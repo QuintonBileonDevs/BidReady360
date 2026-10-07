@@ -1,0 +1,7 @@
+{
+  "name": "BidReady360",
+  "description": "A 360° picture of procurement. Unified supplier registration and tender platform for Botswana organizations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

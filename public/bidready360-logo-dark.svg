@@ -1,0 +1,5 @@
+<svg viewBox="0 0 420 120" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 97.59 46.32 A 40 40 0 1 1 73.68 22.41" fill="none" stroke="#6FAEE0" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="60" cy="60" r="12" fill="#E8A33D"/>
+  <text x="135" y="78" font-family="'Sora', system-ui, sans-serif" font-size="52" font-weight="700" fill="#FFFFFF" letter-spacing="-1.5">BidReady<tspan fill="#6FAEE0">360</tspan></text>
+</svg>

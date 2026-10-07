@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Source Sans 3", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --font-heading: "Sora", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-ink: #10212E;
+  --color-ink-70: #43525F;
+  --color-ink-50: #6B7A87;
+  --color-line: #D5E0EA;
+  --color-surface: #F7FAFD;
+  --color-mist: #EAF2FA;
+
+  --color-pula-deep: #1F5F99;
+  --color-pula-blue: #6FAEE0;
+  --color-kalahari-amber: #E8A33D;
+
+  --color-verified-green: #2F8F5B;
+  --color-alert-red: #C2412D;
+}
+
+@layer base {
+  :root {
+    --color-ink: #10212E;
+    --color-ink-70: #43525F;
+    --color-ink-50: #6B7A87;
+    --color-line: #D5E0EA;
+    --color-surface: #F7FAFD;
+    --color-mist: #EAF2FA;
+    --color-pula-deep: #1F5F99;
+    --color-pula-blue: #6FAEE0;
+    --color-kalahari-amber: #E8A33D;
+    --color-verified-green: #2F8F5B;
+    --color-alert-red: #C2412D;
+
+    --bg-page: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-surface: #F7FAFD;
+    --border-line: #D5E0EA;
+    --border-subtle: #E8EEF5;
+  }
+
+  html.dark, body.dark, :root.dark, .dark {
+    --bg-page: #0D1A25;
+    --bg-card: #132635;
+    --bg-surface: #10212E;
+    --border-line: #1E364A;
+    --border-subtle: #172D3E;
+  }
+
+  body {
+    font-family: "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--color-ink);
+    background-color: var(--bg-page);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--color-ink);
+    letter-spacing: -0.02em;
+    font-weight: 600;
+  }
+}
+
+/* Container Constraint */
+.container-1160 {
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-1160 {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-1160 {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+/* Dark Mode Overrides */
+.dark body {
+  color: #EAF2FA;
+}
+
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  color: #FFFFFF;
+}
+
+.dark .text-ink {
+  color: #FFFFFF !important;
+}
+
+.dark .text-ink-70 {
+  color: #B2C3D2 !important;
+}
+
+.dark .text-ink-50 {
+  color: #7D92A4 !important;
+}
+
+.dark .bg-surface {
+  background-color: #10212E !important;
+}
+
+.dark .bg-white {
+  background-color: #132635 !important;
+}
+
+.dark .border-line {
+  border-color: #1E364A !important;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: #1E364A !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0D1A25 !important;
+}
+
+.dark .bg-mist {
+  background-color: #162C3E !important;
+}
+
+/* Hairline dividers & crisp borders */
+.border-hairline {
+  border-width: 1px;
+  border-color: #D5E0EA;
+}
+
+.dark .border-hairline {
+  border-color: #1E364A;
+}
+
+/* Subtle shadows */
+.shadow-subtle {
+  box-shadow: 0 1px 3px 0 rgba(16, 33, 46, 0.04), 0 1px 2px -1px rgba(16, 33, 46, 0.04);
+}
+
+.shadow-elevated {
+  box-shadow: 0 4px 16px -2px rgba(16, 33, 46, 0.08), 0 2px 6px -2px rgba(16, 33, 46, 0.04);
+}
+
+.dark .shadow-elevated {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+}
+
+/* Tabular figures for numbers, dates, references */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessible focus visible states */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #1F5F99;
+  outline-offset: 2px;
+}
+
+.dark button:focus-visible,
+.dark a:focus-visible,
+.dark input:focus-visible,
+.dark select:focus-visible,
+.dark textarea:focus-visible {
+  outline-color: #6FAEE0;
+}
+
+/* Motion & Micro-Interactions */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Mobile Touch Target Discipline (44px minimum) */
+@media (max-width: 640px) {
+  button, 
+  a[role="button"],
+  input:not([type="checkbox"]):not([type="radio"]),
+  select {
+    min-height: 42px;
+  }
+}
