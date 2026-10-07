@@ -24,6 +24,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Badge } from '../ui/Badge';
+import { authApi } from '../../services/api';
 
 export type AuthTenant = 'supplier' | 'buyer' | 'auditor';
 
@@ -53,7 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [cipaNumber, setCipaNumber] = useState('');
-  const [buyerOrg, setBuyerOrg] = useState('Gaborone Regional Council');
+  const [buyerOrg, setBuyerOrg] = useState('');
   const [staffId, setStaffId] = useState('');
 
   if (!isOpen) return null;
@@ -67,28 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleQuickDemoLogin = (selectedTenant: AuthTenant) => {
-    setErrorMsg(null);
-    setSuccessMsg('Authenticating verified credentials...');
-    setIsSubmitting(true);
-
-    setTimeout(() => {
-      setIsSubmitting(false);
-      if (selectedTenant === 'supplier') {
-        setRole('supplier');
-        setActiveNav('dashboard');
-      } else if (selectedTenant === 'buyer') {
-        setRole('buyer');
-        setActiveNav('dashboard');
-      } else if (selectedTenant === 'auditor') {
-        setRole('buyer');
-        setActiveNav('audit-log');
-      }
-      onClose();
-    }, 500);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -100,39 +80,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsSubmitting(true);
     setSuccessMsg(mode === 'signup' ? 'Setting up verified workspace...' : 'Verifying credentials...');
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-
-      if (tenant === 'supplier') {
-        if (mode === 'signup' && companyName) {
-          updateSupplierProfile({
-            legalName: companyName,
-            tradingName: companyName,
-            cipaNumber: cipaNumber || 'BW00009876543',
-            email,
+    try {
+      if (mode === 'signup') {
+        if (tenant === 'supplier') {
+          await authApi.registerSupplier({
+            legalName: companyName.trim() || 'My Supplier Entity',
+            cipaUin: cipaNumber.trim().toUpperCase() || `BW${Date.now().toString().slice(-8)}`,
+            fullName: email.split('@')[0] || 'Supplier Admin',
+            email: email.trim().toLowerCase(),
+            password,
           });
-        }
-        setRole('supplier');
-        setActiveNav('dashboard');
-      } else if (tenant === 'buyer') {
-        if (mode === 'signup') {
+          setRole('supplier');
+          setActiveNav('dashboard');
+        } else {
+          await authApi.registerBuyer({
+            organizationName: buyerOrg.trim() || 'Procuring Entity',
+            fullName: email.split('@')[0] || 'Procurement Lead',
+            email: email.trim().toLowerCase(),
+            password,
+          });
           registerBuyerOrganization({
-            orgName: buyerOrg || 'New Procuring Entity',
-            email,
+            orgName: buyerOrg.trim() || 'Procuring Entity',
+            email: email.trim(),
           });
           setRole('buyer');
           setActiveNav('buyer-pending');
-        } else {
+        }
+      } else {
+        const res = await authApi.login(email.trim().toLowerCase(), password);
+        if (res.requiresMfa) {
+          onClose();
+          setActiveNav(tenant === 'buyer' ? 'buyer-login' : 'supplier-login');
+          return;
+        }
+
+        if (tenant === 'supplier') {
+          setRole('supplier');
+          setActiveNav('dashboard');
+        } else if (tenant === 'buyer') {
           setRole('buyer');
           setActiveNav('dashboard');
+        } else if (tenant === 'auditor') {
+          setRole('buyer');
+          setActiveNav('audit-log');
         }
-      } else if (tenant === 'auditor') {
-        setRole('buyer');
-        setActiveNav('audit-log');
       }
 
       onClose();
-    }, 700);
+    } catch (err: any) {
+      console.error('[AUTH MODAL ERROR]', err);
+      setErrorMsg(err.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setIsSubmitting(false);
+      setSuccessMsg(null);
+    }
   };
 
   return (
@@ -351,32 +352,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </Button>
             </div>
           </form>
-
-          {/* Quick Demo Accounts */}
-          <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-            <span className="text-[11px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
-              1-Click Demo Login
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('supplier')}
-                className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3E] text-left transition-colors"
-              >
-                <div className="font-semibold text-[#10212E] dark:text-white">Kopano Supplies</div>
-                <div className="text-[10px] text-[#6B7A87]">Supplier Passport</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickDemoLogin('buyer')}
-                className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3E] text-left transition-colors"
-              >
-                <div className="font-semibold text-[#10212E] dark:text-white">Gaborone Council</div>
-                <div className="text-[10px] text-[#6B7A87]">Lead SCM Officer</div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

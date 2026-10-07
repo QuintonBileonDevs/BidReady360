@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Checkbox } from '../ui/Checkbox';
 import { PasswordRulesCheck } from './PasswordRulesCheck';
+import { authApi } from '../../services/api';
 import {
   Building2,
   Lock,
@@ -106,24 +107,44 @@ export const BuyerSignup: React.FC<BuyerSignupProps> = ({ onNavigate }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsLoading(true);
-    registerBuyerOrganization({
-      orgName: orgName.trim(),
-      email: officialEmail.trim(),
-      orgType,
-      regNumber: regNumber.trim(),
-      jobTitle: jobTitle.trim(),
-      phone: phone.trim(),
-    });
+    setErrors({});
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.registerBuyer({
+        organizationName: orgName.trim(),
+        organizationType: 'local_authority',
+        fullName: userName.trim(),
+        email: officialEmail.trim().toLowerCase(),
+        password,
+        phone: phone.trim(),
+      });
+
+      registerBuyerOrganization({
+        orgName: orgName.trim(),
+        email: officialEmail.trim(),
+        orgType,
+        regNumber: regNumber.trim(),
+        jobTitle: jobTitle.trim(),
+        phone: phone.trim(),
+      });
+
       onNavigate('buyer-pending');
-    }, 750);
+    } catch (err: any) {
+      console.error('[BUYER SIGNUP ERROR]', err);
+      const msg = err.message || 'Registration failed. Please check your information.';
+      if (err.field === 'email' || msg.toLowerCase().includes('email')) {
+        setErrors({ officialEmail: msg });
+      } else {
+        setErrors({ orgName: msg });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

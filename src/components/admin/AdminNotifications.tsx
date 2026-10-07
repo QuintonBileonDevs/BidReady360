@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
-import { ADMIN_NOTIFICATIONS, NotificationDelivery } from '../../mockAdminData';
+import { NotificationDelivery } from '../../types/admin';
 import { RefreshCw, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 export const AdminNotifications: React.FC = () => {
-  const [logs, setLogs] = useState<NotificationDelivery[]>(ADMIN_NOTIFICATIONS);
+  const [logs, setLogs] = useState<NotificationDelivery[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_notification_deliveries');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const handleRetry = (id: string) => {
@@ -45,44 +52,52 @@ export const AdminNotifications: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
-              {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
-                  <td className="p-4">
-                    <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
-                      {log.channel}
-                    </span>
-                  </td>
-                  <td className="p-4 font-sans text-[#43525F] dark:text-[#B2C3D2]">{log.recipient}</td>
-                  <td className="p-4 text-[#10212E] dark:text-white max-w-sm truncate">{log.subjectOrPreview}</td>
-                  <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] text-[13px]">{log.sentAt}</td>
-                  <td className="p-4">
-                    <span
-                      className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
-                        log.status === 'Delivered'
-                          ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                          : log.status === 'Failed'
-                          ? 'bg-[#FEF2F2] text-[#C2412D]'
-                          : 'bg-[#FFFBEB] text-[#92400E]'
-                      }`}
-                    >
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right">
-                    {log.status === 'Failed' && (
-                      <button
-                        type="button"
-                        onClick={() => handleRetry(log.id)}
-                        disabled={retryingId === log.id}
-                        className="px-3 py-1 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[13px] font-medium rounded-[4px] inline-flex items-center gap-1.5"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${retryingId === log.id ? 'animate-spin' : ''}`} />
-                        <span>Retry</span>
-                      </button>
-                    )}
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-[#6B7A87]">
+                    No notification delivery logs found. Deliveries will appear here as notifications are dispatched.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                logs.map((log) => (
+                  <tr key={log.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
+                    <td className="p-4">
+                      <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                        {log.channel}
+                      </span>
+                    </td>
+                    <td className="p-4 font-sans text-[#43525F] dark:text-[#B2C3D2]">{log.recipient}</td>
+                    <td className="p-4 text-[#10212E] dark:text-white max-w-sm truncate">{log.subjectOrPreview}</td>
+                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] text-[13px]">{log.sentAt}</td>
+                    <td className="p-4">
+                      <span
+                        className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
+                          log.status === 'Delivered'
+                            ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+                            : log.status === 'Failed'
+                            ? 'bg-[#FEF2F2] text-[#C2412D]'
+                            : 'bg-[#FFFBEB] text-[#92400E]'
+                        }`}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      {log.status === 'Failed' && (
+                        <button
+                          type="button"
+                          onClick={() => handleRetry(log.id)}
+                          disabled={retryingId === log.id}
+                          className="px-3 py-1 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[13px] font-medium rounded-[4px] inline-flex items-center gap-1.5"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${retryingId === log.id ? 'animate-spin' : ''}`} />
+                          <span>Retry</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -10,8 +10,8 @@ export const BuyerBidsOpening: React.FC = () => {
 
   const [selectedCallId, setSelectedCallId] = useState<string>(sealedCalls[0]?.id || '');
   const [isOpeningSessionOpen, setIsOpeningSessionOpen] = useState(false);
-  const [witnesses, setWitnesses] = useState<string>('Thabo Ditsele (Internal Auditor), Neo Morapedi (Legal Advisor)');
-  const [openedCallIds, setOpenedCallIds] = useState<string[]>(['call-3']); // call-3 is already opened
+  const [witnesses, setWitnesses] = useState<string>('');
+  const [openedCallIds, setOpenedCallIds] = useState<string[]>([]);
   const [openingSuccess, setOpeningSuccess] = useState(false);
 
   const selectedCall = calls.find((c) => c.id === selectedCallId) || sealedCalls[0];
@@ -19,7 +19,7 @@ export const BuyerBidsOpening: React.FC = () => {
 
   const hasOpeningPermission = buyerSubRole === 'Org admin' || buyerSubRole === 'Procurement officer';
 
-  // Sample sealed bidder envelopes for this tender
+  // Sealed bidder envelopes for this tender
   const bidders = [
     {
       id: 'bid-1',

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
-import { DemoModeWidget } from './components/common/DemoModeWidget';
 
 // Public Views
 import { PublicAbout } from './components/public/PublicAbout';
@@ -37,7 +36,6 @@ const MainContent: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
         <AdminDashboard />
-        <DemoModeWidget />
       </div>
     );
   }
@@ -50,14 +48,12 @@ const MainContent: React.FC = () => {
       return (
         <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
           <AuthScreen initialRoute="buyer-pending" />
-          <DemoModeWidget />
         </div>
       );
     }
     return (
       <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
         <BuyerLayout />
-        <DemoModeWidget />
       </div>
     );
   }
@@ -244,9 +240,6 @@ const MainContent: React.FC = () => {
       </main>
 
       <Footer />
-
-      {/* Global Collapsible Demo Mode Controller */}
-      <DemoModeWidget />
     </div>
   );
 };

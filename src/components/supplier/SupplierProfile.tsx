@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Director } from '../../mockData';
+import { Director } from '../../types';
 import {
   Building2,
   Users,

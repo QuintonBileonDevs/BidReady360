@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Call, FormField, PriceLineItem, ApplicationResponse, SupplierDocument } from '../../mockData';
+import { Call, FormField, PriceLineItem, ApplicationResponse, SupplierDocument } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   CheckCircle2,

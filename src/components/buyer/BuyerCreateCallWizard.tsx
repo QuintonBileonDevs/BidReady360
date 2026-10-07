@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Call } from '../../mockData';
+import { buyerApi } from '../../services/api';
+import { Call } from '../../types';
 import {
   PlusCircle,
   Calendar,
@@ -12,6 +13,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Lock,
+  AlertCircle,
 } from 'lucide-react';
 
 interface BuyerCreateCallWizardProps {
@@ -22,9 +24,11 @@ interface BuyerCreateCallWizardProps {
 export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ onFinished, onCancel }) => {
   const { createCall, formTemplates } = useApp();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [callData, setCallData] = useState({
-    callNumber: 'GRC/RFP/2026/09',
+    callNumber: `GRC/RFP/2026/${Math.floor(10 + Math.random() * 90)}`,
     organizationId: 'org-grc',
     organizationName: 'Gaborone Regional Council',
     title: 'Procurement of Municipal Fleet Maintenance & Heavy Equipment Spare Parts',
@@ -75,9 +79,37 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
     }
   };
 
-  const handlePublish = () => {
-    const newId = createCall(callData);
-    onFinished(newId);
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await buyerApi.createCall({
+        referenceNo: callData.callNumber,
+        title: callData.title,
+        callType: 'rfp',
+        summary: callData.summary,
+        description: callData.summary,
+        opensAt: new Date().toISOString(),
+        closesAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+        estimatedValue: callData.estimatedBudgetBWP,
+        currency: 'BWP',
+        criteria: [
+          { name: 'Technical Methodology & Past Performance', weight: 40, maxScore: 100, criterionType: 'scored', isMandatoryGate: false },
+          { name: 'Key Personnel Qualifications & OHS Plan', weight: 30, maxScore: 100, criterionType: 'scored', isMandatoryGate: false },
+          { name: 'Financial Schedule & Bill of Quantities', weight: 30, maxScore: 100, criterionType: 'scored', isMandatoryGate: false },
+        ],
+        requiredDocTypeCodes: ['TAX_CLEARANCE', 'PPRA_REGISTRATION', 'WORKERS_COMPENSATION', 'PUBLIC_LIABILITY_INSURANCE'],
+      });
+
+      const localId = createCall(callData);
+      onFinished(res.callId || localId);
+    } catch (err: any) {
+      console.error('[PUBLISH CALL ERROR]', err);
+      setErrorMsg(err.message || 'Failed to publish tender call.');
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   return (

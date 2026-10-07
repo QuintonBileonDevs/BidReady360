@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
-import { ADMIN_USERS, AdminUserRecord } from '../../mockAdminData';
+import { AdminUserRecord } from '../../types/admin';
 import { UserPlus, ShieldCheck, Check, Mail, Lock } from 'lucide-react';
 
 export const AdminUsers: React.FC = () => {
-  const [users, setUsers] = useState<AdminUserRecord[]>(ADMIN_USERS);
+  const [users, setUsers] = useState<AdminUserRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_admin_users');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newFullName, setNewFullName] = useState('');

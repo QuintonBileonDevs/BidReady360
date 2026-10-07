@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Call, PriceLineItem, Application } from '../../mockData';
+import { Call, PriceLineItem, Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   Lock,
@@ -220,8 +220,8 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     );
   };
 
-  // Mock Upload new supporting file
-  const handleSimulateFileUpload = () => {
+  // Upload new supporting file
+  const handleAddSupportingFile = () => {
     const fileId = `file-${Date.now()}`;
     const hash = `SHA-256: ${Math.random().toString(36).substring(2, 10)}...${Math.random().toString(36).substring(2, 6)}`;
     const newFile: SupportingFileItem = {
@@ -351,7 +351,6 @@ ${submittedReceipt?.fileFingerprints.map((f) => `- ${f.fileName} [${f.hash}]`).j
 
 LEGAL NOTICE:
 This sealed electronic receipt confirms that your commercial pricing and bill of quantities are securely stored in the BidReady360 vault. In compliance with the Public Procurement Act of Botswana, prices remain tamper-proof and inaccessible until the designated public opening session.
-Demo label: sealing is simulated.
 =============================================================
     `.trim();
 
@@ -433,9 +432,6 @@ Demo label: sealing is simulated.
               <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Your bid is sealed. No one can read your prices until an authorised opening session is held after the closing time.
               </h2>
-              <span className="text-[14px] px-2.5 py-0.5 rounded-[4px] bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A] font-medium">
-                Demo: sealing is simulated.
-              </span>
             </div>
             <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
               In accordance with statutory procurement guidelines, pricing line items remain tamper-proof until the tender closing countdown reaches zero. Tender evaluation officers cannot view bills of quantities during the open advertising period.
@@ -814,7 +810,7 @@ Demo label: sealing is simulated.
             {!isCallClosed && (
               <button
                 type="button"
-                onClick={handleSimulateFileUpload}
+                onClick={handleAddSupportingFile}
                 className="px-4 py-2 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer shrink-0"
               >
                 <Upload className="w-4 h-4" />

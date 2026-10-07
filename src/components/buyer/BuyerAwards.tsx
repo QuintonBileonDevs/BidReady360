@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { AwardDecision } from '../../mockData';
+import { AwardDecision } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   Award,

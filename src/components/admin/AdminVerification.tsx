@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ADMIN_VERIFICATION_QUEUE, VerificationQueueItem } from '../../mockAdminData';
+import { VerificationQueueItem } from '../../types/admin';
 import {
   FileCheck2,
   CheckCircle2,
@@ -13,7 +13,14 @@ import {
 } from 'lucide-react';
 
 export const AdminVerification: React.FC = () => {
-  const [items, setItems] = useState<VerificationQueueItem[]>(ADMIN_VERIFICATION_QUEUE);
+  const [items, setItems] = useState<VerificationQueueItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_verification_queue');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedItem, setSelectedItem] = useState<VerificationQueueItem | null>(items[0]);
   const [filterType, setFilterType] = useState<string>('ALL');
   const [rejectReason, setRejectReason] = useState('');

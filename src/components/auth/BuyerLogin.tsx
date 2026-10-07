@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthLayout } from './AuthLayout';
 import { useApp } from '../../context/AppContext';
+import { authApi } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DigitCodeInput } from './DigitCodeInput';
@@ -11,11 +12,8 @@ import {
   EyeOff,
   ArrowRight,
   ShieldCheck,
-  KeyRound,
   AlertCircle,
   ArrowLeft,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 
 interface BuyerLoginProps {
@@ -30,8 +28,8 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDemoAccessOpen, setIsDemoAccessOpen] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
+  const [mfaUserId, setMfaUserId] = useState('');
 
   const [mfaCountdown, setMfaCountdown] = useState(60);
 
@@ -63,13 +61,7 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
     setErrors(newErrors);
   };
 
-  const handleFillDemo = () => {
-    setEmail('k.tau@grc.gov.bw');
-    setPassword('Procure2026!');
-    setErrors({});
-  };
-
-  const handleCredentialsSubmit = (e: React.FormEvent) => {
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string; password?: string } = {};
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
@@ -87,20 +79,36 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
     setIsLoading(true);
     setErrors({});
 
-    setTimeout(() => {
+    try {
+      const res = await authApi.login(email.trim().toLowerCase(), password);
+      if (res.requiresMfa && res.mfaUserId) {
+        setMfaUserId(res.mfaUserId);
+        setStep('mfa');
+        setMfaCountdown(60);
+      } else {
+        setRole('buyer');
+        setActiveNav('dashboard');
+      }
+    } catch (err: any) {
+      console.error('[BUYER LOGIN ERROR]', err);
+      setErrors({ general: err.message || 'Invalid email or password.' });
+    } finally {
       setIsLoading(false);
-      setStep('mfa');
-      setMfaCountdown(60);
-    }, 600);
+    }
   };
 
-  const handleMfaComplete = (code: string) => {
+  const handleMfaComplete = async (code: string) => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setErrors({});
+    try {
+      await authApi.verifyMfa(mfaUserId, code);
       setRole('buyer');
       setActiveNav('dashboard');
-    }, 700);
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Invalid or expired confirmation code.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -186,40 +194,6 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
                 Continue to verification code
               </Button>
             </form>
-
-            {/* Demo Access Panel (Small collapsible) */}
-            <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden text-[14px]">
-              <button
-                type="button"
-                onClick={() => setIsDemoAccessOpen(!isDemoAccessOpen)}
-                className="w-full p-3 bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between font-medium text-[#10212E] dark:text-white cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-[#1F5F99]" />
-                  <span>Demo access (Demo data only)</span>
-                </div>
-                {isDemoAccessOpen ? <ChevronUp className="w-4 h-4 text-[#6B7A87]" /> : <ChevronDown className="w-4 h-4 text-[#6B7A87]" />}
-              </button>
-
-              {isDemoAccessOpen && (
-                <div className="p-3 bg-white dark:bg-[#132635] border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                  <p className="text-[13px] text-[#6B7A87]">
-                    Use these sample credentials to test the buyer console:
-                  </p>
-                  <div className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] space-y-1">
-                    <div>Email: <span className="font-semibold text-[#10212E] dark:text-white">k.tau@grc.gov.bw</span></div>
-                    <div>Password: <span className="font-semibold text-[#10212E] dark:text-white">Procure2026!</span></div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleFillDemo}
-                    className="text-[13px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0] hover:underline cursor-pointer"
-                  >
-                    Auto-fill demo credentials
-                  </button>
-                </div>
-              )}
-            </div>
 
             <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
               Need to register your organization?{' '}

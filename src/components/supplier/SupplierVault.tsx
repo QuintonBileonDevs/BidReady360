@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { SupplierDocument, DocumentVersion } from '../../mockData';
+import { SupplierDocument, DocumentVersion } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   FileText,
@@ -90,9 +90,6 @@ export const SupplierVault: React.FC = () => {
   const [versionHistoryDoc, setVersionHistoryDoc] = useState<SupplierDocument | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
-  // Demo empty state toggle
-  const [showDemoEmptyState, setShowDemoEmptyState] = useState(false);
-
   // Upload Drawer Form State
   const [drawerDocType, setDrawerDocType] = useState<SupplierDocument['documentType']>(
     'BURS Tax Clearance Certificate'
@@ -128,7 +125,7 @@ export const SupplierVault: React.FC = () => {
   };
 
   // Summary strip metrics
-  const activeDocsList = showDemoEmptyState ? [] : documents;
+  const activeDocsList = documents;
 
   const validCount = useMemo(() => {
     return activeDocsList.filter((d) => {
@@ -334,7 +331,7 @@ export const SupplierVault: React.FC = () => {
     setReplacingDoc(null);
   };
 
-  // Mock download
+  // Trigger document download
   const handleDownload = (doc: SupplierDocument) => {
     addAuditEvent({
       action: 'Document Downloaded from Vault',
@@ -374,15 +371,6 @@ export const SupplierVault: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setShowDemoEmptyState(!showDemoEmptyState)}
-            className="px-3.5 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer"
-            title="Toggle between populated vault and new supplier onboarding checklist"
-          >
-            {showDemoEmptyState ? 'Show populated vault' : 'Preview new supplier checklist'}
-          </button>
-
           {/* Primary Action Button in Pula Deep */}
           <button
             type="button"
@@ -541,7 +529,7 @@ export const SupplierVault: React.FC = () => {
       </div>
 
       {/* 4. Empty State for New Supplier (Checklist) */}
-      {(showDemoEmptyState || (activeDocsList.length === 0 && filterCategory === 'ALL')) ? (
+      {(activeDocsList.length === 0 && filterCategory === 'ALL') ? (
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
           <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
             <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">

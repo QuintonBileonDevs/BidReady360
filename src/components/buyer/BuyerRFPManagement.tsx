@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Clarification, Call } from '../../mockData';
+import { Clarification, Call } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   Lock,

@@ -6,6 +6,7 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Checkbox } from '../ui/Checkbox';
 import { PasswordRulesCheck } from './PasswordRulesCheck';
+import { authApi } from '../../services/api';
 import {
   Building2,
   Lock,
@@ -24,7 +25,7 @@ interface SupplierSignupProps {
 }
 
 export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) => {
-  const { updateSupplierProfile } = useApp();
+  const { setRole, setActiveNav, updateSupplierProfile } = useApp();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -118,7 +119,7 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreedToTerms || !agreedToPrivacy) {
       setErrors({ terms: 'You must agree to the Terms and Privacy notice to continue.' });
@@ -126,18 +127,44 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    setErrors({});
+
+    try {
+      const res = await authApi.registerSupplier({
+        legalName: legalName.trim(),
+        cipaUin: cipaNumber.trim().toUpperCase(),
+        fullName: fullName.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        phone: phone.trim(),
+      });
+
       updateSupplierProfile({
-        legalName,
-        tradingName: legalName,
-        cipaNumber: cipaNumber || 'BW00001234567',
-        email,
-        primaryPhone: phone,
+        legalName: legalName.trim(),
+        tradingName: legalName.trim(),
+        cipaNumber: cipaNumber.trim().toUpperCase(),
+        email: email.trim().toLowerCase(),
+        primaryPhone: phone.trim(),
         city,
       });
-      onNavigate('supplier-verify-email');
-    }, 750);
+
+      setRole('supplier');
+      setActiveNav('dashboard');
+    } catch (err: any) {
+      console.error('[SUPPLIER SIGNUP ERROR]', err);
+      const errMsg = err.message || 'Registration failed. Please check your details.';
+      if (err.field === 'email' || errMsg.toLowerCase().includes('email')) {
+        setStep(1);
+        setErrors({ email: errMsg });
+      } else if (err.field === 'cipa_uin' || errMsg.toLowerCase().includes('cipa')) {
+        setStep(2);
+        setErrors({ cipaNumber: errMsg });
+      } else {
+        setErrors({ general: errMsg });
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

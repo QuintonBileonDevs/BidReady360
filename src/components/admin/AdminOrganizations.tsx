@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ADMIN_ORGANIZATIONS, PendingOrg } from '../../mockAdminData';
+import { PendingOrg } from '../../types/admin';
 import {
   Search,
   Filter,
@@ -24,7 +24,14 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'Pending' | 'Active' | 'Suspended'>('Pending');
   const [searchQuery, setSearchQuery] = useState('');
-  const [orgs, setOrgs] = useState<PendingOrg[]>(ADMIN_ORGANIZATIONS);
+  const [orgs, setOrgs] = useState<PendingOrg[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_admin_orgs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedOrg, setSelectedOrg] = useState<PendingOrg | null>(null);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [supportTargetOrg, setSupportTargetOrg] = useState<string>('');

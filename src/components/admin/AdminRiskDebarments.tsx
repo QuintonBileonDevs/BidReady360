@@ -1,10 +1,24 @@
 import React, { useState } from 'react';
-import { ADMIN_RISK_FLAGS, ADMIN_DEBARMENTS, RiskFlag } from '../../mockAdminData';
+import { RiskFlag, DebarmentRecord } from '../../types/admin';
 import { ShieldAlert, AlertTriangle, CheckCircle2, UserX, Plus } from 'lucide-react';
 
 export const AdminRiskDebarments: React.FC = () => {
-  const [flags, setFlags] = useState<RiskFlag[]>(ADMIN_RISK_FLAGS);
-  const [debarments, setDebarments] = useState(ADMIN_DEBARMENTS);
+  const [flags, setFlags] = useState<RiskFlag[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_risk_flags');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [debarments, setDebarments] = useState<DebarmentRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_debarments');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [resolvedIds, setResolvedIds] = useState<string[]>([]);
 
   const handleResolveFlag = (id: string) => {
@@ -32,64 +46,70 @@ export const AdminRiskDebarments: React.FC = () => {
         </h2>
 
         <div className="space-y-4">
-          {flags.map((flag) => {
-            const isResolved = resolvedIds.includes(flag.id);
-            return (
-              <div
-                key={flag.id}
-                className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`text-[12px] px-2.5 py-1 rounded-[4px] font-semibold ${
-                        flag.severity === 'High'
-                          ? 'bg-[#FEF2F2] text-[#C2412D]'
-                          : 'bg-[#FFFBEB] text-[#92400E]'
-                      }`}
-                    >
-                      {flag.severity} Severity
+          {flags.length === 0 ? (
+            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center text-[#6B7A87]">
+              No active integrity flags detected. All cross-entity directorships and statutory filings are normal.
+            </div>
+          ) : (
+            flags.map((flag) => {
+              const isResolved = resolvedIds.includes(flag.id);
+              return (
+                <div
+                  key={flag.id}
+                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`text-[12px] px-2.5 py-1 rounded-[4px] font-semibold ${
+                          flag.severity === 'High'
+                            ? 'bg-[#FEF2F2] text-[#C2412D]'
+                            : 'bg-[#FFFBEB] text-[#92400E]'
+                        }`}
+                      >
+                        {flag.severity} Severity
+                      </span>
+                      <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
+                        {flag.flagType}
+                      </h3>
+                    </div>
+                    <span className="text-[13px] text-[#6B7A87]">
+                      Detected {flag.detectedAt}
                     </span>
-                    <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
-                      {flag.flagType}
-                    </h3>
                   </div>
-                  <span className="text-[13px] text-[#6B7A87]">
-                    Detected {flag.detectedAt}
-                  </span>
-                </div>
 
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-                  {flag.description}
-                </p>
+                  <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                    {flag.description}
+                  </p>
 
-                <div className="p-3 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[6px] text-[13px] space-y-1">
-                  <div><strong>Suppliers involved:</strong> {flag.suppliersInvolved.join(', ')}</div>
-                  <div><strong>Procuring entity:</strong> {flag.organizationsInvolved.join(', ')}</div>
-                </div>
+                  <div className="p-3 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[6px] text-[13px] space-y-1">
+                    <div><strong>Suppliers involved:</strong> {flag.suppliersInvolved.join(', ')}</div>
+                    <div><strong>Procuring entity:</strong> {flag.organizationsInvolved.join(', ')}</div>
+                  </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
-                  <span className="text-[13px] text-[#6B7A87]">
-                    Status: {isResolved ? 'Resolved' : flag.status}
-                  </span>
-                  {!isResolved ? (
-                    <button
-                      type="button"
-                      onClick={() => handleResolveFlag(flag.id)}
-                      className="px-4 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[13px] font-medium rounded-[4px]"
-                    >
-                      Mark investigation resolved
-                    </button>
-                  ) : (
-                    <span className="text-[13px] text-[#2F8F5B] font-medium flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Case resolved & logged</span>
+                  <div className="flex items-center justify-between pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+                    <span className="text-[13px] text-[#6B7A87]">
+                      Status: {isResolved ? 'Resolved' : flag.status}
                     </span>
-                  )}
+                    {!isResolved ? (
+                      <button
+                        type="button"
+                        onClick={() => handleResolveFlag(flag.id)}
+                        className="px-4 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[13px] font-medium rounded-[4px]"
+                      >
+                        Mark investigation resolved
+                      </button>
+                    ) : (
+                      <span className="text-[13px] text-[#2F8F5B] font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Case resolved & logged</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 

@@ -15,23 +15,56 @@ import {
   FormTemplate,
   Evaluator,
   AwardDecision,
-  CURRENT_SUPPLIER,
-  CURRENT_SUPPLIER_DOCUMENTS,
-  INITIAL_ORGANIZATIONS,
-  INITIAL_CALLS,
-  INITIAL_APPLICATIONS,
-  INITIAL_CLARIFICATIONS,
-  INITIAL_CONSENT_GRANTS,
-  INITIAL_CRITERIA,
-  INITIAL_EVALUATORS,
-  INITIAL_SCORES,
-  INITIAL_AWARD_DECISION,
-  INITIAL_AUDIT_EVENTS,
-  INITIAL_NOTIFICATIONS,
-  INITIAL_FORM_TEMPLATES,
-  OTHER_SUPPLIERS,
-} from '../mockData';
+} from '../types';
 import { Language, TRANSLATIONS } from '../translations';
+
+const EMPTY_SUPPLIER: Supplier = {
+  id: '',
+  legalName: '',
+  tradingName: '',
+  cipaNumber: '',
+  tinNumber: '',
+  ppraCode: '',
+  ppraSubcodes: [],
+  ppraGrade: '',
+  category: '',
+  secondaryCategories: [],
+  physicalAddress: '',
+  city: '',
+  district: '',
+  postalAddress: '',
+  primaryPhone: '',
+  email: '',
+  website: '',
+  yearEstablished: new Date().getFullYear(),
+  citizenOwnedPercentage: 100,
+  youthOwned: false,
+  womenOwned: false,
+  disabilityOwned: false,
+  eddCertified: false,
+  bankName: '',
+  bankBranch: '',
+  accountNumberMasked: '',
+  directors: [],
+  profileCompleteness: 0,
+  missingItems: [],
+  complianceStatus: 'Action required',
+  documents: [],
+};
+
+const DEFAULT_AWARD_DECISION: AwardDecision = {
+  id: '',
+  callId: '',
+  callNumber: '',
+  callTitle: '',
+  recommendedSupplierId: '',
+  recommendedSupplierName: '',
+  awardedAmountBWP: 0,
+  justification: '',
+  status: 'Draft',
+  draftedBy: '',
+  draftedAt: '',
+};
 
 export type UserRole = 'public' | 'supplier' | 'buyer' | 'admin';
 export type BuyerSubRole = 'Org admin' | 'Procurement officer' | 'Evaluator' | 'Approver' | 'Auditor';
@@ -119,9 +152,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
 
   // Buyer Verification State
-  const [buyerOrgStatus, setBuyerOrgStatus] = useState<'Pending' | 'Approved' | 'Rejected'>('Approved');
-  const [registeredBuyerOrgName, setRegisteredBuyerOrgName] = useState<string | null>('Gaborone Regional Council');
-  const [registeredBuyerEmail, setRegisteredBuyerEmail] = useState<string | null>('k.tau@grc.gov.bw');
+  const [buyerOrgStatus, setBuyerOrgStatus] = useState<'Pending' | 'Approved' | 'Rejected'>('Pending');
+  const [registeredBuyerOrgName, setRegisteredBuyerOrgName] = useState<string | null>(null);
+  const [registeredBuyerEmail, setRegisteredBuyerEmail] = useState<string | null>(null);
 
   const registerBuyerOrganization = (data: {
     orgName: string;
@@ -194,21 +227,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // In-memory data states
-  const [supplier, setSupplier] = useState<Supplier>(CURRENT_SUPPLIER);
-  const [documents, setDocuments] = useState<SupplierDocument[]>(CURRENT_SUPPLIER_DOCUMENTS);
-  const [organizations] = useState<Organization[]>(INITIAL_ORGANIZATIONS);
-  const [calls, setCalls] = useState<Call[]>(INITIAL_CALLS);
-  const [applications, setApplications] = useState<Application[]>(INITIAL_APPLICATIONS);
-  const [clarifications, setClarifications] = useState<Clarification[]>(INITIAL_CLARIFICATIONS);
-  const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>(INITIAL_CONSENT_GRANTS);
-  const [criteria, setCriteria] = useState<Criterion[]>(INITIAL_CRITERIA);
-  const [scores, setScores] = useState<Score[]>(INITIAL_SCORES);
-  const [evaluators, setEvaluators] = useState<Evaluator[]>(INITIAL_EVALUATORS);
-  const [awardDecision, setAwardDecision] = useState<AwardDecision>(INITIAL_AWARD_DECISION);
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>(INITIAL_AUDIT_EVENTS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
-  const [formTemplates, setFormTemplates] = useState<FormTemplate[]>(INITIAL_FORM_TEMPLATES);
+  // Dynamic data states
+  const [supplier, setSupplier] = useState<Supplier>(EMPTY_SUPPLIER);
+  const [allSuppliers] = useState<Supplier[]>([EMPTY_SUPPLIER]);
+  const [documents, setDocuments] = useState<SupplierDocument[]>([]);
+  const [organizations] = useState<Organization[]>([]);
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [clarifications, setClarifications] = useState<Clarification[]>([]);
+  const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>([]);
+  const [criteria, setCriteria] = useState<Criterion[]>([]);
+  const [scores, setScores] = useState<Score[]>([]);
+  const [evaluators, setEvaluators] = useState<Evaluator[]>([]);
+  const [awardDecision, setAwardDecision] = useState<AwardDecision>(DEFAULT_AWARD_DECISION);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
 
   const t = (key: string): string => {
     return TRANSLATIONS[language]?.[key] || key;
@@ -786,8 +820,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
-
-  const allSuppliers = [supplier, ...OTHER_SUPPLIERS];
 
   return (
     <AppContext.Provider

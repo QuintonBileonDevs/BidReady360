@@ -1,11 +1,5 @@
 import React, { useState } from 'react';
-import {
-  ADMIN_ATTENTION_ITEMS,
-  ADMIN_KEY_METRICS,
-  ADMIN_ORGANIZATIONS,
-  ADMIN_VERIFICATION_QUEUE,
-  ADMIN_RISK_FLAGS,
-} from '../../mockAdminData';
+import { AttentionItem, AdminMetric, PendingOrg, VerificationQueueItem, RiskFlag } from '../../types/admin';
 import { AdminGrowthChart, AdminRevenueChart } from './AdminCharts';
 import {
   RefreshCw,
@@ -27,13 +21,35 @@ interface AdminOverviewProps {
   onApproveOrg: (orgId: string) => void;
 }
 
+const DEFAULT_ATTENTION_ITEMS: AttentionItem[] = [
+  { id: 'att-1', count: 0, label: 'Organizations awaiting approval', targetTab: 'organizations', colorBorder: 'border-l-[#E8A33D]' },
+  { id: 'att-2', count: 0, label: 'Verification queue', targetTab: 'verification', colorBorder: 'border-l-[#1F5F99]' },
+  { id: 'att-3', count: 0, label: 'Open risk flags', targetTab: 'risk-debarments', colorBorder: 'border-l-[#C2412D]' },
+  { id: 'att-4', count: 0, label: 'Failed deliveries', targetTab: 'notifications', colorBorder: 'border-l-[#E8A33D]' },
+  { id: 'att-5', count: 0, label: 'Overdue invoices', targetTab: 'billing', colorBorder: 'border-l-[#C2412D]' },
+];
+
+const DEFAULT_KEY_METRICS: AdminMetric[] = [
+  { id: 'met-1', label: 'Active organizations', value: '16', change: '+3 this month', isPositive: true },
+  { id: 'met-2', label: 'Registered suppliers', value: '1,248', change: '+84 this month', isPositive: true },
+  { id: 'met-3', label: 'Published tender calls', value: '42', change: '+12 this week', isPositive: true },
+  { id: 'met-4', label: 'Sealed bids in vault', value: '196', change: '100% cryptographic integrity', isPositive: true },
+  { id: 'met-5', label: 'Monthly billing MRR', value: 'BWP 214k', change: '+8.4% vs last period', isPositive: true },
+  { id: 'met-6', label: 'Statutory compliance rate', value: '94.2%', change: '+1.8% vs benchmark', isPositive: true },
+];
+
 export const AdminOverview: React.FC<AdminOverviewProps> = ({
   onNavigateTab,
   onApproveOrg,
 }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState('2 mins ago');
+  const [lastUpdated, setLastUpdated] = useState('Just now');
   const [approvedList, setApprovedList] = useState<string[]>([]);
+  const [attentionItems] = useState<AttentionItem[]>(DEFAULT_ATTENTION_ITEMS);
+  const [keyMetrics] = useState<AdminMetric[]>(DEFAULT_KEY_METRICS);
+  const [pendingOrgs] = useState<PendingOrg[]>([]);
+  const [verificationQueue] = useState<VerificationQueueItem[]>([]);
+  const [riskFlags] = useState<RiskFlag[]>([]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -47,10 +63,6 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
     setApprovedList((prev) => [...prev, orgId]);
     onApproveOrg(orgId);
   };
-
-  const pendingOrgs = ADMIN_ORGANIZATIONS.filter(
-    (o) => o.status === 'Pending' && !approvedList.includes(o.id)
-  );
 
   return (
     <div className="space-y-12">
@@ -82,7 +94,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {ADMIN_ATTENTION_ITEMS.map((item) => (
+          {attentionItems.map((item) => (
             <div
               key={item.id}
               onClick={() => onNavigateTab(item.targetTab)}
@@ -114,7 +126,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {ADMIN_KEY_METRICS.map((metric) => (
+          {keyMetrics.map((metric) => (
             <div
               key={metric.id}
               className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-2"
@@ -220,30 +232,36 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
             </div>
 
             <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              {ADMIN_VERIFICATION_QUEUE.slice(0, 3).map((item) => (
-                <div key={item.id} className="py-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                      {item.checkType}
-                    </span>
-                    <span className="text-[13px] text-[#6B7A87]">
-                      {item.waitingTime}
-                    </span>
-                  </div>
-                  <div className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-                    {item.supplierName}
-                  </div>
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => onNavigateTab('verification')}
-                      className="text-[13px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline"
-                    >
-                      Review document →
-                    </button>
-                  </div>
+              {verificationQueue.length === 0 ? (
+                <div className="py-6 text-center text-[13px] text-[#6B7A87]">
+                  No items in verification queue
                 </div>
-              ))}
+              ) : (
+                verificationQueue.slice(0, 3).map((item) => (
+                  <div key={item.id} className="py-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[14px] text-[#10212E] dark:text-white">
+                        {item.checkType}
+                      </span>
+                      <span className="text-[13px] text-[#6B7A87]">
+                        {item.waitingTime}
+                      </span>
+                    </div>
+                    <div className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                      {item.supplierName}
+                    </div>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab('verification')}
+                        className="text-[13px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline"
+                      >
+                        Review document →
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -266,41 +284,47 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                 Open risk flags
               </h3>
               <span className="bg-[#FEF2F2] text-[#C2412D] text-[13px] px-2 py-0.5 rounded-[4px] font-medium">
-                2 active
+                {riskFlags.length} active
               </span>
             </div>
 
             <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              {ADMIN_RISK_FLAGS.map((flag) => (
-                <div key={flag.id} className="py-3 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-[14px] text-[#10212E] dark:text-white line-clamp-1">
-                      {flag.flagType}
-                    </span>
-                    <span
-                      className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium shrink-0 ${
-                        flag.severity === 'High'
-                          ? 'bg-[#FEF2F2] text-[#C2412D]'
-                          : 'bg-[#FFFBEB] text-[#92400E]'
-                      }`}
-                    >
-                      {flag.severity}
-                    </span>
-                  </div>
-                  <p className="text-[13px] text-[#6B7A87] line-clamp-2">
-                    {flag.description}
-                  </p>
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={() => onNavigateTab('risk-debarments')}
-                      className="text-[13px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline"
-                    >
-                      Review risk case →
-                    </button>
-                  </div>
+              {riskFlags.length === 0 ? (
+                <div className="py-6 text-center text-[13px] text-[#6B7A87]">
+                  No open risk flags detected
                 </div>
-              ))}
+              ) : (
+                riskFlags.map((flag) => (
+                  <div key={flag.id} className="py-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-[14px] text-[#10212E] dark:text-white line-clamp-1">
+                        {flag.flagType}
+                      </span>
+                      <span
+                        className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium shrink-0 ${
+                          flag.severity === 'High'
+                            ? 'bg-[#FEF2F2] text-[#C2412D]'
+                            : 'bg-[#FFFBEB] text-[#92400E]'
+                        }`}
+                      >
+                        {flag.severity}
+                      </span>
+                    </div>
+                    <p className="text-[13px] text-[#6B7A87] line-clamp-2">
+                      {flag.description}
+                    </p>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => onNavigateTab('risk-debarments')}
+                        className="text-[13px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline"
+                      >
+                        Review risk case →
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ConsentGrant } from '../../mockData';
+import { ConsentGrant } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   Building2,

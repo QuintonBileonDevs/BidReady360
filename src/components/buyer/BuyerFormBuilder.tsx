@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FormField, FormTemplate } from '../../mockData';
+import { FormField, FormTemplate } from '../../types';
 import {
   Plus,
   Trash2,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Application } from '../../mockData';
+import { Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import {
   FileText,

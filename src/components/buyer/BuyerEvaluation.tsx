@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Criterion, Evaluator, Score } from '../../mockData';
+import { Criterion, Evaluator, Score } from '../../types';
 import {
   TrendingUp,
   ShieldCheck,

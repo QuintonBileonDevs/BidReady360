@@ -30,14 +30,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDemoAccessOpen, setIsDemoAccessOpen] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-
-  const handleFillDemo = () => {
-    setEmail('admin@bidready360.gov.bw');
-    setPassword('SuperAdmin2026!');
-    setErrors({});
-  };
 
   const handleCredentialsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,51 +155,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
                 >
                   Back
                 </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleMfaComplete('999888')}
-                  isLoading={isLoading}
-                >
-                  Simulate code entry
-                </Button>
               </div>
             </div>
           )}
-
-          {/* Collapsible Demo Access */}
-          <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden text-[14px]">
-            <button
-              type="button"
-              onClick={() => setIsDemoAccessOpen(!isDemoAccessOpen)}
-              className="w-full p-3 bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between font-medium text-[#10212E] dark:text-white cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-[#1F5F99]" />
-                <span>Demo access (Demo data only)</span>
-              </div>
-              {isDemoAccessOpen ? <ChevronUp className="w-4 h-4 text-[#6B7A87]" /> : <ChevronDown className="w-4 h-4 text-[#6B7A87]" />}
-            </button>
-
-            {isDemoAccessOpen && (
-              <div className="p-3 bg-white dark:bg-[#132635] border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                <div className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] space-y-1">
-                  <div>Email: <span className="font-semibold text-[#10212E] dark:text-white">admin@bidready360.gov.bw</span></div>
-                  <div>Password: <span className="font-semibold text-[#10212E] dark:text-white">SuperAdmin2026!</span></div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleFillDemo}
-                  className="text-[13px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0] hover:underline cursor-pointer"
-                >
-                  Auto-fill demo credentials
-                </button>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Minimal Footer (No external links) */}
+        {/* Minimal Footer */}
         <div className="text-center text-[13px] text-[#6B7A87]">
           <span>BidReady360 Platform Administration Desk</span>
         </div>

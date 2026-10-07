@@ -57,11 +57,10 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
   const activeOrg = brandedOrgs[currentOrgSlug] || brandedOrgs['org-grc'];
 
   const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
-  const [email, setEmail] = useState(`officer@${activeOrg.domain}`);
-  const [password, setPassword] = useState('Procure2026!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDemoAccessOpen, setIsDemoAccessOpen] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [mfaCountdown, setMfaCountdown] = useState(60);
 
@@ -160,35 +159,6 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
       showPoweredBy={true}
     >
       <div className="space-y-6">
-        {/* Dynamic Organization Switcher Bar for Demo */}
-        <div className="p-3 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] space-y-2 text-[14px]">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-[#10212E] dark:text-white">
-              Preview organization branding:
-            </span>
-            <span className="text-[12px] text-[#6B7A87]">
-              /o/{activeOrg.slug}/login
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {Object.values(brandedOrgs).map((org) => (
-              <button
-                key={org.slug}
-                type="button"
-                onClick={() => handleOrgSwitch(org.slug)}
-                className={`px-3 py-2 rounded-[6px] text-[13px] font-medium text-center truncate transition-all cursor-pointer ${
-                  currentOrgSlug === org.slug
-                    ? 'bg-[#10212E] text-white'
-                    : 'bg-white dark:bg-[#132635] text-[#43525F] dark:text-[#B2C3D2] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD]'
-                }`}
-              >
-                {org.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {step === 'credentials' ? (
           <>
             <div className="space-y-1.5">
@@ -266,30 +236,6 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
                 Continue to verification code
               </Button>
             </form>
-
-            {/* Demo Access Panel */}
-            <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden text-[14px]">
-              <button
-                type="button"
-                onClick={() => setIsDemoAccessOpen(!isDemoAccessOpen)}
-                className="w-full p-3 bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between font-medium text-[#10212E] dark:text-white cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-[#1F5F99]" />
-                  <span>Demo access (Demo data only)</span>
-                </div>
-                {isDemoAccessOpen ? <ChevronUp className="w-4 h-4 text-[#6B7A87]" /> : <ChevronDown className="w-4 h-4 text-[#6B7A87]" />}
-              </button>
-
-              {isDemoAccessOpen && (
-                <div className="p-3 bg-white dark:bg-[#132635] border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                  <div className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] space-y-1">
-                    <div>Email: <span className="font-semibold text-[#10212E] dark:text-white">officer@{activeOrg.domain}</span></div>
-                    <div>Password: <span className="font-semibold text-[#10212E] dark:text-white">Procure2026!</span></div>
-                  </div>
-                </div>
-              )}
-            </div>
           </>
         ) : (
           /* STEP 2: 6-DIGIT CODE INPUT */
