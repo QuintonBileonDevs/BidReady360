@@ -22,14 +22,18 @@ interface PublicForSuppliersProps {
 }
 
 export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAuth }) => {
-  const { setRole, setActiveNav } = useApp();
+  const { role, isAuthenticated, setIntendedRoute, setActiveNav } = useApp();
 
   const handleRegister = () => {
     if (onOpenAuth) {
       onOpenAuth('supplier', 'signup');
     } else {
-      setRole('supplier');
-      setActiveNav('vault');
+      if (!isAuthenticated || role !== 'supplier') {
+        setIntendedRoute('vault');
+        setActiveNav('supplier-signup');
+      } else {
+        setActiveNav('vault');
+      }
     }
   };
 

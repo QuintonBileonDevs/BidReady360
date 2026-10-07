@@ -21,7 +21,7 @@ interface BuyerLoginProps {
 }
 
 export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
-  const { setRole, setActiveNav } = useApp();
+  const { setRole, setActiveNav, loginSuccess } = useApp();
 
   const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
   const [email, setEmail] = useState('');
@@ -86,8 +86,19 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
         setStep('mfa');
         setMfaCountdown(60);
       } else {
-        setRole('buyer');
-        setActiveNav('dashboard');
+        const buyerMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'organization');
+        loginSuccess(
+          {
+            user: res.user,
+            activeTenant: buyerMembership || {
+              tenantType: 'organization',
+              tenantId: 'org-grc',
+              tenantName: 'Gaborone Regional Council',
+            },
+            token: res.token,
+          },
+          'buyer'
+        );
       }
     } catch (err: any) {
       console.error('[BUYER LOGIN ERROR]', err);
@@ -101,9 +112,20 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
     setIsLoading(true);
     setErrors({});
     try {
-      await authApi.verifyMfa(mfaUserId, code);
-      setRole('buyer');
-      setActiveNav('dashboard');
+      const mfaRes = await authApi.verifyMfa(mfaUserId, code);
+      const buyerMembership = mfaRes.user?.memberships?.find((m: any) => m.tenantType === 'organization');
+      loginSuccess(
+        {
+          user: mfaRes.user,
+          activeTenant: buyerMembership || {
+            tenantType: 'organization',
+            tenantId: 'org-grc',
+            tenantName: 'Gaborone Regional Council',
+          },
+          token: mfaRes.token,
+        },
+        'buyer'
+      );
     } catch (err: any) {
       setErrors({ general: err.message || 'Invalid or expired confirmation code.' });
     } finally {

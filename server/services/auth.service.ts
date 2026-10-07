@@ -1,5 +1,6 @@
 import { withTransaction, query } from '../db/client';
 import { usersRepository, User, UserTenantMembership } from '../repositories/users.repository';
+import { sanitizeIp } from '../utils/ip';
 import {
   hashPassword,
   verifyPassword,
@@ -66,6 +67,16 @@ export class AuthService {
     const passwordHash = await hashPassword(dto.password);
 
     const { newUser, newSupplier } = await withTransaction(async (client) => {
+      // 0. Verify CIPA UIN uniqueness before proceeding
+      const existingCipa = await client.query('SELECT id FROM suppliers WHERE cipa_uin = $1 LIMIT 1', [cleanCipa]);
+      if (existingCipa.rows.length > 0) {
+        const err: any = new Error('A company with this CIPA registration number is already registered.');
+        err.code = '23505';
+        err.detail = 'Key (cipa_uin)=(' + cleanCipa + ')';
+        err.field = 'cipa_uin';
+        throw err;
+      }
+
       // 1. Create User
       const userRes = await client.query(
         `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
@@ -104,11 +115,11 @@ export class AuthService {
         [supplier.id, dto.fullName.trim(), cleanEmail]
       );
 
-      // 6. Record Legal Acceptance
+      // 6. Record Legal Acceptance (sanitizing client IP for PostgreSQL inet data type)
       await client.query(
         `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
          VALUES ($1, 'supplier_terms', '1.0', $2, $3)`,
-        [user.id, dto.ip || null, dto.userAgent || null]
+        [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
       );
 
       return { newUser: user, newSupplier: supplier };
@@ -187,11 +198,11 @@ export class AuthService {
         [org.id, user.id, roleId]
       );
 
-      // 5. Record Legal Acceptance
+      // 5. Record Legal Acceptance (sanitizing client IP for PostgreSQL inet data type)
       await client.query(
         `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
          VALUES ($1, 'buyer_terms', '1.0', $2, $3)`,
-        [user.id, dto.ip || null, dto.userAgent || null]
+        [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
       );
 
       return { newUser: user, newOrg: org };
@@ -252,7 +263,7 @@ export class AuthService {
       };
     }
 
-    await usersRepository.recordLoginSuccess(user.id, ip);
+    await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
     const memberships = await usersRepository.getUserMemberships(user.id);
 
     const primaryMembership = memberships[0];
@@ -292,7 +303,7 @@ export class AuthService {
       throw new Error('Invalid or expired MFA verification code. Please check your authenticator.');
     }
 
-    await usersRepository.recordLoginSuccess(user.id, ip);
+    await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
     const memberships = await usersRepository.getUserMemberships(user.id);
 
     const primaryMembership = memberships[0];

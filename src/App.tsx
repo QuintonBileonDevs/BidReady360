@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
+import { Logo } from './components/common/Logo';
+import { RouteGuard } from './components/auth/RouteGuard';
 
 // Public Views
 import { PublicAbout } from './components/public/PublicAbout';
@@ -25,114 +27,201 @@ import { SupplierBidSubmission } from './components/supplier/SupplierBidSubmissi
 // Buyer Views
 import { BuyerLayout } from './components/buyer/BuyerLayout';
 
+// Recognized route categories
+const AUTH_ROUTES = [
+  'auth',
+  'signin',
+  'signup',
+  'register',
+  'supplier-login',
+  'supplier-signup',
+  'supplier-verify-email',
+  'supplier-welcome',
+  'buyer-login',
+  'buyer-signup',
+  'buyer-pending',
+  'org-login',
+  'admin-login',
+  'forgot-password',
+  'reset-password',
+  'accept-invite',
+  'choose-workspace',
+  'session-expired',
+  'account-locked',
+];
+
+const SUPPLIER_PROTECTED_ROUTES = [
+  'dashboard',
+  'supplier-dashboard',
+  'profile',
+  'vault',
+  'sharing',
+  'consent',
+  'my-applications',
+  'apply',
+  'bids',
+];
+
+const BUYER_PROTECTED_ROUTES = [
+  'buyer-dashboard',
+  'review-queue',
+  'rfp-management',
+  'bids-opening',
+  'evaluation',
+  'awards',
+  'supplier-database',
+  'buyer-settings',
+  'audit-log',
+];
+
+const ADMIN_PROTECTED_ROUTES = [
+  'admin-dashboard',
+  'admin-overview',
+  'admin-orgs',
+  'admin-verification',
+  'admin-users',
+  'admin-billing',
+  'admin-risk',
+  'admin-notifications',
+  'admin-system',
+];
+
 const MainContent: React.FC = () => {
-  const { role, activeNav, setActiveNav, selectedCallId, setSelectedCallId, calls, buyerOrgStatus } = useApp();
+  const {
+    role,
+    activeNav,
+    setActiveNav,
+    selectedCallId,
+    setSelectedCallId,
+    calls,
+    buyerOrgStatus,
+    isAuthenticated,
+    authLoading,
+  } = useApp();
   const [viewingCallId, setViewingCallId] = useState<string | null>(null);
 
   // ----------------------------------------------------
-  // PLATFORM ADMIN EXPERIENCE (Full-screen sidebar layout)
+  // SESSION RESTORATION LOADING INDICATOR
   // ----------------------------------------------------
-  if (role === 'admin') {
+  if (authLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
-        <AdminDashboard />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
+        <div className="flex flex-col items-center gap-4">
+          <Logo theme="light" size="lg" />
+          <div className="flex items-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+            <div className="w-4 h-4 border-2 border-[#1F5F99] border-t-transparent rounded-full animate-spin" />
+            <span>Verifying security session...</span>
+          </div>
+        </div>
       </div>
     );
   }
 
   // ----------------------------------------------------
-  // BUYER EXPERIENCE (Full-screen grouped sidebar layout)
+  // PLATFORM ADMIN FULL EXPERIENCE (when authenticated)
   // ----------------------------------------------------
-  if (role === 'buyer') {
-    if (buyerOrgStatus !== 'Approved') {
+  if (isAuthenticated && role === 'admin') {
+    const isPublicNav = [
+      'opportunities',
+      'help',
+      'guidelines',
+      'about',
+      'suppliers',
+      'buyers',
+    ].includes(activeNav) || viewingCallId !== null;
+
+    if (!isPublicNav) {
       return (
         <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
-          <AuthScreen initialRoute="buyer-pending" />
+          <AdminDashboard />
         </div>
       );
     }
-    return (
-      <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
-        <BuyerLayout />
-      </div>
-    );
   }
 
-  // Render based on current role and navigation
+  // ----------------------------------------------------
+  // BUYER FULL EXPERIENCE (when authenticated)
+  // ----------------------------------------------------
+  if (isAuthenticated && role === 'buyer') {
+    const isPublicNav = [
+      'opportunities',
+      'help',
+      'guidelines',
+      'about',
+      'suppliers',
+      'buyers',
+    ].includes(activeNav) || viewingCallId !== null;
+
+    if (!isPublicNav) {
+      if (buyerOrgStatus !== 'Approved') {
+        return (
+          <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
+            <AuthScreen initialRoute="buyer-pending" />
+          </div>
+        );
+      }
+      return (
+        <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
+          <BuyerLayout />
+        </div>
+      );
+    }
+  }
+
+  // Render based on current role, route guards, and active navigation
   const renderContent = () => {
-    // ----------------------------------------------------
-    // PUBLIC EXPERIENCE (Unauthenticated / Public Browsing)
-    // ----------------------------------------------------
-    if (role === 'public') {
-      if (viewingCallId) {
-        return (
-          <PublicCallDetail
-            callId={viewingCallId}
-            onBack={() => setViewingCallId(null)}
-          />
-        );
-      }
-      if (activeNav === 'auth' || activeNav === 'signin' || activeNav === 'supplier-login') {
-        return <AuthScreen initialRoute="supplier-login" />;
-      }
-      if (activeNav === 'signup' || activeNav === 'register' || activeNav === 'supplier-signup') {
-        return <AuthScreen initialRoute="supplier-signup" />;
-      }
-      if (activeNav === 'buyer-login') {
-        return <AuthScreen initialRoute="buyer-login" />;
-      }
-      if (activeNav === 'buyer-signup') {
-        return <AuthScreen initialRoute="buyer-signup" />;
-      }
-      if (activeNav === 'buyer-pending') {
-        return <AuthScreen initialRoute="buyer-pending" />;
-      }
-      if (activeNav === 'org-login') {
-        return <AuthScreen initialRoute="org-login" />;
-      }
-      if (activeNav === 'admin-login') {
-        return <AuthScreen initialRoute="admin-login" />;
-      }
-      if (activeNav === 'forgot-password') {
-        return <AuthScreen initialRoute="forgot-password" />;
-      }
-      if (activeNav === 'reset-password') {
-        return <AuthScreen initialRoute="reset-password" />;
-      }
-      if (activeNav === 'accept-invite') {
-        return <AuthScreen initialRoute="accept-invite" />;
-      }
-      if (activeNav === 'choose-workspace') {
-        return <AuthScreen initialRoute="choose-workspace" />;
-      }
-      if (activeNav === 'session-expired') {
-        return <AuthScreen initialRoute="session-expired" />;
-      }
-      if (activeNav === 'opportunities') {
-        return (
-          <PublicOpportunities
-            onSelectCall={(callId) => setViewingCallId(callId)}
-          />
-        );
-      }
-      if (activeNav === 'suppliers') {
-        return <PublicForSuppliers />;
-      }
-      if (activeNav === 'buyers') {
-        return <PublicForBuyers />;
-      }
-      if (activeNav === 'help' || activeNav === 'guidelines') {
-        return <PublicHelp />;
-      }
-      return <PublicAbout />;
+    // 1. Viewing a specific public call detail
+    if (viewingCallId) {
+      return (
+        <PublicCallDetail
+          callId={viewingCallId}
+          onBack={() => setViewingCallId(null)}
+        />
+      );
     }
 
-    // ----------------------------------------------------
-    // SUPPLIER EXPERIENCE
-    // ----------------------------------------------------
-    if (role === 'supplier') {
+    // 2. Authentication sub-routes
+    if (AUTH_ROUTES.includes(activeNav)) {
+      return <AuthScreen initialRoute={activeNav as any} />;
+    }
+
+    // 3. ADMIN PROTECTED ROUTES
+    if (ADMIN_PROTECTED_ROUTES.includes(activeNav)) {
+      if (!isAuthenticated) {
+        return <RouteGuard targetRoute={activeNav} requiredRole="admin" />;
+      }
+      if (role !== 'admin') {
+        return <RouteGuard targetRoute={activeNav} requiredRole="admin" isRoleMismatch={true} />;
+      }
+      return <AdminDashboard />;
+    }
+
+    // 4. BUYER PROTECTED ROUTES
+    if (BUYER_PROTECTED_ROUTES.includes(activeNav)) {
+      if (!isAuthenticated) {
+        return <RouteGuard targetRoute={activeNav} requiredRole="buyer" />;
+      }
+      if (role !== 'buyer') {
+        return <RouteGuard targetRoute={activeNav} requiredRole="buyer" isRoleMismatch={true} />;
+      }
+      if (buyerOrgStatus !== 'Approved') {
+        return <AuthScreen initialRoute="buyer-pending" />;
+      }
+      return <BuyerLayout />;
+    }
+
+    // 5. SUPPLIER PROTECTED ROUTES
+    if (SUPPLIER_PROTECTED_ROUTES.includes(activeNav)) {
+      if (!isAuthenticated) {
+        return <RouteGuard targetRoute={activeNav} requiredRole="supplier" />;
+      }
+      if (role !== 'supplier') {
+        return <RouteGuard targetRoute={activeNav} requiredRole="supplier" isRoleMismatch={true} />;
+      }
+
       switch (activeNav) {
         case 'dashboard':
+        case 'supplier-dashboard':
           return (
             <SupplierDashboard
               onNavigateToVault={() => setActiveNav('vault')}
@@ -203,15 +292,6 @@ const MainContent: React.FC = () => {
               onNewApplication={() => setActiveNav('opportunities')}
             />
           );
-        case 'opportunities':
-          return (
-            <PublicOpportunities
-              onSelectCall={(callId) => {
-                setSelectedCallId(callId);
-                setActiveNav('apply');
-              }}
-            />
-          );
         default:
           return (
             <SupplierDashboard
@@ -225,6 +305,42 @@ const MainContent: React.FC = () => {
               onNavigateToConsent={() => setActiveNav('consent')}
             />
           );
+      }
+    }
+
+    // 6. PUBLIC ROUTES
+    if (activeNav === 'opportunities') {
+      return (
+        <PublicOpportunities
+          onSelectCall={(callId) => setViewingCallId(callId)}
+        />
+      );
+    }
+    if (activeNav === 'suppliers') {
+      return <PublicForSuppliers />;
+    }
+    if (activeNav === 'buyers') {
+      return <PublicForBuyers />;
+    }
+    if (activeNav === 'help' || activeNav === 'guidelines') {
+      return <PublicHelp />;
+    }
+
+    // 7. DEFAULT LANDING
+    if (isAuthenticated) {
+      if (role === 'supplier') {
+        return (
+          <SupplierDashboard
+            onNavigateToVault={() => setActiveNav('vault')}
+            onNavigateToApplications={() => setActiveNav('my-applications')}
+            onNavigateToApply={(callId) => {
+              if (callId) setSelectedCallId(callId);
+              setActiveNav('apply');
+            }}
+            onNavigateToProfile={() => setActiveNav('profile')}
+            onNavigateToConsent={() => setActiveNav('consent')}
+          />
+        );
       }
     }
 

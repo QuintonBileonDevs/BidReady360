@@ -25,7 +25,7 @@ interface SupplierSignupProps {
 }
 
 export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) => {
-  const { setRole, setActiveNav, updateSupplierProfile } = useApp();
+  const { setRole, setActiveNav, updateSupplierProfile, loginSuccess } = useApp();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -148,8 +148,20 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
         city,
       });
 
-      setRole('supplier');
-      setActiveNav('dashboard');
+      const membership = res.user?.memberships?.[0] || {
+        tenantType: 'supplier',
+        tenantId: `sup-${Date.now()}`,
+        tenantName: legalName.trim(),
+      };
+
+      loginSuccess(
+        {
+          user: res.user,
+          activeTenant: membership,
+          token: res.token,
+        },
+        'supplier'
+      );
     } catch (err: any) {
       console.error('[SUPPLIER SIGNUP ERROR]', err);
       const errMsg = err.message || 'Registration failed. Please check your details.';

@@ -33,7 +33,7 @@ interface BrandedOrg {
 }
 
 export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) => {
-  const { currentOrgSlug, setCurrentOrgSlug, setRole, setActiveNav } = useApp();
+  const { currentOrgSlug, setCurrentOrgSlug, setRole, setActiveNav, loginSuccess } = useApp();
 
   const brandedOrgs: Record<string, BrandedOrg> = {
     'org-grc': {
@@ -124,8 +124,22 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-      setRole('buyer');
-      setActiveNav('dashboard');
+      loginSuccess(
+        {
+          user: {
+            id: `officer-${Date.now()}`,
+            email: email || `officer@${activeOrg.domain}`,
+            fullName: 'Procurement Officer',
+            isPlatformAdmin: false,
+          },
+          activeTenant: {
+            tenantType: 'organization',
+            tenantId: activeOrg.slug,
+            tenantName: activeOrg.name,
+          },
+        },
+        'buyer'
+      );
     }, 700);
   };
 

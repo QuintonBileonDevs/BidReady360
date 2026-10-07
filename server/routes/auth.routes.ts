@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authService } from '../services/auth.service';
 import { translateDbError } from '../db/errors';
 import { requireAuth } from '../middleware/auth.middleware';
+import { extractClientIp } from '../utils/ip';
 
 const router = Router();
 
@@ -26,7 +27,7 @@ router.post('/register-supplier', async (req: Request, res: Response) => {
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Web Client';
 
     const result = await authService.registerSupplier({
@@ -52,6 +53,7 @@ router.post('/register-supplier', async (req: Request, res: Response) => {
 
     res.status(201).json(result);
   } catch (err: any) {
+    console.error('[AUTH REGISTER SUPPLIER ERROR]', err);
     const safeError = translateDbError(err);
     res.status(safeError.status).json(safeError);
   }
@@ -70,7 +72,7 @@ router.post('/register-buyer', async (req: Request, res: Response) => {
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Web Client';
 
     const result = await authService.registerOrganization({
@@ -95,6 +97,7 @@ router.post('/register-buyer', async (req: Request, res: Response) => {
 
     res.status(201).json(result);
   } catch (err: any) {
+    console.error('[AUTH REGISTER BUYER ERROR]', err);
     const safeError = translateDbError(err);
     res.status(safeError.status).json(safeError);
   }
@@ -113,7 +116,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const result = await authService.login(email, password, ip);
 
     if (result.token) {
@@ -127,6 +130,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (err: any) {
+    console.error('[AUTH LOGIN ERROR]', err);
     res.status(401).json({
       error: 'AUTHENTICATION_FAILED',
       message: err.message || 'Invalid email or password.',
@@ -147,7 +151,7 @@ router.post('/verify-mfa', async (req: Request, res: Response) => {
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const result = await authService.verifyMfa(userId, totpCode, ip);
 
     if (result.token) {

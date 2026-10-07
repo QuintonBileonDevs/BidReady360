@@ -20,7 +20,7 @@ interface SupplierLoginProps {
 }
 
 export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
-  const { setRole, setActiveNav } = useApp();
+  const { setRole, setActiveNav, updateSupplierProfile, loginSuccess } = useApp();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -86,8 +86,28 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
         return;
       }
 
-      setRole('supplier');
-      setActiveNav('dashboard');
+      const supplierMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'supplier');
+      if (supplierMembership) {
+        updateSupplierProfile({
+          id: supplierMembership.tenantId,
+          legalName: supplierMembership.tenantName,
+          tradingName: supplierMembership.tenantName,
+          email: res.user.email,
+        });
+      }
+
+      loginSuccess(
+        {
+          user: res.user,
+          activeTenant: supplierMembership || {
+            tenantType: 'supplier',
+            tenantId: 'sup-1',
+            tenantName: res.user?.fullName || 'Registered Supplier',
+          },
+          token: res.token,
+        },
+        'supplier'
+      );
     } catch (err: any) {
       console.error('[LOGIN ERROR]', err);
       const msg = err.message || 'Invalid email or password.';
@@ -112,9 +132,20 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     setMfaError('');
 
     try {
-      await authApi.verifyMfa(mfaUserId, totpCode.trim());
-      setRole('supplier');
-      setActiveNav('dashboard');
+      const mfaRes = await authApi.verifyMfa(mfaUserId, totpCode.trim());
+      const supplierMembership = mfaRes.user?.memberships?.find((m: any) => m.tenantType === 'supplier');
+      loginSuccess(
+        {
+          user: mfaRes.user,
+          activeTenant: supplierMembership || {
+            tenantType: 'supplier',
+            tenantId: 'sup-1',
+            tenantName: mfaRes.user?.fullName || 'Registered Supplier',
+          },
+          token: mfaRes.token,
+        },
+        'supplier'
+      );
     } catch (err: any) {
       setMfaError(err.message || 'Invalid or expired MFA code.');
     } finally {

@@ -23,7 +23,7 @@ interface AdminLoginProps {
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
-  const { setRole, setActiveNav } = useApp();
+  const { setRole, setActiveNav, loginSuccess } = useApp();
 
   const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
   const [email, setEmail] = useState('');
@@ -58,8 +58,17 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
     setIsLoading(true);
     setTimeout(() => {
       setIsLoading(false);
-      setRole('admin');
-      setActiveNav('admin-dashboard');
+      loginSuccess(
+        {
+          user: {
+            id: 'admin-platform',
+            email: email.trim().toLowerCase() || 'admin@bidready360.bw',
+            fullName: 'Platform Administrator',
+            isPlatformAdmin: true,
+          },
+        },
+        'admin'
+      );
     }, 700);
   };
 

@@ -26,6 +26,9 @@ export const Header: React.FC = () => {
     notifications,
     language,
     setLanguage,
+    isAuthenticated,
+    currentUser,
+    logout,
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -89,7 +92,7 @@ export const Header: React.FC = () => {
 
   const navItems = isAuthRoute
     ? []
-    : role === 'public'
+    : (!isAuthenticated || role === 'public')
     ? publicNavItems
     : role === 'supplier'
     ? supplierNavItems
@@ -107,6 +110,12 @@ export const Header: React.FC = () => {
     setIsMobileMenuOpen(false);
     setIsUserMenuOpen(false);
     setIsSignInDropdownOpen(false);
+  };
+
+  const handleSignOut = async () => {
+    setIsUserMenuOpen(false);
+    setIsMobileMenuOpen(false);
+    await logout();
   };
 
   return (
@@ -260,11 +269,7 @@ export const Header: React.FC = () => {
                       Document vault
                     </button>
                     <button
-                      onClick={() => {
-                        setRole('public');
-                        setActiveNav('about');
-                        setIsUserMenuOpen(false);
-                      }}
+                      onClick={handleSignOut}
                       className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"
                     >
                       <span>Sign out</span>
@@ -308,11 +313,7 @@ export const Header: React.FC = () => {
                       </div>
                     </div>
                     <button
-                      onClick={() => {
-                        setRole('public');
-                        setActiveNav('about');
-                        setIsUserMenuOpen(false);
-                      }}
+                      onClick={handleSignOut}
                       className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"
                     >
                       <span>Sign out</span>

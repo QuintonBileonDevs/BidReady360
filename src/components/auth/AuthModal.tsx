@@ -41,7 +41,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialTenant = 'supplier',
   initialMode = 'signin',
 }) => {
-  const { setRole, setActiveNav, updateSupplierProfile, registerBuyerOrganization } = useApp();
+  const { setRole, setActiveNav, updateSupplierProfile, registerBuyerOrganization, loginSuccess } = useApp();
   const [tenant, setTenant] = useState<AuthTenant>(initialTenant);
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [showPassword, setShowPassword] = useState(false);
@@ -83,15 +83,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       if (mode === 'signup') {
         if (tenant === 'supplier') {
-          await authApi.registerSupplier({
+          const res = await authApi.registerSupplier({
             legalName: companyName.trim() || 'My Supplier Entity',
             cipaUin: cipaNumber.trim().toUpperCase() || `BW${Date.now().toString().slice(-8)}`,
             fullName: email.split('@')[0] || 'Supplier Admin',
             email: email.trim().toLowerCase(),
             password,
           });
-          setRole('supplier');
-          setActiveNav('dashboard');
+          updateSupplierProfile({
+            id: res.user?.memberships?.[0]?.tenantId || 'sup-new',
+            legalName: companyName.trim() || 'My Supplier Entity',
+            tradingName: companyName.trim() || 'My Supplier Entity',
+            cipaNumber: cipaNumber.trim().toUpperCase() || `BW${Date.now().toString().slice(-8)}`,
+            email: email.trim().toLowerCase(),
+          });
+          loginSuccess(
+            {
+              user: res.user,
+              activeTenant: res.user?.memberships?.[0] || {
+                tenantType: 'supplier',
+                tenantId: 'sup-registered',
+                tenantName: companyName.trim() || 'My Supplier Entity',
+              },
+              token: res.token,
+            },
+            'supplier'
+          );
         } else {
           await authApi.registerBuyer({
             organizationName: buyerOrg.trim() || 'Procuring Entity',
@@ -103,7 +120,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             orgName: buyerOrg.trim() || 'Procuring Entity',
             email: email.trim(),
           });
-          setRole('buyer');
           setActiveNav('buyer-pending');
         }
       } else {
@@ -114,16 +130,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
-        if (tenant === 'supplier') {
-          setRole('supplier');
-          setActiveNav('dashboard');
-        } else if (tenant === 'buyer') {
-          setRole('buyer');
-          setActiveNav('dashboard');
-        } else if (tenant === 'auditor') {
-          setRole('buyer');
-          setActiveNav('audit-log');
-        }
+        const targetResolvedRole = tenant === 'buyer' || tenant === 'auditor' ? 'buyer' : 'supplier';
+        loginSuccess(
+          {
+            user: res.user,
+            activeTenant: res.user?.memberships?.find((m: any) =>
+              m.tenantType === (targetResolvedRole === 'supplier' ? 'supplier' : 'organization')
+            ) || {
+              tenantType: targetResolvedRole === 'supplier' ? 'supplier' : 'organization',
+              tenantId: targetResolvedRole === 'supplier' ? 'sup-1' : 'org-grc',
+              tenantName: targetResolvedRole === 'supplier' ? 'Registered Supplier' : 'Gaborone Regional Council',
+            },
+            token: res.token,
+          },
+          targetResolvedRole
+        );
       }
 
       onClose();

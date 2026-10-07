@@ -7,6 +7,7 @@ import { consentRepository } from '../repositories/consent.repository';
 import { applicationsRepository } from '../repositories/applications.repository';
 import { bidsRepository } from '../repositories/bids.repository';
 import { translateDbError } from '../db/errors';
+import { extractClientIp } from '../utils/ip';
 
 const router = Router();
 router.use(requireAuth);

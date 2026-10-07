@@ -35,7 +35,9 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     calls,
     clarifications,
     submitClarificationQuestion,
-    setRole,
+    role,
+    isAuthenticated,
+    setIntendedRoute,
     setActiveNav,
     setSelectedCallId,
   } = useApp();
@@ -75,7 +77,9 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
 
   const handleApply = () => {
     setSelectedCallId(call.id);
-    setRole('supplier');
+    if (!isAuthenticated || role !== 'supplier') {
+      setIntendedRoute('apply');
+    }
     setActiveNav('apply');
   };
 

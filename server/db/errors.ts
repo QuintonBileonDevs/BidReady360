@@ -25,10 +25,13 @@ export function translateDbError(err: any): SafeDbError {
       const detail = err.detail || '';
       let fieldMatch = detail.match(/Key \((.*?)\)=/);
       const field = fieldMatch ? fieldMatch[1] : undefined;
+      let userFriendlyField = field ? field.replace(/_/g, ' ') : '';
+      if (field === 'cipa_uin') userFriendlyField = 'CIPA registration number';
+      if (field === 'email') userFriendlyField = 'email address';
       return {
         status: 409,
         message: field
-          ? `The value provided for ${field.replace(/_/g, ' ')} is already in use.`
+          ? `The ${userFriendlyField} provided is already registered to another account.`
           : 'That value is already in use.',
         code: 'UNIQUE_VIOLATION',
         field,
@@ -72,6 +75,15 @@ export function translateDbError(err: any): SafeDbError {
       };
     }
 
+    case '22P02': {
+      // Invalid text representation
+      return {
+        status: 400,
+        message: 'Invalid input format provided. Please check all entered parameters.',
+        code: 'INVALID_INPUT_SYNTAX',
+      };
+    }
+
     case '40P01': {
       // Deadlock detected
       return {
@@ -91,9 +103,17 @@ export function translateDbError(err: any): SafeDbError {
     }
 
     default:
+      if (err.message && typeof err.message === 'string' && !err.message.includes('Query execution failed')) {
+        return {
+          status: err.status || 400,
+          message: err.message,
+          code: sqlState || err.code || 'BAD_REQUEST',
+          field: err.field,
+        };
+      }
       return {
         status: 500,
-        message: 'Unable to process your request at this time.',
+        message: 'Unable to process your request at this time. Please verify your details and try again.',
         code: sqlState || 'DB_ERROR',
       };
   }

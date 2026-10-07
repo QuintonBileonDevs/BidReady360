@@ -22,14 +22,18 @@ interface PublicForBuyersProps {
 }
 
 export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) => {
-  const { setRole, setActiveNav } = useApp();
+  const { role, isAuthenticated, setIntendedRoute, setActiveNav } = useApp();
 
   const handleOpenBuyer = () => {
     if (onOpenAuth) {
       onOpenAuth('buyer', 'signin');
     } else {
-      setRole('buyer');
-      setActiveNav('dashboard');
+      if (!isAuthenticated || role !== 'buyer') {
+        setIntendedRoute('buyer-dashboard');
+        setActiveNav('buyer-login');
+      } else {
+        setActiveNav('dashboard');
+      }
     }
   };
 

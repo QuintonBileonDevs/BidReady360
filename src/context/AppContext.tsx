@@ -17,6 +17,7 @@ import {
   AwardDecision,
 } from '../types';
 import { Language, TRANSLATIONS } from '../translations';
+import { ApiUser, authApi } from '../services/api';
 
 const EMPTY_SUPPLIER: Supplier = {
   id: '',
@@ -89,6 +90,15 @@ interface AppContextType {
   setSelectedCallId: (id: string | null) => void;
   selectedAppId: string | null;
   setSelectedAppId: (id: string | null) => void;
+
+  // Authentication & Security State
+  currentUser: ApiUser | null;
+  isAuthenticated: boolean;
+  authLoading: boolean;
+  intendedRoute: string | null;
+  setIntendedRoute: (route: string | null) => void;
+  loginSuccess: (session: { user: ApiUser; activeTenant?: any; token?: string }, targetRole?: UserRole) => void;
+  logout: () => Promise<void>;
   
   // Buyer Verification State
   buyerOrgStatus: 'Pending' | 'Approved' | 'Rejected';
@@ -150,6 +160,144 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeNav, setActiveNavState] = useState<string>('about');
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+
+  // Authentication & Security State
+  const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [intendedRoute, setIntendedRoute] = useState<string | null>(null);
+
+  // Restore authenticated session on startup
+  useEffect(() => {
+    let isMounted = true;
+    async function restoreSession() {
+      const token = localStorage.getItem('bidready_token');
+      if (!token) {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setAuthLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const session = await authApi.getMe();
+        if (session && session.user && isMounted) {
+          setCurrentUser(session.user);
+          setIsAuthenticated(true);
+          if (session.user.isPlatformAdmin) {
+            setRoleState('admin');
+          } else if (session.activeTenant?.tenantType === 'organization') {
+            setRoleState('buyer');
+            setBuyerOrgStatus('Approved');
+            setRegisteredBuyerOrgName(session.activeTenant.tenantName);
+            setRegisteredBuyerEmail(session.user.email);
+          } else if (session.activeTenant?.tenantType === 'supplier') {
+            setRoleState('supplier');
+            updateSupplierProfile({
+              id: session.activeTenant.tenantId,
+              legalName: session.activeTenant.tenantName,
+              tradingName: session.activeTenant.tenantName,
+              email: session.user.email,
+            });
+          }
+        } else if (isMounted) {
+          localStorage.removeItem('bidready_token');
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      } catch {
+        if (isMounted) {
+          localStorage.removeItem('bidready_token');
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    restoreSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const loginSuccess = (
+    session: { user: ApiUser; activeTenant?: any; token?: string },
+    targetRole?: UserRole
+  ) => {
+    if (session.token) {
+      localStorage.setItem('bidready_token', session.token);
+    }
+    setCurrentUser(session.user);
+    setIsAuthenticated(true);
+
+    let resolvedRole: UserRole = targetRole || 'supplier';
+    if (session.user.isPlatformAdmin) {
+      resolvedRole = 'admin';
+    } else if (session.activeTenant?.tenantType === 'organization') {
+      resolvedRole = 'buyer';
+      setBuyerOrgStatus('Approved');
+      setRegisteredBuyerOrgName(session.activeTenant.tenantName);
+      setRegisteredBuyerEmail(session.user.email);
+    } else if (session.activeTenant?.tenantType === 'supplier') {
+      resolvedRole = 'supplier';
+      updateSupplierProfile({
+        id: session.activeTenant.tenantId,
+        legalName: session.activeTenant.tenantName,
+        tradingName: session.activeTenant.tenantName,
+        email: session.user.email,
+      });
+    }
+
+    setRoleState(resolvedRole);
+
+    if (intendedRoute) {
+      const destination = intendedRoute;
+      setIntendedRoute(null);
+      setActiveNavState(destination);
+    } else {
+      setActiveNavState(resolvedRole === 'admin' ? 'admin-dashboard' : 'dashboard');
+    }
+
+    addAuditEvent({
+      actorName: session.user.fullName || session.user.email,
+      actorRole: resolvedRole === 'supplier' ? 'Supplier' : resolvedRole === 'buyer' ? 'Procurement Officer' : 'Super Admin',
+      organizationName: session.activeTenant?.tenantName || 'BidReady360 Platform',
+      action: 'User Authentication Successful',
+      entityType: resolvedRole === 'buyer' ? 'Organization' : 'Supplier',
+      entityId: session.user.id,
+      details: `Interactive session established for ${session.user.email}. Role: ${resolvedRole}.`,
+    });
+  };
+
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Ignore
+    }
+    localStorage.removeItem('bidready_token');
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setRoleState('public');
+    setActiveNavState('about');
+    setIntendedRoute(null);
+
+    addAuditEvent({
+      actorName: currentUser?.fullName || 'Active User',
+      actorRole: role === 'supplier' ? 'Supplier' : role === 'buyer' ? 'Procurement Officer' : role === 'admin' ? 'Super Admin' : 'System',
+      organizationName: 'BidReady360 Platform',
+      action: 'Session Terminated (Logout)',
+      entityType: role === 'buyer' ? 'Organization' : 'Supplier',
+      entityId: currentUser?.id || 'anon',
+      details: 'User logged out and security session invalidated.',
+    });
+  };
 
   // Buyer Verification State
   const [buyerOrgStatus, setBuyerOrgStatus] = useState<'Pending' | 'Approved' | 'Rejected'>('Pending');
@@ -249,6 +397,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setRole = (newRole: UserRole) => {
+    if (!isAuthenticated && newRole !== 'public') {
+      if (newRole === 'supplier') {
+        setActiveNavState('supplier-login');
+      } else if (newRole === 'buyer') {
+        setActiveNavState('buyer-login');
+      } else if (newRole === 'admin') {
+        setActiveNavState('admin-login');
+      }
+      return;
+    }
+
     setRoleState(newRole);
     if (newRole === 'public') {
       setActiveNavState('about');
@@ -842,6 +1001,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedCallId,
         selectedAppId,
         setSelectedAppId,
+        currentUser,
+        isAuthenticated,
+        authLoading,
+        intendedRoute,
+        setIntendedRoute,
+        loginSuccess,
+        logout,
         buyerOrgStatus,
         registeredBuyerOrgName,
         registeredBuyerEmail,
