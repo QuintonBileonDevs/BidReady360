@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { requireAuth, requirePermission } from '../middleware/auth.middleware';
 import { getTenantContext } from '../middleware/tenant.helper';
 import { auditRepository } from '../repositories/audit.repository';
+import { extractClientIp } from '../utils/ip';
 
 const router = Router();
 router.use(requireAuth);
@@ -27,7 +28,7 @@ router.post('/export', requirePermission('audit.view'), async (req: Request, res
   try {
     const ctx = getTenantContext(req);
     const { exportType, recordsCount } = req.body;
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const userAgent = req.headers['user-agent'] || 'Web Client';
 
     const checksumSha256 = crypto.createHash('sha256').update(`${ctx.tenantId}|${exportType}|${Date.now()}`).digest('hex');

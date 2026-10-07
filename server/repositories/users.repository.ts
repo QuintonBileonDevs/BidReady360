@@ -62,7 +62,7 @@ export class UsersRepository {
     return res.rows[0] || null;
   }
 
-  async recordLoginSuccess(userId: string, ip?: string): Promise<void> {
+  async recordLoginSuccess(userId: string, ip?: string | null): Promise<void> {
     await query(
       `UPDATE users
        SET last_login_at = NOW(),

@@ -169,7 +169,7 @@ router.post('/applications/submit', async (req: Request, res: Response) => {
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const result = await applicationsRepository.submitApplication({
       callId,
       supplierId: ctx.tenantId,
@@ -199,7 +199,7 @@ router.post('/bids/seal', async (req: Request, res: Response) => {
       return;
     }
 
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
     const result = await bidsRepository.sealAndSubmitBid({
       callId,
       supplierId: ctx.tenantId,

@@ -7,6 +7,7 @@ import { bidsRepository } from '../repositories/bids.repository';
 import { evaluationsRepository } from '../repositories/evaluations.repository';
 import { awardsRepository } from '../repositories/awards.repository';
 import { translateDbError } from '../db/errors';
+import { extractClientIp } from '../utils/ip';
 
 const router = Router();
 router.use(requireAuth);
@@ -44,7 +45,7 @@ router.post('/applications/:id/review', requirePermission('applications.review')
   try {
     const ctx = getOrganizationContext(req);
     const { decision, comment } = req.body;
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
 
     await applicationsRepository.recordReviewDecision({
       applicationId: req.params.id,
@@ -99,7 +100,7 @@ router.post('/bids/:callId/open-session', requirePermission('bids.open'), async 
   try {
     const ctx = getOrganizationContext(req);
     const { witnesses } = req.body;
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
 
     const result = await bidsRepository.conductOpeningSession({
       callId: req.params.callId,
@@ -172,7 +173,7 @@ router.post('/evaluations/:callId/score', requirePermission('evaluation.score'),
 router.post('/evaluations/:callId/lock', requirePermission('evaluation.score'), async (req: Request, res: Response) => {
   try {
     const ctx = getOrganizationContext(req);
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
 
     await evaluationsRepository.lockScorecard({
       callId: req.params.callId,
@@ -206,7 +207,7 @@ router.post('/awards/recommend', requirePermission('awards.recommend'), async (r
   try {
     const ctx = getOrganizationContext(req);
     const { callId, bidId, supplierId, awardValue, justification } = req.body;
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
 
     const awardId = await awardsRepository.recommendAward({
       callId,
@@ -233,7 +234,7 @@ router.post('/awards/:id/approve', requirePermission('awards.approve'), async (r
   try {
     const ctx = getOrganizationContext(req);
     const { decision, comment } = req.body;
-    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+    const ip = extractClientIp(req);
 
     await awardsRepository.approveAward({
       awardId: req.params.id,

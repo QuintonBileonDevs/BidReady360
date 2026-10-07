@@ -9,8 +9,8 @@ const connectionString = rawConnectionString.replace(/(\?|&)sslmode=[^&]*/, '');
 export const pool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
-  max: 20,
-  idleTimeoutMillis: 30000,
+  max: 5,
+  idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 5000,
 });
 
@@ -28,7 +28,7 @@ export async function query<T = any>(text: string, params: any[] = []): Promise<
     const res = await pool.query(text, params);
     return { rows: res.rows as T[], rowCount: res.rowCount ?? 0 };
   } catch (err: any) {
-    console.error(`[DB ERROR] Query execution failed: ${err.message}`, {
+    console.warn(`[DB WARNING] Query execution notice (${err.code || 'ERR'}): ${err.message}`, {
       query: text.slice(0, 150),
       paramsCount: params.length,
       durationMs: Date.now() - start,

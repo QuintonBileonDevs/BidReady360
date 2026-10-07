@@ -5,7 +5,6 @@ import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { RingMotif } from '../ui/RingMotif';
 import { Accordion, AccordionItem } from '../ui/Accordion';
-import { AuthModal, AuthTenant } from '../auth/AuthModal';
 import {
   Building2,
   Briefcase,
@@ -28,18 +27,16 @@ import {
   UserCheck,
   Check,
 } from 'lucide-react';
-
 export const PublicAbout: React.FC = () => {
   const { calls, setRole, setActiveNav, supplier, setSelectedCallId } = useApp();
   const [howItWorksTab, setHowItWorksTab] = useState<'suppliers' | 'buyers'>('suppliers');
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authTenant, setAuthTenant] = useState<AuthTenant>('supplier');
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
 
-  const openAuth = (tenant: AuthTenant, mode: 'signin' | 'signup') => {
-    setAuthTenant(tenant);
-    setAuthMode(mode);
-    setIsAuthModalOpen(true);
+  const openAuth = (tenant: 'supplier' | 'buyer', mode: 'signin' | 'signup') => {
+    if (tenant === 'buyer') {
+      setActiveNav(mode === 'signup' ? 'buyer-signup' : 'buyer-login');
+    } else {
+      setActiveNav(mode === 'signup' ? 'supplier-signup' : 'supplier-login');
+    }
   };
 
   const handleSelectCall = (callId: string) => {
@@ -570,14 +567,6 @@ export const PublicAbout: React.FC = () => {
           </div>
         </Card>
       </section>
-
-      {/* Auth Modal Trigger */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        initialTenant={authTenant}
-        initialMode={authMode}
-      />
     </div>
   );
 };

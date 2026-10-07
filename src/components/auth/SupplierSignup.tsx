@@ -18,6 +18,7 @@ import {
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SupplierSignupProps {
@@ -420,6 +421,13 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
 
               {errors.terms && (
                 <p className="text-[14px] text-[#C2412D] font-medium">{errors.terms}</p>
+              )}
+
+              {errors.general && (
+                <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[14px] text-[#C2412D] font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errors.general}</span>
+                </div>
               )}
             </div>
 

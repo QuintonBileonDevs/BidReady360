@@ -14,7 +14,6 @@ import {
   LogIn,
 } from 'lucide-react';
 import { NotificationDrawer } from './NotificationDrawer';
-import { AuthModal, AuthTenant } from '../auth/AuthModal';
 
 export const Header: React.FC = () => {
   const {
@@ -33,9 +32,6 @@ export const Header: React.FC = () => {
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authTenant, setAuthTenant] = useState<AuthTenant>('supplier');
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSignInDropdownOpen, setIsSignInDropdownOpen] = useState(false);
 
@@ -103,10 +99,12 @@ export const Header: React.FC = () => {
     setIsMobileMenuOpen(false);
   };
 
-  const openAuth = (tenant: AuthTenant, mode: 'signin' | 'signup') => {
-    setAuthTenant(tenant);
-    setAuthMode(mode);
-    setIsAuthModalOpen(true);
+  const openAuth = (tenant: 'supplier' | 'buyer', mode: 'signin' | 'signup') => {
+    if (tenant === 'buyer') {
+      setActiveNav(mode === 'signup' ? 'buyer-signup' : 'buyer-login');
+    } else {
+      setActiveNav(mode === 'signup' ? 'supplier-signup' : 'supplier-login');
+    }
     setIsMobileMenuOpen(false);
     setIsUserMenuOpen(false);
     setIsSignInDropdownOpen(false);
@@ -367,12 +365,6 @@ export const Header: React.FC = () => {
       <NotificationDrawer
         isOpen={isNotifOpen}
         onClose={() => setIsNotifOpen(false)}
-      />
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        initialTenant={authTenant}
-        initialMode={authMode}
       />
     </>
   );
