@@ -77,46 +77,68 @@ export class SuppliersRepository {
   async calculateCompleteness(supplierId: string): Promise<number> {
     try {
       const sRes = await query(
-        `SELECT trading_name, description, physical_address, primary_phone,
-                bank_name, bank_branch, citizen_owned_percentage, edd_certified
-         FROM suppliers WHERE id = $1`,
+        `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
+                s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked AS bank_account_number,
+                s.citizen_owned_percentage
+         FROM suppliers s WHERE s.id = $1`,
         [supplierId]
       );
       if (sRes.rows.length === 0) return 0;
       const s = sRes.rows[0];
 
-      let score = 0;
+      let completedCount = 0;
 
-      // Task 1: Basic Profile Details (up to 40%)
-      if (s.trading_name) score += 10;
-      if (s.description) score += 10;
-      if (s.physical_address) score += 10;
-      if (s.primary_phone) score += 10;
+      // 10 Company items
+      if (s.legal_name && s.legal_name.trim()) completedCount++;
+      if (s.trading_name && s.trading_name.trim()) completedCount++;
+      if (s.burs_tin && s.burs_tin.trim()) completedCount++;
+      if (s.physical_address && s.physical_address.trim()) completedCount++;
+      if (s.city && s.city.trim()) completedCount++;
+      if (s.district_id) completedCount++;
+      if (s.primary_phone && s.primary_phone.trim()) completedCount++;
+      if (s.email && s.email.trim()) completedCount++;
+      if (s.bank_name && (s.bank_branch || s.bank_account_number)) completedCount++;
+      if (s.citizen_owned_percentage !== null && Number(s.citizen_owned_percentage) > 0) completedCount++;
 
-      // Task 2: Financial Details (up to 15%)
-      if (s.bank_name && s.bank_branch) score += 15;
-
-      // Task 3: Citizen / Ownership Details (up to 15%)
-      if (s.citizen_owned_percentage !== null) score += 10;
-      if (s.edd_certified) score += 5;
-
-      // Task 4: Directors Roster (up to 15%)
+      // 1 People item: at least 1 director with sum ownership = 100%
       const pRes = await query(
-        `SELECT COUNT(*) FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
+        `SELECT ownership_percent FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
         [supplierId]
       );
-      const peopleCount = parseInt(pRes.rows[0]?.count || '0', 10);
-      if (peopleCount > 0) score += 15;
+      if (pRes.rows.length > 0) {
+        const totalOwnership = pRes.rows.reduce((sum: number, r: any) => sum + (parseFloat(r.ownership_percent) || 0), 0);
+        if (Math.round(totalOwnership) === 100) {
+          completedCount++;
+        }
+      }
 
-      // Task 5: Document Vault Compliance (up to 15%)
+      // 4 Document items: CIPA, Tax Clearance, Workers Comp, Public Liability
       const dRes = await query(
-        `SELECT COUNT(*) FROM supplier_documents WHERE supplier_id = $1 AND status = 'active'`,
+        `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until
+         FROM supplier_documents sd
+         JOIN document_types dt ON dt.id = sd.document_type_id
+         LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
+         WHERE sd.supplier_id = $1 AND sd.status != 'rejected'`,
         [supplierId]
       );
-      const docsCount = parseInt(dRes.rows[0]?.count || '0', 10);
-      if (docsCount > 0) score += 15;
 
-      return score;
+      const isValid = (keywords: string[]) => {
+        return dRes.rows.some((d: any) => {
+          const name = ((d.code || '') + ' ' + (d.name || '')).toLowerCase();
+          const matches = keywords.some((k: string) => name.includes(k.toLowerCase()));
+          if (!matches) return false;
+          if (d.status === 'expired') return false;
+          if (d.valid_until && new Date(d.valid_until) < new Date()) return false;
+          return true;
+        });
+      };
+
+      if (isValid(['cipa', 'incorporation', 'company_reg'])) completedCount++;
+      if (isValid(['tax', 'burs'])) completedCount++;
+      if (isValid(['safety', 'compensation', 'wca'])) completedCount++;
+      if (isValid(['insurance', 'liability'])) completedCount++;
+
+      return Math.round((completedCount / 15) * 100);
     } catch (err) {
       console.warn('[RECALCULATE COMPLETENESS ERROR]', err);
       return 0;
@@ -132,11 +154,13 @@ export class SuppliersRepository {
 
     const res = await query<SupplierProfile>(
       `SELECT s.id, s.legal_name AS "legalName", s.trading_name AS "tradingName",
-              s.cipa_uin AS "cipaUin", s.burs_tin AS "bursTin", s.ppra_registration_no AS "ppraRegistrationNo",
+              s.cipa_uin AS "cipaUin", s.cipa_uin AS "cipaNumber", s.burs_tin AS "bursTin", s.burs_tin AS "tinNumber",
+              s.ppra_registration_no AS "ppraRegistrationNo", s.ppra_registration_no AS "ppraCode",
               s.company_type AS "companyType", s.year_established AS "yearEstablished", s.description,
               s.physical_address AS "physicalAddress", s.postal_address AS "postalAddress", s.city,
               s.district_id AS "districtId", gd.name AS "districtName",
               s.primary_phone AS "primaryPhone", s.email, s.website,
+              s.bank_name AS "bankName", s.bank_branch AS "bankBranch", s.account_number_masked AS "accountNumberMasked",
               s.employee_count_band AS "employeeCountBand", s.citizen_owned_percentage AS "citizenOwnedPercentage",
               s.youth_owned AS "youthOwned", s.women_owned AS "womenOwned", s.disability_owned AS "disabilityOwned",
               s.edd_certified AS "eddCertified", s.edd_certificate_no AS "eddCertificateNo", s.edd_valid_until AS "eddValidUntil",
@@ -150,7 +174,7 @@ export class SuppliersRepository {
     return res.rows[0] || null;
   }
 
-  async updateProfile(supplierId: string, data: Partial<SupplierProfile>): Promise<SupplierProfile> {
+  async updateProfile(supplierId: string, data: Partial<SupplierProfile> & Record<string, any>): Promise<SupplierProfile> {
     const fields: string[] = [];
     const params: any[] = [supplierId];
 
@@ -162,13 +186,29 @@ export class SuppliersRepository {
       params.push(data.tradingName);
       fields.push(`trading_name = $${params.length}`);
     }
-    if (data.bursTin !== undefined) {
-      params.push(data.bursTin);
+    if (data.bursTin !== undefined || data.tinNumber !== undefined) {
+      params.push(data.bursTin || data.tinNumber);
       fields.push(`burs_tin = $${params.length}`);
     }
-    if (data.ppraRegistrationNo !== undefined) {
-      params.push(data.ppraRegistrationNo);
+    if (data.cipaUin !== undefined || data.cipaNumber !== undefined) {
+      params.push(data.cipaUin || data.cipaNumber);
+      fields.push(`cipa_uin = $${params.length}`);
+    }
+    if (data.ppraRegistrationNo !== undefined || data.ppraCode !== undefined) {
+      params.push(data.ppraRegistrationNo || data.ppraCode);
       fields.push(`ppra_registration_no = $${params.length}`);
+    }
+    if (data.bankName !== undefined) {
+      params.push(data.bankName);
+      fields.push(`bank_name = $${params.length}`);
+    }
+    if (data.bankBranch !== undefined) {
+      params.push(data.bankBranch);
+      fields.push(`bank_branch = $${params.length}`);
+    }
+    if (data.accountNumberMasked !== undefined) {
+      params.push(data.accountNumberMasked);
+      fields.push(`account_number_masked = $${params.length}`);
     }
     if (data.companyType !== undefined) {
       params.push(data.companyType);
@@ -194,8 +234,8 @@ export class SuppliersRepository {
       params.push(data.city);
       fields.push(`city = $${params.length}`);
     }
-    if (data.districtId !== undefined) {
-      params.push(data.districtId);
+    if (data.districtId !== undefined || data.district !== undefined) {
+      params.push(data.districtId || data.district);
       fields.push(`district_id = $${params.length}`);
     }
     if (data.primaryPhone !== undefined) {

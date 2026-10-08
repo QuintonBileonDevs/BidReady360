@@ -77,10 +77,10 @@ export class AuthService {
         throw err;
       }
 
-      // 1. Create User
+      // 1. Create User (stays unverified until email confirmation link is clicked)
       const userRes = await client.query(
         `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
-         VALUES ($1, $2, $3, $4, 'active', NOW())
+         VALUES ($1, $2, $3, $4, 'active', NULL)
          RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
         [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
       );
@@ -358,6 +358,17 @@ export class AuthService {
     }
 
     await usersRepository.enableMfa(userId);
+  }
+
+  /**
+   * Verify email address for user upon clicking link or entering code.
+   */
+  async verifyEmail(email: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    await query(
+      `UPDATE users SET email_verified_at = NOW() WHERE email = $1`,
+      [cleanEmail]
+    );
   }
 
   /**

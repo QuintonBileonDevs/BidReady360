@@ -13,6 +13,7 @@ import {
   ArrowRight,
   AlertCircle,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 
 interface SupplierLoginProps {
@@ -20,7 +21,7 @@ interface SupplierLoginProps {
 }
 
 export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
-  const { setRole, setActiveNav, updateSupplierProfile, loginSuccess } = useApp();
+  const { setRole, setActiveNav, updateSupplierProfile, loginSuccess, loadDemoSupplier } = useApp();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,9 +42,9 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     const newErrors = { ...errors };
     if (field === 'email') {
       if (!email.trim()) {
-        newErrors.email = 'Enter an email address like name@company.co.bw';
-      } else if (!/\S+@\S+\.\S+/.test(email)) {
-        newErrors.email = 'Enter a valid email address like name@company.co.bw';
+        newErrors.email = 'Enter your email address.';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        newErrors.email = 'Enter a valid email address.';
       } else {
         delete newErrors.email;
       }
@@ -62,8 +63,8 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     e.preventDefault();
 
     const newErrors: { email?: string; password?: string; general?: string } = {};
-    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Enter an email address like name@company.co.bw';
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      newErrors.email = 'Enter a valid email address.';
     }
     if (!password) {
       newErrors.password = 'Enter your account password.';
@@ -228,18 +229,25 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
         ) : (
           /* Login Form */
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Email address *"
-              type="email"
-              placeholder="e.g. name@company.co.bw"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onBlur={() => handleBlur('email')}
-              error={errors.email}
-              disabled={isLoading}
-              leftIcon={<Mail className="w-4 h-4" />}
-              autoComplete="username"
-            />
+            <div>
+              <Input
+                label="Email address *"
+                type="email"
+                placeholder="e.g. name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => handleBlur('email')}
+                error={errors.email}
+                disabled={isLoading}
+                leftIcon={<Mail className="w-4 h-4" />}
+                autoComplete="username"
+              />
+              {!errors.email && (
+                <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2] mt-1.5 leading-snug">
+                  Use an email you check regularly. Company and personal addresses are both fine.
+                </p>
+              )}
+            </div>
 
             <div className="space-y-1">
               <Input
@@ -295,16 +303,32 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
           </form>
         )}
 
-        {/* Bottom Switcher Link */}
-        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
-          Don't have an account?{' '}
-          <button
-            type="button"
-            onClick={() => onNavigate('supplier-signup')}
-            className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] hover:underline cursor-pointer"
-          >
-            Register company
-          </button>
+        {/* Bottom Switcher Link & Sample Demo Account */}
+        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+          <div className="text-center text-[14px] text-[#6B7A87]">
+            Don't have an account?{' '}
+            <button
+              type="button"
+              onClick={() => onNavigate('supplier-signup')}
+              className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] hover:underline cursor-pointer"
+            >
+              Register company
+            </button>
+          </div>
+
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                loadDemoSupplier();
+                setRole('supplier', 'dashboard');
+              }}
+              className="w-full py-2.5 px-3 bg-[#FFFBEB] hover:bg-[#FEF3C7] dark:bg-[#78350F]/20 dark:hover:bg-[#78350F]/30 border border-[#FDE68A] dark:border-[#78350F]/50 rounded-[8px] text-[13px] text-[#92400E] dark:text-[#FCD34D] font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-[#D97706]" />
+              <span>Explore labelled demo account (Kopano)</span>
+            </button>
+          </div>
         </div>
       </div>
     </AuthLayout>

@@ -24,6 +24,7 @@ import {
   XCircle,
   Download,
   Info,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface SupplierApplicationsListProps {
@@ -117,6 +118,10 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
         label: 'Resume application',
         primary: true,
         action: () => {
+          if (!supplier.emailVerified) {
+            setActiveNav('supplier-verify-email');
+            return;
+          }
           setSelectedCallId(app.callId);
           setActiveNav('apply');
         },
@@ -265,6 +270,10 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
                 <button
                   type="button"
                   onClick={() => {
+                    if (!supplier.emailVerified) {
+                      setActiveNav('supplier-verify-email');
+                      return;
+                    }
                     setSelectedCallId(selectedApp.callId);
                     setActiveNav('apply');
                   }}
@@ -698,7 +707,13 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            onClick={onNewApplication}
+            onClick={() => {
+              if (!supplier.emailVerified) {
+                setActiveNav('supplier-verify-email');
+                return;
+              }
+              onNewApplication();
+            }}
             className="px-5 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -706,6 +721,30 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
           </button>
         </div>
       </div>
+
+      {/* Safeguard: Email Verification Mandatory */}
+      {!supplier.emailVerified && (
+        <div className="p-4 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold text-amber-900 dark:text-amber-200 block">
+                Email verification mandatory to apply for tenders
+              </span>
+              <p className="text-amber-800 dark:text-amber-300 text-[13px]">
+                Your account is currently unverified. Applying for open calls and managing submissions is restricted until your email address is verified.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveNav('supplier-verify-email')}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors"
+          >
+            Verify email now
+          </button>
+        </div>
+      )}
 
       {/* 2. Three Tabs: Drafts, Submitted, Decisions */}
       <div className="flex items-center gap-2 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-px">

@@ -25,8 +25,9 @@ export interface DocumentVersion {
 
 export interface SupplierDocument {
   id: string;
-  supplierId: string;
+  supplierId?: string;
   documentType: string;
+  title?: string;
   documentNumber: string;
   fileName: string;
   fileSize: string;
@@ -40,6 +41,10 @@ export interface SupplierDocument {
   downloadUrl: string;
   versionHistory?: DocumentVersion[];
   extractedFields?: { [key: string]: string };
+  issuingAuthority?: string;
+  uploadedAt?: string;
+  certifiedCopy?: boolean;
+  certificationDate?: string;
 }
 
 export interface Supplier {
@@ -77,6 +82,17 @@ export interface Supplier {
   hasCipa?: boolean;
   hasBurs?: boolean;
   hasPpra?: boolean;
+  isDemoAccount?: boolean;
+  citizenOwnershipSet?: boolean;
+  categories?: string[];
+  pastProjects?: any[];
+  teamMembers?: any[];
+  detailsSaved?: boolean;
+  emailVerified?: boolean;
+  companyType?: string;
+  description?: string;
+  vatRegistered?: boolean;
+  biddingPublicTenders?: boolean;
 }
 
 export interface Organization {
@@ -181,18 +197,24 @@ export interface Clarification {
 
 export interface ConsentGrant {
   id: string;
-  supplierId: string;
+  supplierId?: string;
   organizationId: string;
   organizationName: string;
   grantedAt: string;
+  validUntil?: string;
   expiryDate?: string;
   purpose?: string;
   status: 'Active' | 'Revoked';
   scope: {
-    companyDetails: boolean;
-    directorsOwners: boolean;
-    pastProjects: boolean;
-    selectedDocuments: boolean;
+    companyDetails?: boolean;
+    directorsOwners?: boolean;
+    pastProjects?: boolean;
+    selectedDocuments?: boolean;
+    profile?: boolean;
+    directors?: boolean;
+    financials?: boolean;
+    taxClearance?: boolean;
+    certifications?: boolean;
     taxCompliance?: boolean;
     financialStatements?: boolean;
     keyPersonnel?: boolean;
@@ -202,6 +224,7 @@ export interface ConsentGrant {
   selectedDocumentIds?: string[];
   selectedDocumentNames?: string[];
   tiedApplicationNumbers?: string[];
+  accessedCount?: number;
   lastAccessedAt?: string;
 }
 
@@ -268,9 +291,15 @@ export interface Application {
   informationRequest?: InformationRequest;
   withdrawnAt?: string;
   sharedDocumentIds: string[];
+  pinnedDocumentVersionIds?: string[];
+  completenessScore?: number;
+  answers?: Record<string, any>;
   responses: ApplicationResponse[];
   bid?: Bid;
   timeline: {
+    id?: string;
+    author?: string;
+    action?: string;
     stage: 'Draft' | 'Submitted' | 'Under review' | 'More information requested' | 'Approved' | 'Rejected' | 'Withdrawn';
     timestamp: string;
     note?: string;

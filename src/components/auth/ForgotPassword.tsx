@@ -81,17 +81,24 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onNavigate }) =>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Email address *"
-              type="email"
-              placeholder="e.g. name@company.co.bw"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={error || undefined}
-              leftIcon={<Mail className="w-4 h-4" />}
-              autoComplete="email"
-              required
-            />
+            <div>
+              <Input
+                label="Email address *"
+                type="email"
+                placeholder="e.g. name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                error={error || undefined}
+                leftIcon={<Mail className="w-4 h-4" />}
+                autoComplete="email"
+                required
+              />
+              {!error && (
+                <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2] mt-1.5 leading-snug">
+                  Use an email you check regularly. Company and personal addresses are both fine.
+                </p>
+              )}
+            </div>
 
             <Button
               type="submit"

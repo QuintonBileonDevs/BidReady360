@@ -19,6 +19,7 @@ import {
   Users,
   Briefcase,
   Search,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface SharingActivityItem {
@@ -41,6 +42,7 @@ export const SupplierConsent: React.FC = () => {
     documents,
     applications,
     addAuditEvent,
+    setActiveNav,
   } = useApp();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -118,6 +120,10 @@ export const SupplierConsent: React.FC = () => {
 
   // Open Share Drawer
   const handleOpenShareDrawer = () => {
+    if (!supplier.emailVerified) {
+      showToast('Email verification is mandatory before sharing documents or granting access.');
+      return;
+    }
     setSelectedOrgId(organizations[0]?.id || 'org-grc');
     setShareCompanyDetails(true);
     setShareDirectorsOwners(true);
@@ -136,6 +142,10 @@ export const SupplierConsent: React.FC = () => {
   // Submit new grant from drawer
   const handleConfirmShare = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supplier.emailVerified) {
+      showToast('Email verification is mandatory before sharing documents.');
+      return;
+    }
     const targetOrg = organizations.find((o) => o.id === selectedOrgId);
     if (!targetOrg) return;
 
@@ -172,7 +182,7 @@ export const SupplierConsent: React.FC = () => {
     revokeConsent(revokingGrant.id);
     addAuditEvent({
       action: 'Sharing access revoked',
-      actorName: 'Kagiso Molosiwa (Supplier admin)',
+      actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       entityType: 'Organization',
@@ -264,6 +274,30 @@ export const SupplierConsent: React.FC = () => {
             className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer"
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* Safeguard: Email Verification Mandatory for Document Sharing */}
+      {!supplier.emailVerified && (
+        <div className="p-4 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-750 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold text-amber-900 dark:text-amber-200 block">
+                Email verification mandatory to share documents
+              </span>
+              <p className="text-amber-800 dark:text-amber-300 text-[13px]">
+                Your supplier account is currently unverified. You cannot share company credentials or vault documents until you verify your email address.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveNav('supplier-verify-email')}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors"
+          >
+            Verify email now
           </button>
         </div>
       )}

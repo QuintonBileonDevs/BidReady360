@@ -12,6 +12,7 @@ import {
   LogOut,
   UserPlus,
   LogIn,
+  RotateCw,
 } from 'lucide-react';
 import { NotificationDrawer } from './NotificationDrawer';
 
@@ -28,6 +29,7 @@ export const Header: React.FC = () => {
     isAuthenticated,
     currentUser,
     logout,
+    resetDemoData,
   } = useApp();
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -216,23 +218,29 @@ export const Header: React.FC = () => {
               </div>
             )}
 
-            {/* Supplier User Menu: Avatar, Full Company Name with Tooltip, Second line "Verified supplier" */}
+            {/* Supplier User Menu: Avatar, Full Company Name with Tooltip, Status */}
             {role === 'supplier' && (
               <div className="relative">
                 <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  title={supplier.legalName}
+                  title={supplier.legalName || 'Supplier'}
                   className="flex items-center gap-2.5 pl-2 pr-1.5 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer text-left"
                 >
                   <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] text-[#1F5F99] flex items-center justify-center font-semibold text-[13px] shrink-0">
-                    KB
+                    {supplier.legalName ? supplier.legalName.trim().substring(0, 2).toUpperCase() : 'SP'}
                   </div>
                   <div className="hidden sm:block leading-tight">
                     <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
-                      {supplier.legalName}
+                      {supplier.legalName || 'Supplier Account'}
                     </span>
                     <span className="text-[13px] text-[#6B7A87] block">
-                      Verified supplier
+                      {supplier.isDemoAccount
+                        ? 'Demo account'
+                        : !supplier.emailVerified
+                        ? 'Unverified account'
+                        : supplier.profileCompleteness === 100
+                        ? 'Complete profile'
+                        : `Incomplete (${supplier.profileCompleteness}%)`}
                     </span>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-[#6B7A87]" strokeWidth={1.5} />
@@ -241,12 +249,22 @@ export const Header: React.FC = () => {
                 {isUserMenuOpen && (
                   <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-2 z-50 text-[13px] space-y-1">
                     <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                      <div className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                        {supplier.legalName}
+                      <div className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
+                        {supplier.legalName || 'Supplier Account'}
                       </div>
                       <div className="text-[13px] text-[#6B7A87]">
-                        CIPA: {supplier.cipaNumber}
+                        {supplier.cipaNumber ? `CIPA: ${supplier.cipaNumber}` : 'Account active'}
                       </div>
+                      {!supplier.isDemoAccount && !supplier.emailVerified && (
+                        <div className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[11px] font-medium inline-block">
+                          Email unverified
+                        </div>
+                      )}
+                      {supplier.isDemoAccount && (
+                        <div className="mt-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] dark:bg-[#78350F]/30 text-[#92400E] dark:text-[#FCD34D] text-[11px] font-medium inline-block">
+                          Demo mode
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => {
@@ -266,6 +284,18 @@ export const Header: React.FC = () => {
                     >
                       Document vault
                     </button>
+                    {supplier.isDemoAccount && (
+                      <button
+                        onClick={() => {
+                          resetDemoData();
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#FFFBEB] dark:hover:bg-[#78350F]/20 text-[#D97706] font-medium transition-colors flex items-center justify-between"
+                      >
+                        <span>Reset demo data</span>
+                        <RotateCw className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       onClick={handleSignOut}
                       className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"

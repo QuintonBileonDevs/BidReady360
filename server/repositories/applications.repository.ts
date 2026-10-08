@@ -81,6 +81,23 @@ export class ApplicationsRepository {
     return res.rows;
   }
 
+  async listBySupplier(supplierId: string): Promise<ApplicationView[]> {
+    const res = await query<any>(
+      `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
+              a.organization_id AS "organizationId", o.name AS "organizationName",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+       FROM applications a
+       JOIN calls c ON c.id = a.call_id
+       JOIN suppliers s ON s.id = a.supplier_id
+       JOIN organizations o ON o.id = a.organization_id
+       WHERE a.supplier_id = $1
+       ORDER BY a.submitted_at DESC NULLS LAST, a.created_at DESC`,
+      [supplierId]
+    );
+    return res.rows;
+  }
+
   /**
    * Submit an application with strict mandatory document verification.
    */

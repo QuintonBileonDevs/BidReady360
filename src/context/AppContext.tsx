@@ -18,6 +18,15 @@ import {
 } from '../types';
 import { Language, TRANSLATIONS } from '../translations';
 import { ApiUser, authApi, callsApi, supplierApi, buyerApi } from '../services/api';
+import { calculateSupplierCompleteness, SupplierCompletenessResult } from '../utils/supplierOnboarding';
+import {
+  DEMO_SUPPLIER,
+  DEMO_DOCUMENTS,
+  DEMO_APPLICATIONS,
+  DEMO_CONSENT_GRANTS,
+  DEMO_PAST_PROJECTS,
+  DEMO_TEAM_MEMBERS,
+} from '../data/demoSupplierData';
 
 const EMPTY_SUPPLIER: Supplier = {
   id: '',
@@ -30,6 +39,7 @@ const EMPTY_SUPPLIER: Supplier = {
   ppraGrade: '',
   category: '',
   secondaryCategories: [],
+  categories: [],
   physicalAddress: '',
   city: '',
   district: '',
@@ -38,7 +48,8 @@ const EMPTY_SUPPLIER: Supplier = {
   email: '',
   website: '',
   yearEstablished: new Date().getFullYear(),
-  citizenOwnedPercentage: 100,
+  citizenOwnedPercentage: 0,
+  citizenOwnershipSet: false,
   youthOwned: false,
   womenOwned: false,
   disabilityOwned: false,
@@ -51,6 +62,11 @@ const EMPTY_SUPPLIER: Supplier = {
   missingItems: [],
   complianceStatus: 'Action required',
   documents: [],
+  pastProjects: [],
+  teamMembers: [],
+  isDemoAccount: false,
+  emailVerified: false,
+  detailsSaved: false,
 };
 
 const DEFAULT_AWARD_DECISION: AwardDecision = {
@@ -73,7 +89,7 @@ export type ThemeMode = 'light' | 'dark';
 
 interface AppContextType {
   role: UserRole;
-  setRole: (role: UserRole) => void;
+  setRole: (role: UserRole, targetNav?: string) => void;
   buyerSubRole: BuyerSubRole;
   setBuyerSubRole: (subRole: BuyerSubRole) => void;
   currentOrgSlug: string;
@@ -147,6 +163,11 @@ interface AppContextType {
   updateAwardDecision: (updates: Partial<AwardDecision>) => void;
   markNotificationRead: (id: string) => void;
   addAuditEvent: (event: Omit<AuditEvent, 'id' | 'timestamp'>) => void;
+
+  // Demo & Onboarding
+  loadDemoSupplier: () => void;
+  resetDemoData: () => void;
+  completenessResult: SupplierCompletenessResult;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -195,12 +216,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setRegisteredBuyerEmail(session.user.email);
           } else if (session.activeTenant?.tenantType === 'supplier') {
             setRoleState('supplier');
-            updateSupplierProfile({
-              id: session.activeTenant.tenantId,
-              legalName: session.activeTenant.tenantName,
-              tradingName: session.activeTenant.tenantName,
-              email: session.user.email,
-            });
+            try {
+              const remoteProfile = await supplierApi.getProfile();
+              if (remoteProfile) {
+                updateSupplierProfile({
+                  id: session.activeTenant.tenantId,
+                  legalName: remoteProfile.legalName || session.activeTenant.tenantName,
+                  tradingName: remoteProfile.tradingName || session.activeTenant.tenantName,
+                  email: remoteProfile.email || session.user.email,
+                  ...(remoteProfile.cipaNumber || remoteProfile.cipaUin ? { cipaNumber: remoteProfile.cipaNumber || remoteProfile.cipaUin } : {}),
+                  ...(remoteProfile.tinNumber || remoteProfile.bursTin ? { tinNumber: remoteProfile.tinNumber || remoteProfile.bursTin } : {}),
+                  ...(remoteProfile.ppraCode || remoteProfile.ppraRegistrationNo ? { ppraCode: remoteProfile.ppraCode || remoteProfile.ppraRegistrationNo } : {}),
+                  ...(remoteProfile.physicalAddress ? { physicalAddress: remoteProfile.physicalAddress } : {}),
+                  ...(remoteProfile.city ? { city: remoteProfile.city } : {}),
+                  ...(remoteProfile.districtName || remoteProfile.districtId ? { district: remoteProfile.districtName || remoteProfile.districtId } : {}),
+                  ...(remoteProfile.postalAddress ? { postalAddress: remoteProfile.postalAddress } : {}),
+                  ...(remoteProfile.primaryPhone ? { primaryPhone: remoteProfile.primaryPhone } : {}),
+                  ...(remoteProfile.bankName ? { bankName: remoteProfile.bankName } : {}),
+                  ...(remoteProfile.bankBranch ? { bankBranch: remoteProfile.bankBranch } : {}),
+                  ...(remoteProfile.accountNumberMasked ? { accountNumberMasked: remoteProfile.accountNumberMasked } : {}),
+                  ...(remoteProfile.companyType ? { companyType: remoteProfile.companyType } : {}),
+                  ...(remoteProfile.description ? { description: remoteProfile.description } : {}),
+                  ...(remoteProfile.yearEstablished ? { yearEstablished: Number(remoteProfile.yearEstablished) } : {}),
+                  ...(remoteProfile.citizenOwnedPercentage !== undefined && remoteProfile.citizenOwnedPercentage !== null ? { citizenOwnedPercentage: Number(remoteProfile.citizenOwnedPercentage) } : {}),
+                });
+              }
+            } catch {
+              // Maintain local state if offline or endpoint fails
+            }
           }
         } else if (isMounted) {
           localStorage.removeItem('bidready_token');
@@ -375,12 +418,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Dynamic data states
-  const [supplier, setSupplier] = useState<Supplier>(EMPTY_SUPPLIER);
+  // Persistence helpers
+  const saveSupplierToStorage = (nextSup: Supplier) => {
+    try {
+      localStorage.setItem('bidready_supplier_profile', JSON.stringify(nextSup));
+    } catch {}
+  };
+
+  const saveDocumentsToStorage = (nextDocs: SupplierDocument[]) => {
+    try {
+      localStorage.setItem('bidready_supplier_documents', JSON.stringify(nextDocs));
+    } catch {}
+  };
+
+  const saveApplicationsToStorage = (nextApps: Application[]) => {
+    try {
+      localStorage.setItem('bidready_supplier_applications', JSON.stringify(nextApps));
+    } catch {}
+  };
+
+  // Dynamic data states with localStorage initialization
+  const [supplier, setSupplier] = useState<Supplier>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_supplier_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && parsed.id) return parsed;
+      }
+    } catch {}
+    return EMPTY_SUPPLIER;
+  });
   const [allSuppliers] = useState<Supplier[]>([EMPTY_SUPPLIER]);
-  const [documents, setDocuments] = useState<SupplierDocument[]>([]);
+  const [documents, setDocuments] = useState<SupplierDocument[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_supplier_documents');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [organizations] = useState<Organization[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
+  const [applications, setApplications] = useState<Application[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_supplier_applications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -426,85 +516,159 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Dual-mode Supplier Passport Loader (Authenticated profile or Public unauthenticated preview)
+  // Dual-mode Supplier Passport Loader (Authenticated profile or clean empty state)
   useEffect(() => {
     let isMounted = true;
     async function loadSupplierProfile() {
       if (isAuthenticated && role === 'supplier') {
         try {
           const profile = await supplierApi.getProfile();
-          const docsList = await supplierApi.listDocuments();
-          
-          let hasCipaVal = false;
-          let hasBursVal = false;
-          let hasPpraVal = false;
-          
-          if (Array.isArray(docsList)) {
-            hasCipaVal = docsList.some((d: any) => d.documentTypeCode === 'COMPANY_REGISTRATION' && d.status === 'active');
-            hasBursVal = docsList.some((d: any) => d.documentTypeCode === 'TAX_CLEARANCE' && d.status === 'active');
-            hasPpraVal = docsList.some((d: any) => d.documentTypeCode === 'PPRA_REGISTRATION' && d.status === 'active');
-            setDocuments(docsList);
-          }
-          
-          if (isMounted && profile) {
-            setSupplier({
-              id: profile.id,
-              legalName: profile.legalName,
-              tradingName: profile.tradingName || profile.legalName,
-              cipaNumber: profile.cipaUin || '',
-              tinNumber: profile.bursTin || '',
-              ppraCode: profile.ppraRegistrationNo || '',
-              ppraSubcodes: [],
-              ppraGrade: '',
-              category: '',
-              secondaryCategories: [],
-              physicalAddress: profile.physicalAddress || '',
-              city: profile.city || '',
-              district: '',
-              postalAddress: profile.postalAddress || '',
-              primaryPhone: profile.primaryPhone || '',
-              email: profile.email || '',
-              website: profile.website || '',
-              yearEstablished: profile.yearEstablished || new Date().getFullYear(),
-              citizenOwnedPercentage: profile.citizenOwnedPercentage ? Number(profile.citizenOwnedPercentage) : 100,
-              youthOwned: profile.youthOwned || false,
-              womenOwned: profile.womenOwned || false,
-              disabilityOwned: profile.disabilityOwned || false,
-              eddCertified: profile.eddCertified || false,
-              bankName: profile.bankName || '',
-              bankBranch: profile.bankBranch || '',
-              accountNumberMasked: profile.accountNumberMasked || '',
-              directors: [],
-              profileCompleteness: typeof profile.profileCompleteness === 'number' ? profile.profileCompleteness : 94,
-              missingItems: [],
-              complianceStatus: profile.complianceStatus || 'Action required',
-              documents: Array.isArray(docsList) ? docsList : [],
-              hasCipa: hasCipaVal,
-              hasBurs: hasBursVal,
-              hasPpra: hasPpraVal,
-            });
+          const docsList = await supplierApi.listDocuments().catch(() => []);
+          const appsList = await supplierApi.listApplications().catch(() => []);
+          const peopleList = await supplierApi.listPeople().catch(() => []);
+          const consentList = await supplierApi.listConsent().catch(() => []);
+
+          if (isMounted) {
+            const mappedDocs: SupplierDocument[] = Array.isArray(docsList)
+              ? docsList.map((d: any) => ({
+                  id: d.id,
+                  supplierId: d.supplierId || profile?.id || '',
+                  documentType: d.documentTypeName || d.documentTypeCode || d.documentType || 'Document',
+                  documentNumber: d.documentNumber || '',
+                  fileName: d.fileName || 'document.pdf',
+                  fileSize: d.fileSize || '1.2 MB',
+                  issueDate: d.issueDate || '',
+                  expiryDate: d.expiryDate || '',
+                  status:
+                    d.status === 'active' || d.status === 'Verified'
+                      ? 'Verified'
+                      : d.status === 'expired'
+                      ? 'Expired'
+                      : d.status === 'rejected'
+                      ? 'Rejected'
+                      : 'Pending',
+                  statusMessage: d.statusMessage || '',
+                  downloadUrl: d.downloadUrl || '#',
+                }))
+              : [];
+
+            setDocuments(mappedDocs);
+
+            if (Array.isArray(appsList) && appsList.length > 0) {
+              setApplications(
+                appsList.map((a: any) => ({
+                  id: a.id,
+                  callId: a.callId,
+                  callNumber: a.callNumber || `TDR-${a.id.substring(0, 6)}`,
+                  callTitle: a.callTitle || 'Tender Call',
+                  callType: 'RFP',
+                  organizationId: a.organizationId,
+                  organizationName: a.organizationName || 'Procuring Entity',
+                  supplierId: a.supplierId,
+                  supplierName: a.supplierLegalName || profile?.legalName || '',
+                  submittedAt: a.submittedAt || '',
+                  status:
+                    a.status === 'Approved'
+                      ? 'Approved'
+                      : a.status === 'Rejected'
+                      ? 'Rejected'
+                      : 'Submitted',
+                  sharedDocumentIds: [],
+                  responses: a.answers || {},
+                  timeline: a.timeline || [],
+                }))
+              );
+            }
+
+            if (Array.isArray(consentList) && consentList.length > 0) {
+              setConsentGrants(
+                consentList.map((c: any) => ({
+                  id: c.id,
+                  supplierId: c.supplierId || profile?.id || '',
+                  organizationId: c.organizationId,
+                  organizationName: c.organizationName || 'Buying Entity',
+                  grantedAt: c.grantedAt || '',
+                  validUntil: c.validUntil || '',
+                  status: c.status === 'revoked' ? 'Revoked' : 'Active',
+                  scope: c.scope || {
+                    profile: true,
+                    directors: true,
+                    financials: true,
+                    taxClearance: true,
+                    certifications: true,
+                  },
+                  accessedCount: c.accessedCount || 0,
+                  lastAccessedAt: c.lastAccessedAt,
+                }))
+              );
+            }
+
+            const mappedDirectors = Array.isArray(peopleList)
+              ? peopleList.map((p: any) => ({
+                  id: p.id,
+                  fullName: p.fullName,
+                  nationalIdOrPassport: p.nationalIdOrPassport || p.identityNumber || '',
+                  nationality: p.nationality || 'Motswana',
+                  isCitizen: p.isCitizen !== false,
+                  shareholdingPercentage: Number(p.ownershipPercent || p.shareholdingPercentage || 0),
+                  role: p.personRole || p.role || 'Director',
+                }))
+              : [];
+
+            if (profile) {
+              const builtSupplier: Supplier = {
+                id: profile.id,
+                legalName: profile.legalName,
+                tradingName: profile.tradingName || profile.legalName,
+                cipaNumber: profile.cipaUin || '',
+                tinNumber: profile.bursTin || '',
+                ppraCode: profile.ppraRegistrationNo || '',
+                ppraSubcodes: [],
+                ppraGrade: '',
+                category: profile.category || '',
+                secondaryCategories: [],
+                categories: profile.categories || [],
+                physicalAddress: profile.physicalAddress || '',
+                city: profile.city || '',
+                district: profile.districtName || profile.districtId || '',
+                postalAddress: profile.postalAddress || '',
+                primaryPhone: profile.primaryPhone || '',
+                email: profile.email || '',
+                website: profile.website || '',
+                yearEstablished: profile.yearEstablished || new Date().getFullYear(),
+                citizenOwnedPercentage: profile.citizenOwnedPercentage
+                  ? Number(profile.citizenOwnedPercentage)
+                  : 0,
+                citizenOwnershipSet:
+                  profile.citizenOwnedPercentage !== null &&
+                  profile.citizenOwnedPercentage !== undefined,
+                youthOwned: profile.youthOwned || false,
+                womenOwned: profile.womenOwned || false,
+                disabilityOwned: profile.disabilityOwned || false,
+                eddCertified: profile.eddCertified || false,
+                bankName: profile.bankName || '',
+                bankBranch: profile.bankBranch || '',
+                accountNumberMasked: profile.accountNumberMasked || profile.bankAccountNumber || '',
+                directors: mappedDirectors,
+                profileCompleteness: 0,
+                missingItems: [],
+                complianceStatus: profile.complianceStatus || 'Action required',
+                documents: mappedDocs,
+                hasCipa: mappedDocs.some((d) => d.documentType.toLowerCase().includes('cipa')),
+                hasBurs: mappedDocs.some((d) => d.documentType.toLowerCase().includes('tax')),
+                hasPpra: mappedDocs.some((d) => d.documentType.toLowerCase().includes('ppra')),
+                isDemoAccount: false,
+              };
+
+              const completeness = calculateSupplierCompleteness(builtSupplier, mappedDocs);
+              builtSupplier.profileCompleteness = completeness.score;
+              builtSupplier.missingItems = completeness.missingItems.map((m) => m.label);
+
+              setSupplier(builtSupplier);
+            }
           }
         } catch (err) {
           console.warn('[APP CONTEXT] Failed to load live supplier profile:', err);
-        }
-      } else {
-        // Public/Unauthenticated preview state
-        try {
-          const preview = await callsApi.getSupplierPreview();
-          if (isMounted && preview) {
-            setSupplier((prev) => ({
-              ...prev,
-              id: preview.id || 'default',
-              legalName: preview.legalName || 'Test Company (Pty) Ltd',
-              cipaNumber: preview.cipaNumber || 'BW000005864',
-              profileCompleteness: typeof preview.profileCompleteness === 'number' ? preview.profileCompleteness : 94,
-              hasCipa: preview.hasCipa,
-              hasBurs: preview.hasBurs,
-              hasPpra: preview.hasPpra,
-            }));
-          }
-        } catch (err) {
-          console.warn('[APP CONTEXT] Failed to load public supplier preview:', err);
         }
       }
     }
@@ -515,9 +679,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [isAuthenticated, role]);
 
-  const [applications, setApplications] = useState<Application[]>([]);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
-  const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>([]);
+  const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>(() => {
+    try {
+      const saved = localStorage.getItem('bidready_supplier_consent_grants');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [evaluators, setEvaluators] = useState<Evaluator[]>([]);
@@ -526,27 +698,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
 
+  // Real-time completeness result computed from current memory state
+  const completenessResult = calculateSupplierCompleteness(supplier, documents);
+
+  const loadDemoSupplier = () => {
+    setSupplier({
+      ...DEMO_SUPPLIER,
+      pastProjects: DEMO_PAST_PROJECTS,
+      teamMembers: DEMO_TEAM_MEMBERS,
+      isDemoAccount: true,
+      profileCompleteness: 100,
+      missingItems: [],
+    });
+    setDocuments(DEMO_DOCUMENTS);
+    setApplications(DEMO_APPLICATIONS);
+    setConsentGrants(DEMO_CONSENT_GRANTS);
+  };
+
+  const resetDemoData = () => {
+    setSupplier({
+      ...DEMO_SUPPLIER,
+      pastProjects: DEMO_PAST_PROJECTS,
+      teamMembers: DEMO_TEAM_MEMBERS,
+      isDemoAccount: true,
+      profileCompleteness: 100,
+      missingItems: [],
+    });
+    setDocuments(DEMO_DOCUMENTS);
+    setApplications(DEMO_APPLICATIONS);
+    setConsentGrants(DEMO_CONSENT_GRANTS);
+  };
+
   const t = (key: string): string => {
     return TRANSLATIONS[language]?.[key] || key;
   };
 
-  const setRole = (newRole: UserRole) => {
+  const setRole = (newRole: UserRole, targetNav?: string) => {
     if (!isAuthenticated && newRole !== 'public') {
-      if (newRole === 'supplier') {
-        setActiveNavState('supplier-login');
-      } else if (newRole === 'buyer') {
-        setActiveNavState('buyer-login');
-      } else if (newRole === 'admin') {
-        setActiveNavState('admin-login');
+      const token = localStorage.getItem('bidready_token');
+      if (token) {
+        setIsAuthenticated(true);
+      } else {
+        if (newRole === 'supplier') {
+          setActiveNavState('supplier-login');
+        } else if (newRole === 'buyer') {
+          setActiveNavState('buyer-login');
+        } else if (newRole === 'admin') {
+          setActiveNavState('admin-login');
+        }
+        return;
       }
-      return;
     }
 
     setRoleState(newRole);
+    if (targetNav) {
+      setActiveNavState(targetNav);
+      return;
+    }
+
     if (newRole === 'public') {
       setActiveNavState('about');
     } else if (newRole === 'supplier') {
-      setActiveNavState('dashboard');
+      setActiveNavState((prev) => (prev === 'profile' ? 'profile' : 'dashboard'));
     } else if (newRole === 'buyer') {
       setActiveNavState('dashboard');
     } else if (newRole === 'admin') {
@@ -570,20 +783,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSupplierProfile = (updates: Partial<Supplier>) => {
     setSupplier((prev) => {
       const next = { ...prev, ...updates };
-      // Recalculate completeness
-      let score = 70;
-      if (next.directors.length > 0) score += 10;
-      if (next.bankName && next.bankBranch) score += 10;
-      if (documents.some((d) => d.status === 'Verified')) score += 10;
-      const missing: string[] = [];
-      if (documents.some((d) => d.status === 'Expired')) {
-        missing.push('One or more compliance certificates in vault are expired');
-        score = Math.max(score - 15, 60);
-      }
-      next.profileCompleteness = Math.min(100, score);
-      next.missingItems = missing;
+      const completeness = calculateSupplierCompleteness(next, documents);
+      next.profileCompleteness = completeness.score;
+      next.missingItems = completeness.missingItems.map((m) => m.label);
+      saveSupplierToStorage(next);
       return next;
     });
+
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      supplierApi.updateProfile(updates).catch((err) => {
+        console.warn('[APP CONTEXT] Server database profile update notice:', err);
+      });
+    }
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
@@ -601,14 +813,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...docData,
       id: `doc-${Date.now()}`,
     };
-    setDocuments((prev) => [newDoc, ...prev]);
-    setSupplier((prev) => ({
-      ...prev,
-      documents: [newDoc, ...prev.documents],
-    }));
+    const nextDocs = [newDoc, ...documents];
+    setDocuments(nextDocs);
+    saveDocumentsToStorage(nextDocs);
+    setSupplier((prev) => {
+      const completeness = calculateSupplierCompleteness(prev, nextDocs);
+      const nextSup = {
+        ...prev,
+        documents: nextDocs,
+        profileCompleteness: completeness.score,
+        missingItems: completeness.missingItems.map((m) => m.label),
+      };
+      saveSupplierToStorage(nextSup);
+      return nextSup;
+    });
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: 'Uploaded Document to Vault',
@@ -616,43 +837,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       entityId: newDoc.id,
       details: `Uploaded ${newDoc.documentType} (Exp: ${newDoc.expiryDate}).`,
     });
+
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      supplierApi.uploadDocument({
+        documentTypeCode: docData.documentType,
+        fileName: docData.fileName,
+        mimeType: 'application/pdf',
+        fileBase64: 'SGVsbG8gV29ybGQ=',
+        documentNumber: docData.documentNumber,
+        issueDate: docData.issueDate,
+        expiryDate: docData.expiryDate,
+        title: docData.title || docData.documentType,
+      }).catch((err) => {
+        console.warn('[APP CONTEXT] Server document upload sync notice:', err);
+      });
+    }
   };
 
   const replaceDocument = (docId: string, updates: Partial<SupplierDocument>) => {
-    setDocuments((prev) =>
-      prev.map((d) => {
-        if (d.id === docId) {
-          const currentVersions = d.versionHistory || [];
-          const nextVersionNumber = currentVersions.length + 1;
-          const newVersionEntry = {
-            version: nextVersionNumber,
-            uploadedBy: 'Kagiso Molosiwa (Supplier admin)',
-            uploadedAt: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-            fileFingerprint: `SHA-256: ${Math.random().toString(36).substring(2, 8)}...${Math.random().toString(36).substring(2, 6)}`,
-            fileName: updates.fileName || d.fileName,
-            fileSize: updates.fileSize || d.fileSize || '1.6 MB',
-            usedInApplications: [],
-          };
-          return {
-            ...d,
-            ...updates,
-            status: updates.status || 'Pending',
-            statusMessage: updates.statusMessage || 'Pending verification by procurement registry officers.',
-            versionHistory: [...currentVersions, newVersionEntry],
-          };
-        }
-        return d;
-      })
-    );
-    setSupplier((prev) => ({
-      ...prev,
-      documents: prev.documents.map((d) =>
-        d.id === docId ? { ...d, ...updates, status: updates.status || 'Pending' } : d
-      ),
-    }));
+    const nextDocs = documents.map((d) => {
+      if (d.id === docId) {
+        const currentVersions = d.versionHistory || [];
+        const nextVersionNumber = currentVersions.length + 1;
+        const newVersionEntry = {
+          version: nextVersionNumber,
+          uploadedBy: supplier.directors[0]?.fullName || 'Supplier admin',
+          uploadedAt:
+            new Date().toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            }) +
+            ', ' +
+            new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+          fileFingerprint: `SHA-256: ${Math.random().toString(36).substring(2, 8)}...${Math.random().toString(36).substring(2, 6)}`,
+          fileName: updates.fileName || d.fileName,
+          fileSize: updates.fileSize || d.fileSize || '1.6 MB',
+          usedInApplications: [],
+        };
+        return {
+          ...d,
+          ...updates,
+          status: updates.status || 'Pending',
+          statusMessage:
+            updates.statusMessage || 'Pending verification by procurement registry officers.',
+          versionHistory: [...currentVersions, newVersionEntry],
+        };
+      }
+      return d;
+    });
+
+    setDocuments(nextDocs);
+    saveDocumentsToStorage(nextDocs);
+    setSupplier((prev) => {
+      const completeness = calculateSupplierCompleteness(prev, nextDocs);
+      const nextSup = {
+        ...prev,
+        documents: nextDocs,
+        profileCompleteness: completeness.score,
+        missingItems: completeness.missingItems.map((m) => m.label),
+      };
+      saveSupplierToStorage(nextSup);
+      return nextSup;
+    });
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: 'Renewed & Replaced Vault Document',
@@ -663,7 +914,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteDocument = (docId: string) => {
-    setDocuments((prev) => prev.filter((d) => d.id !== docId));
+    const nextDocs = documents.filter((d) => d.id !== docId);
+    setDocuments(nextDocs);
+    saveDocumentsToStorage(nextDocs);
+    setSupplier((prev) => {
+      const completeness = calculateSupplierCompleteness(prev, nextDocs);
+      const nextSup = {
+        ...prev,
+        documents: nextDocs,
+        profileCompleteness: completeness.score,
+        missingItems: completeness.missingItems.map((m) => m.label),
+      };
+      saveSupplierToStorage(nextSup);
+      return nextSup;
+    });
   };
 
   const grantConsent = (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => {
@@ -675,7 +939,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setConsentGrants((prev) => [grant, ...prev]);
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: 'Granted Data Sharing Access',
@@ -692,7 +956,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: 'Revoked Data Sharing Consent',
@@ -744,7 +1008,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ],
     };
 
-    setApplications((prev) => [newApp, ...prev]);
+    setApplications((prev) => {
+      const nextApps = [newApp, ...prev];
+      saveApplicationsToStorage(nextApps);
+      return nextApps;
+    });
 
     // Update Call application count
     setCalls((prev) =>
@@ -778,7 +1046,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: appData.callType === 'RFP' ? 'Submitted Sealed RFP Bid' : 'Submitted Registration / EOI Application',
@@ -786,6 +1054,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       entityId: appId,
       details: `Application for ${appData.callNumber} (${appData.callTitle}) submitted to ${appData.organizationName}.`,
     });
+
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      supplierApi.submitApplication({
+        callId: appData.callId,
+        answers: appData.answers || {},
+        attachedDocumentVersionIds: appData.sharedDocumentIds || [],
+      }).catch((err) => {
+        console.warn('[APP CONTEXT] Server application submission sync notice:', err);
+      });
+    }
 
     return appId;
   };
@@ -852,7 +1131,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: 'Withdrew Tender Application',
@@ -865,7 +1144,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const respondToInformationRequest = (appId: string, responseMessage: string) => {
     const targetApp = applications.find((a) => a.id === appId);
     const now = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    const respondent = supplier.directors[0]?.fullName ? `${supplier.directors[0].fullName} (Supplier)` : 'Kagiso Molosiwa (Supplier)';
+    const respondent = supplier.directors[0]?.fullName
+      ? `${supplier.directors[0].fullName} (Supplier)`
+      : supplier.teamMembers?.[0]?.name
+      ? `${supplier.teamMembers[0].name} (Supplier)`
+      : `${supplier.legalName || 'Supplier'} (Supplier)`;
 
     setApplications((prev) =>
       prev.map((app) => {
@@ -936,7 +1219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setClarifications((prev) => [newClar, ...prev]);
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
+      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       action: 'Submitted Clarification Question',
@@ -1184,6 +1467,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateAwardDecision,
         markNotificationRead,
         addAuditEvent,
+        loadDemoSupplier,
+        resetDemoData,
+        completenessResult,
       }}
     >
       {children}

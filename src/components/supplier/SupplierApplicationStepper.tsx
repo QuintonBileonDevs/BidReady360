@@ -24,6 +24,7 @@ import {
   Info,
   XCircle,
   HelpCircle,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface SupplierApplicationStepperProps {
@@ -58,6 +59,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     uploadDocument,
     selectedCallId,
     addAuditEvent,
+    setActiveNav,
   } = useApp();
 
   const activeCallId = initialCallId || selectedCallId || calls[0]?.id;
@@ -94,10 +96,10 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     f4: false,
     f5: '',
     f6: 'BW_LOCAL',
-    f7: 'We maintain 45-day reserve stock at our Gaborone industrial facility with primary and secondary logistics trucks.',
+    f7: supplier.isDemoAccount ? 'We maintain 45-day reserve stock at our Gaborone industrial facility with primary and secondary logistics trucks.' : '',
     'nta-f1': 24,
     'nta-f2': true,
-    'nta-f3': 'Kagiso Molosiwa (Managing Director)',
+    'nta-f3': supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Authorized Officer',
   });
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -313,7 +315,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
       versionHistory: [
         {
           version: 1,
-          uploadedBy: 'Kagiso Molosiwa (Supplier admin)',
+          uploadedBy: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
           uploadedAt: '6 Oct 2026, 14:00',
           fileFingerprint: 'SHA-256: 44aa99...11bc',
           fileName,
@@ -325,7 +327,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
     addAuditEvent({
       action: 'Document Uploaded in Tender Flow',
-      actorName: 'Kagiso Molosiwa (Supplier admin)',
+      actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       entityType: 'Document',
@@ -369,6 +371,10 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   // Submit Application Handler
   const handleFinalSubmit = () => {
     if (!selectedCall) return;
+    if (!supplier.emailVerified) {
+      alert('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
+      return;
+    }
 
     const receiptNum = `REC-2026-${selectedCall.organizationName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
     const nowTime = '6 October 2026, 14:35 CAT';
@@ -406,18 +412,18 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               currency: 'BWP',
               pricingLineItems: lineItemsState,
               totalAmountBWP: totalCalculatedBidBWP,
-              technicalProposalFileName: 'Technical_Proposal_Kopano.pdf',
+              technicalProposalFileName: `Technical_Proposal_${(supplier.legalName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
               financialProposalFileName: 'Commercial_Schedule_Sealed.pdf',
               isSealed: true,
               sealedHash,
             }
           : undefined,
-      initialTimelineNote: `Application submitted by ${supplier.legalName}. Receipt ${receiptNum} issued on ledger.`,
+      initialTimelineNote: `Application submitted by ${supplier.legalName || 'Supplier'}. Receipt ${receiptNum} issued on ledger.`,
     });
 
     addAuditEvent({
       action: 'Tender Application & Sealed Bid Submitted',
-      actorName: 'Kagiso Molosiwa (Supplier admin)',
+      actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
       actorRole: 'Supplier',
       organizationName: selectedCall.organizationName,
       entityType: 'Application',
@@ -516,6 +522,30 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </button>
           </div>
         </div>
+
+        {/* Email Verification Safeguard */}
+        {!supplier.emailVerified && (
+          <div className="p-4 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold text-amber-900 dark:text-amber-200 block">
+                  Email verification mandatory to apply for open calls
+                </span>
+                <p className="text-amber-800 dark:text-amber-300 text-[13px]">
+                  Your account is currently unverified. Submitting applications and sealing bids is restricted until you verify your email address.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveNav('supplier-verify-email')}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors"
+            >
+              Verify email now
+            </button>
+          </div>
+        )}
 
         {/* Stepper Progress Bar & Autosave Status */}
         <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1216,10 +1246,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
             <button
               type="button"
-              disabled={!declarationAgreed}
+              disabled={!declarationAgreed || !supplier.emailVerified}
               onClick={handleFinalSubmit}
+              title={!supplier.emailVerified ? 'Email verification is mandatory before submitting' : undefined}
               className={`px-6 py-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 transition-colors ${
-                declarationAgreed
+                declarationAgreed && supplier.emailVerified
                   ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white cursor-pointer shadow-sm'
                   : 'bg-[#D5E0EA] dark:bg-[#1E364A] text-[#6B7A87] cursor-not-allowed'
               }`}
@@ -1344,7 +1375,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 onClick={() => {
                   addAuditEvent({
                     action: 'Downloaded Submission Receipt',
-                    actorName: 'Kagiso Molosiwa (Supplier admin)',
+                    actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
                     actorRole: 'Supplier',
                     organizationName: selectedCall.organizationName,
                     entityType: 'Application',

@@ -158,6 +158,17 @@ router.post('/consent/:id/revoke', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/supplier/applications
+router.get('/applications', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const apps = await applicationsRepository.listBySupplier(ctx.tenantId);
+    res.json(apps);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/supplier/applications/submit
 router.post('/applications/submit', async (req: Request, res: Response) => {
   try {

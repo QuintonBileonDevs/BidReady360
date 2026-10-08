@@ -21,6 +21,7 @@ import {
   Check,
   Eye,
   Info,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface SupplierBidSubmissionProps {
@@ -53,6 +54,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     withdrawApplication,
     addAuditEvent,
     selectedCallId,
+    setActiveNav,
   } = useApp();
 
   const activeCallId = initialCallId || selectedCallId || 'call-grc-rfp-08';
@@ -96,58 +98,64 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   });
 
   // Step 2: Technical Response State
-  const [technicalMethodology, setTechnicalMethodology] = useState<string>(
-    'Kopano Building Supplies operates an established logistics and warehousing network in G-West Industrial, maintaining dedicated strategic buffer inventory under SABS 1460 timber standards. Delivery to all municipal depots will be serviced within 5 business days utilizing our dedicated Euro-5 fleet.'
-  );
+  const [technicalMethodology, setTechnicalMethodology] = useState<string>(() => {
+    if (supplier.isDemoAccount) {
+      return 'Kopano Building Supplies operates an established logistics and warehousing network in G-West Industrial, maintaining dedicated strategic buffer inventory under SABS 1460 timber standards. Delivery to all municipal depots will be serviced within 5 business days utilizing our dedicated Euro-5 fleet.';
+    }
+    return `${supplier.legalName || 'Our company'} operates an established operational footprint in Botswana. We maintain dedicated capacity and statutory compliance to fulfill this procurement contract in full accordance with all authority specifications.`;
+  });
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState<number>(5);
   const [qualityAssurancePlan, setQualityAssurancePlan] = useState<string>(
-    'All timber shipments undergo batch kiln moisture testing (moisture content <= 12%) and BOBS/SABS stamp verification prior to dispatch. Material test certificates are delivered with each consignment.'
+    'All shipments undergo statutory quality verification and testing prior to dispatch. Material test certificates are delivered with each consignment.'
   );
   const [warrantyMonths, setWarrantyMonths] = useState<number>(24);
 
   // Step 3: Supporting Files
-  const [supportingFiles, setSupportingFiles] = useState<SupportingFileItem[]>([
-    {
-      id: 'file-tech',
-      name: 'Technical proposal and methodology statement',
-      type: 'PDF',
-      size: '3.4 MB',
-      fingerprint: 'SHA-256: 7f83b165...9069',
-      mandatory: true,
-      uploadedAt: '05 Oct 2026, 11:20',
-      fileName: 'Kopano_Technical_Compliance_Schedule_GRC.pdf',
-    },
-    {
-      id: 'file-fin',
-      name: 'Signed financial schedule and bill of quantities',
-      type: 'PDF',
-      size: '2.1 MB',
-      fingerprint: 'SHA-256: e82d334c...182b',
-      mandatory: true,
-      uploadedAt: '05 Oct 2026, 11:25',
-      fileName: 'Kopano_Signed_Financial_BOQ.pdf',
-    },
-    {
-      id: 'file-timber',
-      name: 'SABS 1460 kiln treatment sawmill certificate',
-      type: 'PDF',
-      size: '1.2 MB',
-      fingerprint: 'SHA-256: b109ff82...99ee',
-      mandatory: true,
-      uploadedAt: '05 Oct 2026, 11:28',
-      fileName: 'FSC_Sawmill_Timber_Treatment_Cert.pdf',
-    },
-    {
-      id: 'file-fleet',
-      name: 'Vehicle fleet schedule and logistics roadworthiness',
-      type: 'PDF',
-      size: '1.8 MB',
-      fingerprint: 'SHA-256: c329a100...44aa',
-      mandatory: false,
-      uploadedAt: '05 Oct 2026, 11:32',
-      fileName: 'Kopano_Fleet_Logistics_Capabilities.pdf',
-    },
-  ]);
+  const [supportingFiles, setSupportingFiles] = useState<SupportingFileItem[]>(() => {
+    const compTag = (supplier.legalName || 'Company').replace(/[^a-zA-Z0-9]/g, '_');
+    return [
+      {
+        id: 'file-tech',
+        name: 'Technical proposal and methodology statement',
+        type: 'PDF',
+        size: '3.4 MB',
+        fingerprint: 'SHA-256: 7f83b165...9069',
+        mandatory: true,
+        uploadedAt: 'Today',
+        fileName: `${compTag}_Technical_Compliance_Schedule.pdf`,
+      },
+      {
+        id: 'file-fin',
+        name: 'Signed financial schedule and bill of quantities',
+        type: 'PDF',
+        size: '2.1 MB',
+        fingerprint: 'SHA-256: e82d334c...182b',
+        mandatory: true,
+        uploadedAt: 'Today',
+        fileName: `${compTag}_Signed_Financial_BOQ.pdf`,
+      },
+      {
+        id: 'file-timber',
+        name: 'Statutory compliance & standards certificate',
+        type: 'PDF',
+        size: '1.2 MB',
+        fingerprint: 'SHA-256: b109ff82...99ee',
+        mandatory: true,
+        uploadedAt: 'Today',
+        fileName: `${compTag}_Standards_Compliance_Cert.pdf`,
+      },
+      {
+        id: 'file-fleet',
+        name: 'Vehicle fleet schedule and logistics roadworthiness',
+        type: 'PDF',
+        size: '1.8 MB',
+        fingerprint: 'SHA-256: c329a100...44aa',
+        mandatory: false,
+        uploadedAt: 'Today',
+        fileName: `${compTag}_Fleet_Logistics_Capabilities.pdf`,
+      },
+    ];
+  });
 
   // Step 4: Declarations
   const [declarationAgreed, setDeclarationAgreed] = useState<boolean>(true);
@@ -240,6 +248,10 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   // Handle final sealing & submit
   const handleSubmitAndSeal = () => {
     if (!call || isCallClosed) return;
+    if (!supplier.emailVerified) {
+      alert('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
+      return;
+    }
     setIsSubmitting(true);
 
     const now = '2026-10-06 12:30 CAT';
@@ -439,6 +451,30 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           </div>
         </div>
       </div>
+
+      {/* Safeguard: Email Verification Mandatory */}
+      {!supplier.emailVerified && (
+        <div className="p-4 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold text-amber-900 dark:text-amber-200 block">
+                Email verification mandatory to submit tender bids
+              </span>
+              <p className="text-amber-800 dark:text-amber-300 text-[13px]">
+                Your supplier account is unverified. Submitting sealed proposals is locked until you verify your email address.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveNav('supplier-verify-email')}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors"
+          >
+            Verify email now
+          </button>
+        </div>
+      )}
 
       {/* Read-Only Notice if Call is Closed */}
       {isCallClosed && (
@@ -979,8 +1015,9 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
 
               <button
                 type="button"
-                disabled={!declarationAgreed || !nonCollusionAgreed || isSubmitting || isCallClosed}
+                disabled={!declarationAgreed || !nonCollusionAgreed || isSubmitting || isCallClosed || !supplier.emailVerified}
                 onClick={handleSubmitAndSeal}
+                title={!supplier.emailVerified ? 'Email verification is mandatory before submitting bids' : undefined}
                 className="px-6 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
               >
                 <Lock className="w-4 h-4" />

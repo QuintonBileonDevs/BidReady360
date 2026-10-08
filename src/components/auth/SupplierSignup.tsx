@@ -57,8 +57,8 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
       else delete newErrors.fullName;
     }
     if (field === 'email') {
-      if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-        newErrors.email = 'Enter an email address like name@company.co.bw';
+      if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        newErrors.email = 'Enter a valid email address (e.g. name@example.com).';
       } else {
         delete newErrors.email;
       }
@@ -91,8 +91,8 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
   const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
     if (!fullName.trim()) newErrors.fullName = 'Enter your full name.';
-    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Enter an email address like name@company.co.bw';
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      newErrors.email = 'Enter a valid email address (e.g. name@example.com).';
     }
     if (!phone.trim() || phone.replace(/\D/g, '').length < 8) {
       newErrors.phone = 'Enter a valid mobile number like +267 71234567';
@@ -140,29 +140,58 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
         phone: phone.trim(),
       });
 
-      updateSupplierProfile({
-        legalName: legalName.trim(),
-        tradingName: legalName.trim(),
-        cipaNumber: cipaNumber.trim().toUpperCase(),
-        email: email.trim().toLowerCase(),
-        primaryPhone: phone.trim(),
-        city,
-      });
-
       const membership = res.user?.memberships?.[0] || {
         tenantType: 'supplier',
         tenantId: `sup-${Date.now()}`,
         tenantName: legalName.trim(),
       };
 
-      loginSuccess(
-        {
-          user: res.user,
-          activeTenant: membership,
-          token: res.token,
-        },
-        'supplier'
-      );
+      updateSupplierProfile({
+        id: membership.tenantId,
+        legalName: legalName.trim(),
+        tradingName: '',
+        cipaNumber: cipaNumber.trim().toUpperCase(),
+        tinNumber: '',
+        physicalAddress: '',
+        city: '',
+        district: '',
+        postalAddress: '',
+        primaryPhone: phone.trim(),
+        email: email.trim().toLowerCase(),
+        website: '',
+        bankName: '',
+        bankBranch: '',
+        accountNumberMasked: '',
+        citizenOwnedPercentage: 0,
+        citizenOwnershipSet: false,
+        directors: [],
+        documents: [],
+        pastProjects: [],
+        categories: [],
+        isDemoAccount: false,
+        emailVerified: false,
+        detailsSaved: false,
+        profileCompleteness: 0,
+        missingItems: [],
+        teamMembers: [
+          {
+            id: 'tm-owner',
+            name: fullName.trim(),
+            email: email.trim().toLowerCase(),
+            role: 'Supplier admin',
+            lastActive: 'Active now',
+            status: 'Active',
+          },
+        ],
+      });
+
+      // Save token and set authenticated session with intended destination profile
+      if (res.token) {
+        localStorage.setItem('bidready_token', res.token);
+      }
+
+      // Navigate to email verification step per onboarding workflow
+      onNavigate('supplier-verify-email');
     } catch (err: any) {
       console.error('[SUPPLIER SIGNUP ERROR]', err);
       const errMsg = err.message || 'Registration failed. Please check your details.';
@@ -229,17 +258,24 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
               autoComplete="name"
             />
 
-            <Input
-              label="Work email address *"
-              type="email"
-              placeholder="e.g. name@company.co.bw"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onBlur={() => handleBlur('email')}
-              error={errors.email}
-              leftIcon={<Mail className="w-4 h-4" />}
-              autoComplete="email"
-            />
+            <div>
+              <Input
+                label="Email address *"
+                type="email"
+                placeholder="e.g. name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => handleBlur('email')}
+                error={errors.email}
+                leftIcon={<Mail className="w-4 h-4" />}
+                autoComplete="email"
+              />
+              {!errors.email && (
+                <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2] mt-1.5 leading-snug">
+                  Use an email you check regularly. Company and personal addresses are both fine.
+                </p>
+              )}
+            </div>
 
             <Input
               label="Mobile number *"

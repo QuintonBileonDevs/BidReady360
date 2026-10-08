@@ -36,6 +36,7 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     clarifications,
     submitClarificationQuestion,
     role,
+    supplier,
     isAuthenticated,
     setIntendedRoute,
     setActiveNav,
@@ -79,6 +80,12 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     setSelectedCallId(call.id);
     if (!isAuthenticated || role !== 'supplier') {
       setIntendedRoute('apply');
+      setActiveNav('supplier-login');
+      return;
+    }
+    if (!supplier.emailVerified) {
+      setActiveNav('supplier-verify-email');
+      return;
     }
     setActiveNav('apply');
   };

@@ -112,6 +112,13 @@ export const authApi = {
     return res;
   },
 
+  async verifyEmail(email: string) {
+    return await apiRequest<{ success: boolean; message: string }>('/api/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
   async getMe(): Promise<AuthSession | null> {
     try {
       return await apiRequest<AuthSession>('/api/auth/me');
@@ -236,6 +243,10 @@ export const supplierApi = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
+  },
+
+  async listApplications() {
+    return apiRequest<any[]>('/api/supplier/applications');
   },
 
   async submitApplication(payload: {

@@ -172,6 +172,28 @@ router.post('/verify-mfa', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/auth/verify-email
+router.post('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({
+        error: 'MISSING_EMAIL',
+        message: 'Email address is required to verify account.',
+      });
+      return;
+    }
+
+    await authService.verifyEmail(email);
+    res.json({ success: true, message: 'Email verified successfully.' });
+  } catch (err: any) {
+    res.status(400).json({
+      error: 'VERIFICATION_FAILED',
+      message: err.message || 'Email verification failed.',
+    });
+  }
+});
+
 // GET /api/auth/me
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   res.json({

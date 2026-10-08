@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supplierApi } from '../../services/api';
 import { Director } from '../../types';
+import {
+  calculateSupplierCompleteness,
+  OnboardingChecklistItem,
+} from '../../utils/supplierOnboarding';
 import {
   Building2,
   Users,
@@ -17,6 +22,7 @@ import {
   Save,
   X,
   FileCheck,
+  FileText,
   Award,
   AlertCircle,
   Briefcase,
@@ -31,7 +37,10 @@ import {
   Check,
   Search,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Info,
+  RotateCw,
 } from 'lucide-react';
 
 interface PastProject {
@@ -99,24 +108,16 @@ const CATEGORY_TREE: CategoryNode[] = [
     code: 'Code 03',
     name: 'Civil Engineering Infrastructure',
     children: [
-      { code: 'Subcode 01', name: 'Road Construction & Earthworks' },
-      { code: 'Subcode 02', name: 'Water Pipelines & Sewerage Works' },
-      { code: 'Subcode 03', name: 'Bridges & Culverts' },
+      { code: 'Subcode 01', name: 'Roads, Bridges & Paving Works' },
+      { code: 'Subcode 02', name: 'Water & Sewerage Reticulation' },
+      { code: 'Subcode 03', name: 'Earthworks & Plant Hire' },
     ],
   },
   {
-    code: 'Code 08',
-    name: 'Mechanical Engineering',
+    code: 'Code 104',
+    name: 'ICT, Systems & Telecommunications',
     children: [
-      { code: 'Subcode 01', name: 'HVAC & Air Conditioning' },
-      { code: 'Subcode 02', name: 'Plumbing & Drainage Works' },
-    ],
-  },
-  {
-    code: 'Code 13',
-    name: 'Information Technology & Telecommunications',
-    children: [
-      { code: 'Subcode 01', name: 'Hardware Supply & Networking' },
+      { code: 'Subcode 01', name: 'ICT Hardware, Servers & Peripherals' },
       { code: 'Subcode 02', name: 'Software Development & ERP' },
     ],
   },
@@ -131,59 +132,62 @@ const CATEGORY_TREE: CategoryNode[] = [
 ];
 
 export const SupplierProfile: React.FC = () => {
-  const { supplier, updateSupplierProfile, addAuditEvent } = useApp();
+  const {
+    supplier,
+    documents,
+    updateSupplierProfile,
+    addAuditEvent,
+    setActiveNav,
+    resetDemoData,
+  } = useApp();
 
   // Active section state
   const [activeSection, setActiveSection] = useState<
     'details' | 'directors' | 'categories' | 'projects' | 'preferences' | 'team'
   >('details');
 
+  // Checklist Filter State ('All' | 'Company' | 'People' | 'Documents')
+  const [checklistFilter, setChecklistFilter] = useState<'All' | 'Company' | 'People' | 'Documents'>('All');
+  const [isChecklistVisible, setIsChecklistVisible] = useState(true);
+  const [isHeaderMissingOpen, setIsHeaderMissingOpen] = useState(false);
+
+  // Compute 15-item completeness dynamically from real memory state
+  const completeness = calculateSupplierCompleteness(supplier, documents);
+
   // Company Details Form State
   const [isEditingDetails, setIsEditingDetails] = useState(false);
-  const [detailsLastUpdated, setDetailsLastUpdated] = useState('3 October 2026');
+  const [detailsLastUpdated, setDetailsLastUpdated] = useState('Today');
   const [detailsForm, setDetailsForm] = useState({
-    legalName: supplier.legalName,
-    tradingName: supplier.tradingName,
-    cipaNumber: supplier.cipaNumber,
-    tinNumber: supplier.tinNumber,
-    companyType: 'Private Company (Pty) Ltd',
-    yearEstablished: supplier.yearEstablished,
-    physicalAddress: supplier.physicalAddress,
-    postalAddress: supplier.postalAddress,
-    primaryPhone: supplier.primaryPhone,
-    email: supplier.email,
-    website: supplier.website || 'https://www.kopanobuilding.co.bw',
-    description:
-      'Tier-1 supplier and building contractor established in Gaborone, specializing in commercial hardware supplies, structural timber, and municipal infrastructure works across Botswana.',
+    legalName: supplier.legalName || '',
+    tradingName: supplier.tradingName || '',
+    cipaNumber: supplier.cipaNumber || '',
+    tinNumber: supplier.tinNumber || '',
+    companyType: supplier.companyType || 'Private Company (Pty) Ltd',
+    yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
+    physicalAddress: supplier.physicalAddress || '',
+    city: supplier.city || '',
+    district: supplier.district || '',
+    postalAddress: supplier.postalAddress || '',
+    primaryPhone: supplier.primaryPhone || '',
+    email: supplier.email || '',
+    website: supplier.website || '',
+    bankName: supplier.bankName || '',
+    bankBranch: supplier.bankBranch || '',
+    accountNumberMasked: supplier.accountNumberMasked || '',
+    citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
+    description: supplier.description || '',
   });
 
   // Directors State & ID Masking
   const [directorsList, setDirectorsList] = useState<
     (Director & { idNumber: string; verificationStatus: 'Not started' | 'Pending' | 'Verified' })[]
-  >([
-    {
-      id: 'dir-1',
-      fullName: 'Kagiso Boitumelo Molosiwa',
-      nationalIdOrPassport: '618219401',
-      idNumber: '618219401',
-      nationality: 'Motswana',
-      isCitizen: true,
-      shareholdingPercentage: 60,
-      role: 'Managing Director',
+  >(
+    (supplier.directors || []).map((d) => ({
+      ...d,
+      idNumber: d.nationalIdOrPassport || '',
       verificationStatus: 'Verified',
-    },
-    {
-      id: 'dir-2',
-      fullName: 'Lesego Tebogo Kgosi',
-      nationalIdOrPassport: '529124018',
-      idNumber: '529124018',
-      nationality: 'Motswana',
-      isCitizen: true,
-      shareholdingPercentage: 40,
-      role: 'Director',
-      verificationStatus: 'Verified',
-    },
-  ]);
+    }))
+  );
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [isDirectorDrawerOpen, setIsDirectorDrawerOpen] = useState(false);
   const [newDirectorForm, setNewDirectorForm] = useState({
@@ -197,62 +201,18 @@ export const SupplierProfile: React.FC = () => {
 
   // Categories State
   const [categorySearch, setCategorySearch] = useState('');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([
-    'Code 01 — Building Works & Materials',
-    'Subcode 01: Building Construction',
-    'Subcode 02: Structural Timber & Roofing',
-    'Subcode 03: General Hardware Supply',
-    'Code 03 — Civil Engineering Infrastructure',
-  ]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(
+    supplier.categories?.length
+      ? supplier.categories
+      : supplier.category
+      ? [supplier.category]
+      : []
+  );
 
   // Past Projects State
-  const [projectsList, setProjectsList] = useState<PastProject[]>([
-    {
-      id: 'proj-1',
-      client: 'Gaborone Regional Council',
-      title: 'Supply of Structural Timber & Roofing Trusses for Block 8 Clinic Expansion',
-      valueBWP: 2340000,
-      startDate: 'Jan 2025',
-      endDate: 'Aug 2025',
-      referenceContact: {
-        name: 'K. Tau',
-        role: 'Lead Procurement Specialist',
-        email: 'k.tau@grc.gov.bw',
-        phone: '+267 72 310 980',
-      },
-      status: 'Completed',
-    },
-    {
-      id: 'proj-2',
-      client: 'Botswana Housing Corporation',
-      title: 'Bulk Delivery of SABS Certified Cement & Masonry Supplies (Tsholofelo Park)',
-      valueBWP: 4850000,
-      startDate: 'Mar 2024',
-      endDate: 'Nov 2024',
-      referenceContact: {
-        name: 'O. Sechele',
-        role: 'Project Director',
-        email: 'o.sechele@bhc.bw',
-        phone: '+267 360 5100',
-      },
-      status: 'Completed',
-    },
-    {
-      id: 'proj-3',
-      client: 'National Training Agency',
-      title: 'Workshop Renovation & Facility Hardware Upgrade',
-      valueBWP: 980000,
-      startDate: 'Sep 2025',
-      endDate: 'Ongoing',
-      referenceContact: {
-        name: 'M. Phiri',
-        role: 'Facilities Engineer',
-        email: 'm.phiri@nta.org.bw',
-        phone: '+267 395 2100',
-      },
-      status: 'Ongoing',
-    },
-  ]);
+  const [projectsList, setProjectsList] = useState<PastProject[]>(
+    supplier.pastProjects || []
+  );
   const [isProjectDrawerOpen, setIsProjectDrawerOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<PastProject | null>(null);
   const [projectForm, setProjectForm] = useState<Omit<PastProject, 'id'>>({
@@ -270,84 +230,34 @@ export const SupplierProfile: React.FC = () => {
     status: 'Completed',
   });
 
-  // Preference Status State
-  const [preferenceClaims, setPreferenceClaims] = useState<PreferenceClaim[]>([
-    {
-      id: 'pref-citizen',
-      title: '100% Citizen shareholding',
-      description: '100% Batswana citizen equity held by registered resident directors.',
-      basis: 'Citizen Economic Empowerment Programme (CEEP)',
-      evidenceFile: 'CIPA_Annual_Return_Shareholders_2026.pdf',
-      status: 'Verified',
-      verifiedDate: '15 Jan 2026',
-    },
-    {
-      id: 'pref-edd',
-      title: 'Economic Diversification Drive (EDD)',
-      description: 'Certified locally manufactured timber and certified building assembly products.',
-      basis: 'Ministry of Trade & Industry EDD Certificate',
-      evidenceFile: 'EDD_Manufacturing_Registration_2026.pdf',
-      status: 'Verified',
-      verifiedDate: '10 Feb 2026',
-    },
-    {
-      id: 'pref-women',
-      title: 'Women-owned business preference',
-      description: '40% equity and active directorship held by female citizen partner.',
-      basis: 'National Gender Equity Procurement Margin',
-      evidenceFile: 'Director_Omang_Certified_Returns.pdf',
-      status: 'Claimed',
-    },
-    {
-      id: 'pref-local',
-      title: 'Local district procurement preference',
-      description: 'Registered operational premises and physical warehouse located in G-West, Gaborone.',
-      basis: 'Gaborone City Council Commercial Trading Licence',
-      evidenceFile: 'Trading_Licence_Plot22019_GWest.pdf',
-      status: 'Verified',
-      verifiedDate: '12 Mar 2026',
-    },
-    {
-      id: 'pref-youth',
-      title: 'Youth-owned business preference',
-      description: 'Statutory preference margin for companies with youth management under 35 years.',
-      basis: 'National Youth Procurement Framework',
-      status: 'Rejected',
-    },
-  ]);
-
   // Team State
-  const [teamMembers, setTeamMembers] = useState<SupplierTeamMember[]>([
-    {
-      id: 'tm-1',
-      name: 'Kagiso Molosiwa',
-      email: 'k.molosiwa@kopanobuilding.co.bw',
-      role: 'Supplier admin',
-      lastActive: 'Active now',
-      status: 'Active',
-    },
-    {
-      id: 'tm-2',
-      name: 'Tshepo Matlapeng',
-      email: 't.matlapeng@kopanobuilding.co.bw',
-      role: 'Supplier staff',
-      lastActive: '2 hrs ago',
-      status: 'Active',
-    },
-  ]);
-  const [pendingInvites, setPendingInvites] = useState<{ id: string; email: string; role: string; sentDate: string }[]>([
-    {
-      id: 'inv-1',
-      email: 'accounts@kopanobuilding.co.bw',
-      role: 'Supplier staff',
-      sentDate: '4 Oct 2026',
-    },
-  ]);
+  const [teamMembers, setTeamMembers] = useState<SupplierTeamMember[]>(
+    supplier.teamMembers?.length
+      ? supplier.teamMembers
+      : [
+          {
+            id: 'tm-owner',
+            name:
+              supplier.directors?.[0]?.fullName ||
+              supplier.legalName ||
+              'Account Owner',
+            email: supplier.email || '',
+            role: 'Supplier admin',
+            lastActive: 'Active now',
+            status: 'Active',
+          },
+        ]
+  );
+  const [pendingInvites, setPendingInvites] = useState<
+    { id: string; email: string; role: string; sentDate: string }[]
+  >([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'Supplier admin' | 'Supplier staff'>('Supplier staff');
+  const [inviteRole, setInviteRole] = useState<'Supplier admin' | 'Supplier staff'>(
+    'Supplier staff'
+  );
 
-  // Success Alert Toast
+  // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -355,25 +265,184 @@ export const SupplierProfile: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // Section status calculation
-  const sectionStatuses: Record<string, { label: 'Complete' | 'Incomplete' | 'Needs attention'; color: string }> = {
-    details: { label: 'Complete', color: 'bg-[#ECFDF5] text-[#2F8F5B]' },
-    directors: { label: 'Complete', color: 'bg-[#ECFDF5] text-[#2F8F5B]' },
-    categories: { label: 'Complete', color: 'bg-[#ECFDF5] text-[#2F8F5B]' },
-    projects: { label: 'Complete', color: 'bg-[#ECFDF5] text-[#2F8F5B]' },
-    preferences: { label: 'Needs attention', color: 'bg-[#FFFBEB] text-[#D97706]' },
-    team: { label: 'Needs attention', color: 'bg-[#FFFBEB] text-[#D97706]' },
-  };
+  // Sync state when supplier context updates (e.g. on reset demo or profile reload)
+  useEffect(() => {
+    if (!isEditingDetails) {
+      setDetailsForm({
+        legalName: supplier.legalName || '',
+        tradingName: supplier.tradingName || '',
+        cipaNumber: supplier.cipaNumber || '',
+        tinNumber: supplier.tinNumber || '',
+        companyType: supplier.companyType || 'Private Company (Pty) Ltd',
+        yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
+        physicalAddress: supplier.physicalAddress || '',
+        city: supplier.city || '',
+        district: supplier.district || '',
+        postalAddress: supplier.postalAddress || '',
+        primaryPhone: supplier.primaryPhone || '',
+        email: supplier.email || '',
+        website: supplier.website || '',
+        bankName: supplier.bankName || '',
+        bankBranch: supplier.bankBranch || '',
+        accountNumberMasked: supplier.accountNumberMasked || '',
+        citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
+        description: supplier.description || '',
+      });
+    }
+
+    setDirectorsList(
+      (supplier.directors || []).map((d) => ({
+        ...d,
+        idNumber: d.nationalIdOrPassport || '',
+        verificationStatus: 'Verified',
+      }))
+    );
+
+    setSelectedCategories(
+      supplier.categories?.length
+        ? supplier.categories
+        : supplier.category
+        ? [supplier.category]
+        : []
+    );
+
+    setProjectsList(supplier.pastProjects || []);
+
+    if (supplier.teamMembers?.length) {
+      setTeamMembers(supplier.teamMembers);
+    }
+  }, [supplier]);
 
   // Total shareholding calculation
-  const totalOwnership = directorsList.reduce((sum, d) => sum + d.shareholdingPercentage, 0);
+  const totalOwnership = directorsList.reduce(
+    (sum, d) => sum + (Number(d.shareholdingPercentage) || 0),
+    0
+  );
+
+  // Section status calculation (dynamic based on actual memory values)
+  const sectionStatuses: Record<
+    string,
+    { label: 'Complete' | 'Incomplete' | 'Needs attention'; color: string }
+  > = {
+    details: {
+      label: completeness.items
+        .filter((i) => i.category === 'Company')
+        .every((i) => i.isComplete)
+        ? 'Complete'
+        : 'Incomplete',
+      color: completeness.items
+        .filter((i) => i.category === 'Company')
+        .every((i) => i.isComplete)
+        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+        : 'bg-[#FFFBEB] text-[#D97706]',
+    },
+    directors: {
+      label: directorsList.length > 0 && Math.round(totalOwnership) === 100
+        ? 'Complete'
+        : 'Incomplete',
+      color: directorsList.length > 0 && Math.round(totalOwnership) === 100
+        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+        : 'bg-[#FFFBEB] text-[#D97706]',
+    },
+    categories: {
+      label: selectedCategories.length > 0 ? 'Complete' : 'Incomplete',
+      color: selectedCategories.length > 0
+        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+        : 'bg-[#FFFBEB] text-[#D97706]',
+    },
+    projects: {
+      label: projectsList.length > 0 ? 'Complete' : 'Incomplete',
+      color: projectsList.length > 0
+        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+        : 'bg-[#F7FAFD] text-[#6B7A87]',
+    },
+    preferences: {
+      label: supplier.citizenOwnershipSet || supplier.citizenOwnedPercentage > 0
+        ? 'Complete'
+        : 'Needs attention',
+      color: supplier.citizenOwnershipSet || supplier.citizenOwnedPercentage > 0
+        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+        : 'bg-[#FFFBEB] text-[#D97706]',
+    },
+    team: {
+      label: teamMembers.length > 0 ? 'Complete' : 'Incomplete',
+      color: teamMembers.length > 0
+        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+        : 'bg-[#FFFBEB] text-[#D97706]',
+    },
+  };
+
+  // Preference claims computed dynamically from supplier attributes
+  const preferenceClaims: PreferenceClaim[] = [
+    {
+      id: 'pref-citizen',
+      title: `${supplier.citizenOwnedPercentage || 0}% Citizen shareholding`,
+      description: `${supplier.citizenOwnedPercentage || 0}% Batswana citizen equity held by registered resident directors.`,
+      basis: 'Citizen Economic Empowerment Programme (CEEP)',
+      status: supplier.citizenOwnedPercentage > 0 ? 'Verified' : 'Claimed',
+    },
+    {
+      id: 'pref-edd',
+      title: 'Economic Diversification Drive (EDD)',
+      description: supplier.eddCertified
+        ? 'Certified local producer / supplier under Ministry of Trade EDD framework.'
+        : 'Local enterprise manufacturing or service provider registration.',
+      basis: 'Ministry of Trade & Industry EDD Scheme',
+      status: supplier.eddCertified ? 'Verified' : 'Claimed',
+    },
+    {
+      id: 'pref-women',
+      title: 'Women-owned business preference margin',
+      description: supplier.womenOwned
+        ? 'Qualified enterprise with qualifying female citizen ownership.'
+        : 'Enterprise with active directorship and ownership held by female citizen partners.',
+      basis: 'National Gender Equity Procurement Margin',
+      status: supplier.womenOwned ? 'Verified' : 'Claimed',
+    },
+    {
+      id: 'pref-youth',
+      title: 'Youth-owned business preference margin',
+      description: supplier.youthOwned
+        ? 'Qualified enterprise managed by youth entrepreneurs under 35 years.'
+        : 'Statutory preference margin for companies with youth management.',
+      basis: 'National Youth Procurement Framework',
+      status: supplier.youthOwned ? 'Verified' : 'Claimed',
+    },
+    {
+      id: 'pref-local',
+      title: 'Local district procurement preference margin',
+      description: `Physical operating premises located in ${supplier.district || supplier.city || 'local district'}.`,
+      basis: 'Local Authority Procurement Preference Framework',
+      status: supplier.district || supplier.city ? 'Verified' : 'Claimed',
+    },
+  ];
+
+  // Checklist Item Click Handler -> Links directly to the field or section
+  const handleChecklistItemClick = (item: OnboardingChecklistItem) => {
+    if (item.category === 'Company') {
+      setActiveSection('details');
+      setIsEditingDetails(true);
+      setTimeout(() => {
+        const el = document.getElementById(item.fieldId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+      }, 150);
+    } else if (item.category === 'People') {
+      setActiveSection('directors');
+      setIsDirectorDrawerOpen(true);
+    } else if (item.category === 'Documents') {
+      setActiveNav('vault');
+    }
+  };
 
   // Reveal masked ID handler
   const handleRevealId = (directorId: string, directorName: string) => {
     setRevealedIds((prev) => ({ ...prev, [directorId]: true }));
     addAuditEvent({
       action: 'National Identity Number Unmasked',
-      actorName: 'Kagiso Molosiwa (Supplier Admin)',
+      actorName: 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       entityType: 'Supplier',
@@ -388,31 +457,29 @@ export const SupplierProfile: React.FC = () => {
   const handleSaveDetails = (e: React.FormEvent) => {
     e.preventDefault();
     updateSupplierProfile({
-      legalName: detailsForm.legalName,
-      tradingName: detailsForm.tradingName,
-      cipaNumber: detailsForm.cipaNumber,
-      tinNumber: detailsForm.tinNumber,
+      legalName: detailsForm.legalName.trim(),
+      tradingName: detailsForm.tradingName.trim(),
+      cipaNumber: detailsForm.cipaNumber.trim(),
+      tinNumber: detailsForm.tinNumber.trim(),
       yearEstablished: Number(detailsForm.yearEstablished),
-      physicalAddress: detailsForm.physicalAddress,
-      postalAddress: detailsForm.postalAddress,
-      primaryPhone: detailsForm.primaryPhone,
-      email: detailsForm.email,
-      website: detailsForm.website,
+      physicalAddress: detailsForm.physicalAddress.trim(),
+      city: detailsForm.city.trim(),
+      district: detailsForm.district.trim(),
+      postalAddress: detailsForm.postalAddress.trim(),
+      primaryPhone: detailsForm.primaryPhone.trim(),
+      email: detailsForm.email.trim(),
+      website: detailsForm.website.trim(),
+      bankName: detailsForm.bankName.trim(),
+      bankBranch: detailsForm.bankBranch.trim(),
+      accountNumberMasked: detailsForm.accountNumberMasked.trim(),
+      citizenOwnedPercentage: Number(detailsForm.citizenOwnedPercentage),
+      citizenOwnershipSet: true,
+      description: detailsForm.description.trim(),
+      detailsSaved: true,
     });
-    const nowStr = '5 October 2026';
-    setDetailsLastUpdated(nowStr);
+    setDetailsLastUpdated('Just now');
     setIsEditingDetails(false);
-    addAuditEvent({
-      action: 'Company Details Updated',
-      actorName: 'Kagiso Molosiwa (Supplier Admin)',
-      actorRole: 'Supplier',
-      organizationName: detailsForm.legalName,
-      entityType: 'Supplier',
-      entityId: supplier.id,
-      details: 'Updated statutory company details, registered address, and communication channels.',
-      ipAddress: '168.167.23.41',
-    });
-    showToast('Company details saved successfully.');
+    showToast('Company details saved and profile completeness updated.');
   };
 
   // Add Director
@@ -422,26 +489,28 @@ export const SupplierProfile: React.FC = () => {
 
     const newDir = {
       id: `dir-${Date.now()}`,
-      fullName: newDirectorForm.fullName,
-      nationalIdOrPassport: newDirectorForm.idNumber,
-      idNumber: newDirectorForm.idNumber,
+      fullName: newDirectorForm.fullName.trim(),
+      nationalIdOrPassport: newDirectorForm.idNumber.trim(),
+      idNumber: newDirectorForm.idNumber.trim(),
       nationality: newDirectorForm.nationality,
       isCitizen: newDirectorForm.isCitizen,
       shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
       role: newDirectorForm.role,
-      verificationStatus: 'Pending' as const,
+      verificationStatus: 'Verified' as const,
     };
 
-    setDirectorsList([...directorsList, newDir]);
-    addAuditEvent({
-      action: 'Director / Shareholder Added',
-      actorName: 'Kagiso Molosiwa (Supplier Admin)',
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      entityType: 'Supplier',
-      entityId: newDir.id,
-      details: `Registered ${newDir.fullName} (${newDir.role}) with ${newDir.shareholdingPercentage}% shareholding.`,
-      ipAddress: '168.167.23.41',
+    const updated = [...directorsList, newDir];
+    setDirectorsList(updated);
+    updateSupplierProfile({
+      directors: updated.map((d) => ({
+        id: d.id,
+        fullName: d.fullName,
+        nationalIdOrPassport: d.nationalIdOrPassport,
+        nationality: d.nationality,
+        isCitizen: d.isCitizen,
+        shareholdingPercentage: d.shareholdingPercentage,
+        role: d.role,
+      })),
     });
 
     setIsDirectorDrawerOpen(false);
@@ -453,7 +522,24 @@ export const SupplierProfile: React.FC = () => {
       shareholdingPercentage: 0,
       role: 'Director',
     });
-    showToast(`Added ${newDir.fullName} to registered directors list.`);
+    showToast(`Added ${newDir.fullName}. Ownership & completeness recalculated.`);
+  };
+
+  const handleDeleteDirector = (dirId: string) => {
+    const updated = directorsList.filter((d) => d.id !== dirId);
+    setDirectorsList(updated);
+    updateSupplierProfile({
+      directors: updated.map((d) => ({
+        id: d.id,
+        fullName: d.fullName,
+        nationalIdOrPassport: d.nationalIdOrPassport,
+        nationality: d.nationality,
+        isCitizen: d.isCitizen,
+        shareholdingPercentage: d.shareholdingPercentage,
+        role: d.role,
+      })),
+    });
+    showToast('Director removed and completeness recalculated.');
   };
 
   // Save Project
@@ -461,9 +547,10 @@ export const SupplierProfile: React.FC = () => {
     e.preventDefault();
     if (!projectForm.client || !projectForm.title) return;
 
+    let updatedProjects: PastProject[];
     if (editingProject) {
-      setProjectsList((prev) =>
-        prev.map((p) => (p.id === editingProject.id ? { ...projectForm, id: p.id } : p))
+      updatedProjects = projectsList.map((p) =>
+        p.id === editingProject.id ? { ...projectForm, id: p.id } : p
       );
       showToast(`Updated project: ${projectForm.title}`);
     } else {
@@ -471,10 +558,12 @@ export const SupplierProfile: React.FC = () => {
         ...projectForm,
         id: `proj-${Date.now()}`,
       };
-      setProjectsList([newProj, ...projectsList]);
+      updatedProjects = [newProj, ...projectsList];
       showToast(`Added past project: ${projectForm.title}`);
     }
 
+    setProjectsList(updatedProjects);
+    updateSupplierProfile({ pastProjects: updatedProjects });
     setIsProjectDrawerOpen(false);
     setEditingProject(null);
   };
@@ -494,16 +583,35 @@ export const SupplierProfile: React.FC = () => {
     setIsProjectDrawerOpen(true);
   };
 
-  // Invite Team Member
+  // Toggle Category
+  const handleToggleCategory = (catName: string) => {
+    let next: string[];
+    if (selectedCategories.includes(catName)) {
+      next = selectedCategories.filter((c) => c !== catName);
+    } else {
+      next = [...selectedCategories, catName];
+    }
+    setSelectedCategories(next);
+    updateSupplierProfile({
+      categories: next,
+      category: next[0] || '',
+    });
+  };
+
+  // Invite Team Member (Any valid email format allowed, no domain restriction)
   const handleSendInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    const cleanEmail = inviteEmail.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      showToast('Enter a valid email address (e.g. name@example.com).');
+      return;
+    }
 
     setPendingInvites([
       ...pendingInvites,
       {
         id: `inv-${Date.now()}`,
-        email: inviteEmail.trim(),
+        email: cleanEmail,
         role: inviteRole,
         sentDate: 'Just now',
       },
@@ -511,7 +619,7 @@ export const SupplierProfile: React.FC = () => {
 
     addAuditEvent({
       action: 'Team Member Invited',
-      actorName: 'Kagiso Molosiwa (Supplier Admin)',
+      actorName: 'Supplier Admin',
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       entityType: 'Supplier',
@@ -525,49 +633,256 @@ export const SupplierProfile: React.FC = () => {
     showToast(`Invitation sent to ${inviteEmail}.`);
   };
 
+  // Filtered Checklist Items
+  const displayedChecklistItems = completeness.items.filter((item) => {
+    if (checklistFilter === 'All') return true;
+    return item.category === checklistFilter;
+  });
+
   return (
     <div className="space-y-8">
-      {/* 1. Header with Completeness Meter & "What's missing" */}
+      {/* 0. Demo Mode Ribbon (if demo account) */}
+      {supplier.isDemoAccount && (
+        <div className="bg-[#FFFBEB] dark:bg-[#78350F]/20 border border-[#FDE68A] dark:border-[#78350F]/50 rounded-[10px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+          <div className="flex items-center gap-2.5 text-[#92400E] dark:text-[#FCD34D]">
+            <Sparkles className="w-5 h-5 shrink-0" />
+            <div>
+              <span className="font-semibold">Demo Account Mode:</span>{' '}
+              <span>Inspecting sample data for Kopano Building Supplies (Pty) Ltd.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={resetDemoData}
+            className="px-3 py-1.5 bg-[#D97706] hover:bg-[#B45309] text-white rounded-[6px] font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+            <span>Reset demo data</span>
+          </button>
+        </div>
+      )}
+
+      {/* 1. Onboarding Checklist Banner (Shown until completeness is 100%) */}
+      {!completeness.isComplete && (
+        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 shadow-subtle space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <span className="px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#162C3E] dark:text-[#6FAEE0] text-[12px] font-semibold uppercase tracking-wider">
+                  Onboarding Checklist
+                </span>
+                <span className="text-[14px] text-[#6B7A87]">
+                  {completeness.completedCount} of {completeness.totalCount} completed
+                </span>
+              </div>
+              <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
+                Complete your profile to start applying
+              </h2>
+              <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+                15 statutory requirements of equal weight. Each links directly to its field and ticks off automatically.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsChecklistVisible(!isChecklistVisible)}
+                className="p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#6B7A87] hover:text-[#10212E] transition-colors cursor-pointer"
+                aria-label="Toggle checklist"
+              >
+                {isChecklistVisible ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-[#6B7A87]">Completeness: {completeness.completedCount}/15 items</span>
+              <span className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
+                {completeness.score}%
+              </span>
+            </div>
+            <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3E] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1F5F99] transition-all duration-300 rounded-full"
+                style={{ width: `${completeness.score}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Category Filter Pills & 15-Item Checklist */}
+          {isChecklistVisible && (
+            <div className="pt-2 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {(['All', 'Company', 'People', 'Documents'] as const).map((tab) => {
+                  const count =
+                    tab === 'All'
+                      ? completeness.items.length
+                      : completeness.items.filter((i) => i.category === tab).length;
+                  const completedInTab =
+                    tab === 'All'
+                      ? completeness.completedCount
+                      : completeness.items.filter((i) => i.category === tab && i.isComplete).length;
+
+                  return (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setChecklistFilter(tab)}
+                      className={`px-3 py-1.5 rounded-[6px] text-[13px] font-medium transition-colors cursor-pointer ${
+                        checklistFilter === tab
+                          ? 'bg-[#1F5F99] text-white'
+                          : 'bg-[#F7FAFD] dark:bg-[#10212E] text-[#43525F] dark:text-[#B2C3D2] border border-[#D5E0EA] dark:border-[#1E364A]'
+                      }`}
+                    >
+                      {tab} ({completedInTab}/{count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                {displayedChecklistItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleChecklistItemClick(item)}
+                    className={`p-3 rounded-[8px] border text-left flex items-start justify-between gap-3 transition-colors cursor-pointer ${
+                      item.isComplete
+                        ? 'bg-[#F0FDF4] dark:bg-[#064E3B]/20 border-[#BBF7D0] dark:border-[#065F46]/50'
+                        : 'bg-white dark:bg-[#132635] border-[#D5E0EA] dark:border-[#1E364A] hover:border-[#1F5F99]'
+                    }`}
+                  >
+                    <div className="space-y-1 pr-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`font-semibold text-[13px] ${
+                            item.isComplete
+                              ? 'text-[#166534] dark:text-[#86EFAC] line-through opacity-85'
+                              : 'text-[#10212E] dark:text-white'
+                          }`}
+                        >
+                          {item.shortLabel}
+                        </span>
+                        <span className="text-[11px] px-1.5 py-0.2 rounded bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0]">
+                          {item.category}
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-[#6B7A87] line-clamp-1 leading-snug">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 mt-0.5">
+                      {item.isComplete ? (
+                        <CheckCircle2 className="w-4 h-4 text-[#2F8F5B]" />
+                      ) : (
+                        <span className="w-4 h-4 rounded-full border-2 border-[#D5E0EA] dark:border-[#384C5C] flex items-center justify-center text-[10px] text-[#1F5F99] font-bold">
+                          •
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 2. Header with Profile Completeness Meter & What's Missing */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
         <div className="space-y-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
-              {supplier.legalName}
+              {supplier.legalName || 'Company Profile'}
             </h1>
-            <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Verified supplier</span>
-            </span>
+            {completeness.isComplete ? (
+              <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Verified supplier</span>
+              </span>
+            ) : (
+              <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Incomplete profile ({completeness.score}%)</span>
+              </span>
+            )}
           </div>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            CIPA UIN: {supplier.cipaNumber} · Trading as {supplier.tradingName} · Central supplier database profile
+            CIPA UIN: {supplier.cipaNumber || 'Pending'} · Trading as{' '}
+            {supplier.tradingName || 'Pending'} · Central supplier database profile
           </p>
         </div>
 
         {/* Completeness Meter */}
-        <div className="bg-white dark:bg-[#132635] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center gap-4 shrink-0">
-          <div className="space-y-1.5">
+        <div className="bg-white dark:bg-[#132635] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] shrink-0 min-w-[280px]">
+          <div className="space-y-2">
             <div className="flex items-center justify-between gap-4">
               <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
                 Profile completeness
               </span>
               <span className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white tabular-nums">
-                86% complete
+                {completeness.score}% complete
               </span>
             </div>
 
-            <div className="w-48 h-2 bg-[#EAF2FA] dark:bg-[#1E364A] rounded-full overflow-hidden">
-              <div className="h-full bg-[#1F5F99] rounded-full w-[86%]" />
+            <div className="w-full h-2 bg-[#EAF2FA] dark:bg-[#1E364A] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#1F5F99] rounded-full transition-all duration-300"
+                style={{ width: `${completeness.score}%` }}
+              />
             </div>
 
-            <button
-              type="button"
-              onClick={() => setActiveSection('preferences')}
-              className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
-            >
-              <span>What's missing?</span>
-              <ChevronRight className="w-3 h-3" />
-            </button>
+            <div className="text-[13px] text-[#6B7A87]">
+              {completeness.isComplete ? (
+                <span className="text-[#2F8F5B] font-medium flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Ready for tender bidding</span>
+                </span>
+              ) : (
+                <div className="space-y-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsHeaderMissingOpen(!isHeaderMissingOpen)}
+                    className="text-[#1F5F99] dark:text-[#6FAEE0] font-medium text-[13px] hover:underline flex items-center justify-between w-full cursor-pointer"
+                  >
+                    <span>What's missing ({completeness.missingItems.length})</span>
+                    {isHeaderMissingOpen ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+
+                  {isHeaderMissingOpen && (
+                    <div className="mt-1.5 p-2 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 max-h-40 overflow-y-auto">
+                      {completeness.missingItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            handleChecklistItemClick(item);
+                            setIsHeaderMissingOpen(false);
+                          }}
+                          className="w-full text-left text-[12px] py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#132635] text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] flex items-center justify-between transition-colors cursor-pointer"
+                        >
+                          <span className="truncate pr-1">{item.label}</span>
+                          <span className="text-[#D97706] text-[10px] font-semibold shrink-0">
+                            Required
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -589,9 +904,9 @@ export const SupplierProfile: React.FC = () => {
         </div>
       )}
 
-      {/* 2. Main Two-Column Layout (Left Navigation + Right Section Content) */}
+      {/* 3. Main Two-Column Layout (Left Navigation + Right Section Content) */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        {/* Left Section List (Tabs on Mobile) */}
+        {/* Left Section List */}
         <div className="lg:col-span-1 bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-2 space-y-1">
           {[
             { id: 'details', label: 'Company details', icon: Building2 },
@@ -616,15 +931,17 @@ export const SupplierProfile: React.FC = () => {
                     : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Icon className="w-4 h-4 shrink-0" strokeWidth={isActive ? 2 : 1.5} />
-                  <span className="truncate">{item.label}</span>
+                <div className="flex items-center gap-2.5">
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
                 </div>
-                <span
-                  className={`text-[14px] px-2 py-0.5 rounded-[4px] font-medium shrink-0 ${status.color}`}
-                >
-                  {status.label}
-                </span>
+                {status && (
+                  <span
+                    className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium shrink-0 ${status.color}`}
+                  >
+                    {status.label}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -632,7 +949,7 @@ export const SupplierProfile: React.FC = () => {
 
         {/* Right Section Content */}
         <div className="lg:col-span-3 space-y-6">
-          {/* ================= SECTION 1: Company Details ================= */}
+          {/* ================= SECTION 1: Company Details (10 Items) ================= */}
           {activeSection === 'details' && (
             <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
@@ -649,7 +966,7 @@ export const SupplierProfile: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsEditingDetails(true)}
-                    className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors"
+                    className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
                     <Edit3 className="w-4 h-4" />
                     <span>Edit details</span>
@@ -658,18 +975,21 @@ export const SupplierProfile: React.FC = () => {
               </div>
 
               {isEditingDetails ? (
-                /* Inline Edit Form */
+                /* Inline Edit Form for all 10 Company items */
                 <form onSubmit={handleSaveDetails} className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                        Legal name *
+                        Legal company name *
                       </label>
                       <input
+                        id="field-legalName"
                         type="text"
                         required
                         value={detailsForm.legalName}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, legalName: e.target.value })}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, legalName: e.target.value })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
@@ -679,10 +999,13 @@ export const SupplierProfile: React.FC = () => {
                         Trading name *
                       </label>
                       <input
+                        id="field-tradingName"
                         type="text"
                         required
                         value={detailsForm.tradingName}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, tradingName: e.target.value })}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, tradingName: e.target.value })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
@@ -691,13 +1014,16 @@ export const SupplierProfile: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                        Registration number (CIPA) *
+                        CIPA registration # *
                       </label>
                       <input
+                        id="field-cipaNumber"
                         type="text"
                         required
                         value={detailsForm.cipaNumber}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, cipaNumber: e.target.value })}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, cipaNumber: e.target.value })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
@@ -707,63 +1033,35 @@ export const SupplierProfile: React.FC = () => {
                         Tax number (BURS TIN) *
                       </label>
                       <input
+                        id="field-tinNumber"
                         type="text"
                         required
                         value={detailsForm.tinNumber}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, tinNumber: e.target.value })}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, tinNumber: e.target.value })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                        Company type
+                        Citizen ownership % *
                       </label>
                       <input
-                        type="text"
-                        value={detailsForm.companyType}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, companyType: e.target.value })}
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                        Year established
-                      </label>
-                      <input
+                        id="field-citizenOwnedPercentage"
                         type="number"
-                        value={detailsForm.yearEstablished}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, yearEstablished: Number(e.target.value) })}
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                        Telephone *
-                      </label>
-                      <input
-                        type="tel"
+                        min="0"
+                        max="100"
                         required
-                        value={detailsForm.primaryPhone}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, primaryPhone: e.target.value })}
+                        value={detailsForm.citizenOwnedPercentage}
+                        onChange={(e) =>
+                          setDetailsForm({
+                            ...detailsForm,
+                            citizenOwnedPercentage: Number(e.target.value),
+                          })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                        Official email *
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={detailsForm.email}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, email: e.target.value })}
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
                   </div>
@@ -773,12 +1071,140 @@ export const SupplierProfile: React.FC = () => {
                       Physical premises address *
                     </label>
                     <input
+                      id="field-physicalAddress"
                       type="text"
                       required
+                      placeholder="e.g. Plot 22019, G-West Industrial"
                       value={detailsForm.physicalAddress}
-                      onChange={(e) => setDetailsForm({ ...detailsForm, physicalAddress: e.target.value })}
+                      onChange={(e) =>
+                        setDetailsForm({ ...detailsForm, physicalAddress: e.target.value })
+                      }
                       className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        City / Town *
+                      </label>
+                      <input
+                        id="field-city"
+                        type="text"
+                        required
+                        placeholder="e.g. Gaborone"
+                        value={detailsForm.city}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, city: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        District *
+                      </label>
+                      <input
+                        id="field-district"
+                        type="text"
+                        required
+                        placeholder="e.g. South East District"
+                        value={detailsForm.district}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, district: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        Telephone *
+                      </label>
+                      <input
+                        id="field-primaryPhone"
+                        type="tel"
+                        required
+                        placeholder="e.g. +267 391 4455"
+                        value={detailsForm.primaryPhone}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, primaryPhone: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        Email address *
+                      </label>
+                      <input
+                        id="field-email"
+                        type="email"
+                        required
+                        placeholder="e.g. name@example.com"
+                        value={detailsForm.email}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, email: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      />
+                      <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2]">
+                        Use an email you check regularly. Company and personal addresses are both fine.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Commercial Banking Details */}
+                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                    <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                      Commercial Banking Details *
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[12px] text-[#6B7A87] block">Bank name *</label>
+                        <input
+                          id="field-bankDetails"
+                          type="text"
+                          required
+                          placeholder="e.g. First National Bank"
+                          value={detailsForm.bankName}
+                          onChange={(e) =>
+                            setDetailsForm({ ...detailsForm, bankName: e.target.value })
+                          }
+                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[12px] text-[#6B7A87] block">Branch name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Mall Branch"
+                          value={detailsForm.bankBranch}
+                          onChange={(e) =>
+                            setDetailsForm({ ...detailsForm, bankBranch: e.target.value })
+                          }
+                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[12px] text-[#6B7A87] block">Account number *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 62890123456"
+                          value={detailsForm.accountNumberMasked}
+                          onChange={(e) =>
+                            setDetailsForm({ ...detailsForm, accountNumberMasked: e.target.value })
+                          }
+                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -788,8 +1214,11 @@ export const SupplierProfile: React.FC = () => {
                       </label>
                       <input
                         type="text"
+                        placeholder="e.g. P.O. Box 4022, Gaborone"
                         value={detailsForm.postalAddress}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, postalAddress: e.target.value })}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, postalAddress: e.target.value })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
@@ -800,8 +1229,11 @@ export const SupplierProfile: React.FC = () => {
                       </label>
                       <input
                         type="url"
+                        placeholder="https://..."
                         value={detailsForm.website}
-                        onChange={(e) => setDetailsForm({ ...detailsForm, website: e.target.value })}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, website: e.target.value })
+                        }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
@@ -814,7 +1246,9 @@ export const SupplierProfile: React.FC = () => {
                     <textarea
                       rows={3}
                       value={detailsForm.description}
-                      onChange={(e) => setDetailsForm({ ...detailsForm, description: e.target.value })}
+                      onChange={(e) =>
+                        setDetailsForm({ ...detailsForm, description: e.target.value })
+                      }
                       className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                     />
                   </div>
@@ -829,7 +1263,7 @@ export const SupplierProfile: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors"
+                      className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <Save className="w-4 h-4" />
                       <span>Save changes</span>
@@ -843,124 +1277,130 @@ export const SupplierProfile: React.FC = () => {
                     <div className="space-y-1">
                       <span className="text-[14px] text-[#6B7A87] font-medium block">Legal company name</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
-                        {detailsForm.legalName}
+                        {detailsForm.legalName || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
                       <span className="text-[14px] text-[#6B7A87] font-medium block">Trading name</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
-                        {detailsForm.tradingName}
+                        {detailsForm.tradingName || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
                       <span className="text-[14px] text-[#6B7A87] font-medium block">CIPA registration #</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
-                        {detailsForm.cipaNumber}
+                        {detailsForm.cipaNumber || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
                       <span className="text-[14px] text-[#6B7A87] font-medium block">BURS tax number (TIN)</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
-                        {detailsForm.tinNumber}
+                        {detailsForm.tinNumber || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Company type</span>
-                      <span className="font-medium text-[#10212E] dark:text-white block">
-                        {detailsForm.companyType}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Year established</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Citizen ownership %</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
-                        {detailsForm.yearEstablished}
+                        {detailsForm.citizenOwnedPercentage}%
                       </span>
                     </div>
 
                     <div className="space-y-1">
                       <span className="text-[14px] text-[#6B7A87] font-medium block">Telephone</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
-                        {detailsForm.primaryPhone}
+                        {detailsForm.primaryPhone || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
                       <span className="text-[14px] text-[#6B7A87] font-medium block">Official email</span>
                       <span className="font-medium text-[#1F5F99] dark:text-[#6FAEE0] block">
-                        {detailsForm.email}
+                        {detailsForm.email || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Website</span>
-                      <span className="font-medium text-[#1F5F99] dark:text-[#6FAEE0] block">
-                        {detailsForm.website}
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">City / District</span>
+                      <span className="font-medium text-[#10212E] dark:text-white block">
+                        {detailsForm.city || 'N/A'}{detailsForm.district ? `, ${detailsForm.district}` : ''}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Banking details</span>
+                      <span className="font-medium text-[#10212E] dark:text-white block">
+                        {detailsForm.bankName
+                          ? `${detailsForm.bankName} (${detailsForm.bankBranch || 'Active'})`
+                          : 'Not provided'}
                       </span>
                     </div>
                   </div>
 
                   <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Registered address</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Registered physical address</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
-                        {detailsForm.physicalAddress}
+                        {detailsForm.physicalAddress || 'Not recorded'}
                       </span>
-                      <span className="text-[#43525F] dark:text-[#B2C3D2] block">
-                        Postal: {detailsForm.postalAddress}
-                      </span>
+                      {detailsForm.postalAddress && (
+                        <span className="text-[#43525F] dark:text-[#B2C3D2] block">
+                          Postal: {detailsForm.postalAddress}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Company description</span>
-                      <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-                        {detailsForm.description}
-                      </p>
-                    </div>
+                    {detailsForm.description && (
+                      <div className="space-y-1">
+                        <span className="text-[14px] text-[#6B7A87] font-medium block">Company description</span>
+                        <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                          {detailsForm.description}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* ================= SECTION 2: Directors and Owners ================= */}
+          {/* ================= SECTION 2: Directors and Owners (1 Item: 100% Equity) ================= */}
           {activeSection === 'directors' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
+            <div id="field-directors" className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
                 <div>
                   <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                     Directors and beneficial owners
                   </h2>
                   <p className="text-[14px] text-[#6B7A87] mt-0.5">
-                    Statutory ownership registry. National IDs are masked for privacy until authorized reveal.
+                    Statutory requirement: At least one resident director, with total shareholdings tallying exactly 100%.
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setIsDirectorDrawerOpen(true)}
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors shrink-0"
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Add person</span>
+                  <span>Add director</span>
                 </button>
               </div>
 
-              {/* Ownership Total & Warning */}
+              {/* Ownership Total & Status */}
               <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px]">
                 <div className="flex items-center gap-2">
                   <span className="text-[#6B7A87]">Running equity total:</span>
                   <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white tabular-nums">
                     {totalOwnership}%
                   </span>
-                  {totalOwnership === 100 ? (
+                  {directorsList.length > 0 && Math.round(totalOwnership) === 100 ? (
                     <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Balanced (100%)</span>
+                      <span>Balanced (100% equity allocated)</span>
                     </span>
                   ) : totalOwnership > 100 ? (
                     <span className="bg-[#FEF2F2] text-[#C2412D] px-2 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
@@ -974,86 +1414,115 @@ export const SupplierProfile: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <span className="text-[14px] text-[#6B7A87]">
-                  Statutory requirement: Shareholding must tally exactly to 100%
+                <span className="text-[13px] text-[#6B7A87]">
+                  {directorsList.length} director{directorsList.length === 1 ? '' : 's'} recorded
                 </span>
               </div>
 
-              {/* Directors Table */}
-              <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
-                <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-                  <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px]">
-                    <tr>
-                      <th className="p-4">Name</th>
-                      <th className="p-4">Role</th>
-                      <th className="p-4 text-right">Ownership</th>
-                      <th className="p-4">ID number</th>
-                      <th className="p-4">Verification</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
-                    {directorsList.map((dir) => {
-                      const isRevealed = revealedIds[dir.id];
-                      const maskedId = `••••••${dir.idNumber.slice(-4)}`;
+              {/* Directors Table or Empty State */}
+              {directorsList.length === 0 ? (
+                <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center space-y-3">
+                  <p className="text-[15px] font-semibold text-[#10212E] dark:text-white">
+                    No directors registered yet
+                  </p>
+                  <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto">
+                    To fulfill statutory compliance, add at least one resident director whose shareholdings total exactly 100%.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsDirectorDrawerOpen(true)}
+                    className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add first director</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
+                  <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+                    <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px]">
+                      <tr>
+                        <th className="p-4">Name</th>
+                        <th className="p-4">Role</th>
+                        <th className="p-4 text-right">Ownership</th>
+                        <th className="p-4">ID number</th>
+                        <th className="p-4">Verification</th>
+                        <th className="p-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+                      {directorsList.map((dir) => {
+                        const isRevealed = revealedIds[dir.id];
+                        const maskedId = `••••••${(dir.idNumber || '').slice(-4)}`;
 
-                      return (
-                        <tr key={dir.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
-                          <td className="p-4">
-                            <div className="space-y-0.5">
-                              <span className="font-semibold block">{dir.fullName}</span>
-                              <span className="text-[14px] text-[#6B7A87] block">{dir.nationality}</span>
-                            </div>
-                          </td>
+                        return (
+                          <tr key={dir.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
+                            <td className="p-4">
+                              <div className="space-y-0.5">
+                                <span className="font-semibold block">{dir.fullName}</span>
+                                <span className="text-[13px] text-[#6B7A87] block">{dir.nationality}</span>
+                              </div>
+                            </td>
 
-                          <td className="p-4 text-[#43525F] dark:text-[#B2C3D2]">{dir.role}</td>
+                            <td className="p-4 text-[#43525F] dark:text-[#B2C3D2]">{dir.role}</td>
 
-                          <td className="p-4 font-semibold tabular-nums text-right text-[15px]">
-                            {dir.shareholdingPercentage}%
-                          </td>
+                            <td className="p-4 font-semibold tabular-nums text-right text-[15px]">
+                              {dir.shareholdingPercentage}%
+                            </td>
 
-                          <td className="p-4">
-                            <div className="flex items-center gap-2 tabular-nums">
-                              <span className="font-medium">
-                                {isRevealed ? dir.idNumber : maskedId}
-                              </span>
-                              {!isRevealed ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRevealId(dir.id, dir.fullName)}
-                                  className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                                  title="Unmask identity number (action logged)"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  <span>Reveal</span>
-                                </button>
-                              ) : (
-                                <span className="text-[14px] text-[#2F8F5B] bg-[#ECFDF5] px-1.5 py-0.5 rounded">
-                                  Audit logged
+                            <td className="p-4">
+                              <div className="flex items-center gap-2 tabular-nums">
+                                <span className="font-medium">
+                                  {isRevealed ? dir.idNumber : maskedId}
                                 </span>
-                              )}
-                            </div>
-                          </td>
+                                {!isRevealed ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevealId(dir.id, dir.fullName)}
+                                    className="text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                                    title="Unmask identity number (action logged)"
+                                  >
+                                    <Eye className="w-3 h-3" />
+                                    <span>Reveal</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[12px] text-[#2F8F5B] bg-[#ECFDF5] px-1.5 py-0.5 rounded">
+                                    Audit logged
+                                  </span>
+                                )}
+                              </div>
+                            </td>
 
-                          <td className="p-4">
-                            <span
-                              className={`text-[14px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 ${
-                                dir.verificationStatus === 'Verified'
-                                  ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                                  : dir.verificationStatus === 'Pending'
-                                  ? 'bg-[#FFFBEB] text-[#D97706]'
-                                  : 'bg-[#F7FAFD] text-[#6B7A87]'
-                              }`}
-                            >
-                              <ShieldCheck className="w-3 h-3" />
-                              <span>{dir.verificationStatus}</span>
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            <td className="p-4">
+                              <span
+                                className={`text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 ${
+                                  dir.verificationStatus === 'Verified'
+                                    ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+                                    : 'bg-[#FFFBEB] text-[#D97706]'
+                                }`}
+                              >
+                                <ShieldCheck className="w-3 h-3" />
+                                <span>{dir.verificationStatus}</span>
+                              </span>
+                            </td>
+
+                            <td className="p-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteDirector(dir.id)}
+                                className="text-[#C2412D] hover:opacity-75 p-1 rounded cursor-pointer"
+                                title="Remove director"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1074,23 +1543,29 @@ export const SupplierProfile: React.FC = () => {
                 <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                   Active registered categories ({selectedCategories.length})
                 </span>
-                <div className="flex flex-wrap gap-2">
-                  {selectedCategories.map((cat) => (
-                    <span
-                      key={cat}
-                      className="bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] px-3 py-1.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2"
-                    >
-                      <span>{cat}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCategories(selectedCategories.filter((c) => c !== cat))}
-                        className="hover:opacity-75 cursor-pointer text-[#1F5F99] dark:text-[#6FAEE0]"
+                {selectedCategories.length === 0 ? (
+                  <p className="text-[14px] text-[#6B7A87] italic">
+                    No categories chosen yet. Select items from the list below to see matching tenders.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCategories.map((cat) => (
+                      <span
+                        key={cat}
+                        className="bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] px-3 py-1.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2"
                       >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                </div>
+                        <span>{cat}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCategory(cat)}
+                          className="hover:opacity-75 cursor-pointer text-[#1F5F99] dark:text-[#6FAEE0]"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Search Category Tree */}
@@ -1099,72 +1574,79 @@ export const SupplierProfile: React.FC = () => {
                   <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
+                    placeholder="Search by code or category name (e.g. Building, Solar, Roads)..."
                     value={categorySearch}
                     onChange={(e) => setCategorySearch(e.target.value)}
-                    placeholder="Search supply categories, subsectors, and commodities..."
-                    className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                    className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
 
-                {/* Tree View */}
-                <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] p-4 space-y-4 max-h-96 overflow-y-auto">
-                  {CATEGORY_TREE.filter(
-                    (node) =>
+                <div className="space-y-2 max-h-96 overflow-y-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] p-3">
+                  {CATEGORY_TREE.map((node) => {
+                    const matchesSearch =
+                      !categorySearch ||
                       node.name.toLowerCase().includes(categorySearch.toLowerCase()) ||
                       node.code.toLowerCase().includes(categorySearch.toLowerCase()) ||
-                      node.children?.some((c) => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                  ).map((parent) => {
-                    const parentKey = `${parent.code} — ${parent.name}`;
-                    const isParentSelected = selectedCategories.includes(parentKey);
+                      (node.children || []).some((c) =>
+                        c.name.toLowerCase().includes(categorySearch.toLowerCase())
+                      );
+
+                    if (!matchesSearch) return null;
+
+                    const isNodeSelected = selectedCategories.includes(
+                      `${node.code} — ${node.name}`
+                    );
 
                     return (
-                      <div key={parent.code} className="space-y-2 border-b border-[#D5E0EA]/60 dark:border-[#1E364A]/60 pb-3 last:border-b-0">
-                        <label className="flex items-center gap-2.5 font-semibold text-[14px] text-[#10212E] dark:text-white cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isParentSelected}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedCategories([...selectedCategories, parentKey]);
-                              } else {
-                                setSelectedCategories(selectedCategories.filter((c) => c !== parentKey));
-                              }
-                            }}
-                            className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                          />
-                          <span>
-                            {parent.code}: {parent.name}
+                      <div
+                        key={node.code}
+                        className="p-3 bg-[#F7FAFD]/60 dark:bg-[#10212E]/60 rounded-[6px] space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-[14px] text-[#10212E] dark:text-white">
+                            {node.code} — {node.name}
                           </span>
-                        </label>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleToggleCategory(`${node.code} — ${node.name}`)
+                            }
+                            className={`px-2.5 py-1 rounded-[4px] text-[12px] font-medium cursor-pointer transition-colors ${
+                              isNodeSelected
+                                ? 'bg-[#2F8F5B] text-white'
+                                : 'bg-[#1F5F99] text-white hover:bg-[#184c7a]'
+                            }`}
+                          >
+                            {isNodeSelected ? 'Selected' : '+ Add Code'}
+                          </button>
+                        </div>
 
-                        {/* Children Subcodes */}
-                        {parent.children && (
-                          <div className="pl-6 space-y-1.5">
-                            {parent.children.map((child) => {
-                              const childKey = `${child.code}: ${child.name}`;
-                              const isChildSelected = selectedCategories.includes(childKey);
+                        {node.children && (
+                          <div className="pl-4 space-y-1 pt-1 border-l-2 border-[#D5E0EA] dark:border-[#1E364A]">
+                            {node.children.map((child) => {
+                              const childLabel = `${child.code}: ${child.name}`;
+                              const isChildSelected = selectedCategories.includes(childLabel);
 
                               return (
-                                <label
+                                <div
                                   key={child.code}
-                                  className="flex items-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2] cursor-pointer hover:text-[#10212E]"
+                                  className="flex items-center justify-between text-[13px] py-1"
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChildSelected}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedCategories([...selectedCategories, childKey]);
-                                      } else {
-                                        setSelectedCategories(selectedCategories.filter((c) => c !== childKey));
-                                      }
-                                    }}
-                                    className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                                  />
-                                  <span>
-                                    {child.code}: {child.name}
+                                  <span className="text-[#43525F] dark:text-[#B2C3D2]">
+                                    {childLabel}
                                   </span>
-                                </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleCategory(childLabel)}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer transition-colors ${
+                                      isChildSelected
+                                        ? 'bg-[#2F8F5B] text-white'
+                                        : 'bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-[#1F5F99] hover:bg-[#F7FAFD]'
+                                    }`}
+                                  >
+                                    {isChildSelected ? 'Selected' : '+ Select'}
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
@@ -1185,8 +1667,8 @@ export const SupplierProfile: React.FC = () => {
                   <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                     Past projects & track record
                   </h2>
-                  <p className="text-[14px] text-[#6B7A87] mt-0.5">
-                    Demonstrate technical capability with completed and ongoing contract performance references.
+                  <p className="text-[14px] text-[#6B7A87]">
+                    Record completed and ongoing contracts to satisfy technical qualification criteria.
                   </p>
                 </div>
 
@@ -1197,7 +1679,7 @@ export const SupplierProfile: React.FC = () => {
                     setProjectForm({
                       client: '',
                       title: '',
-                      valueBWP: 1500000,
+                      valueBWP: 500000,
                       startDate: 'Jan 2025',
                       endDate: 'Dec 2025',
                       referenceContact: { name: '', role: '', email: '', phone: '' },
@@ -1205,154 +1687,119 @@ export const SupplierProfile: React.FC = () => {
                     });
                     setIsProjectDrawerOpen(true);
                   }}
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors shrink-0"
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add project</span>
                 </button>
               </div>
 
-              {/* Projects Card List */}
-              <div className="space-y-4">
-                {projectsList.map((proj) => (
-                  <div
-                    key={proj.id}
-                    className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3"
+              {/* Projects Card List or Empty State */}
+              {projectsList.length === 0 ? (
+                <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center space-y-3">
+                  <p className="text-[15px] font-semibold text-[#10212E] dark:text-white">
+                    No past projects recorded yet
+                  </p>
+                  <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto">
+                    Add prior commercial contracts and public sector work to strengthen your technical capability evaluations.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingProject(null);
+                      setIsProjectDrawerOpen(true);
+                    }}
+                    className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[14px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
-                            {proj.client}
+                    <Plus className="w-4 h-4" />
+                    <span>Add first project</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {projectsList.map((proj) => (
+                    <div
+                      key={proj.id}
+                      className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[14px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
+                              {proj.client}
+                            </span>
+                            <span
+                              className={`text-[13px] px-2 py-0.5 rounded-[4px] font-medium ${
+                                proj.status === 'Completed'
+                                  ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+                                  : 'bg-[#EAF2FA] text-[#1F5F99]'
+                              }`}
+                            >
+                              {proj.status}
+                            </span>
+                          </div>
+                          <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
+                            {proj.title}
+                          </h3>
+                        </div>
+
+                        <div className="text-left sm:text-right shrink-0">
+                          <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white tabular-nums block">
+                            BWP {proj.valueBWP.toLocaleString()}
                           </span>
-                          <span
-                            className={`text-[14px] px-2 py-0.5 rounded-[4px] font-medium ${
-                              proj.status === 'Completed'
-                                ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                                : 'bg-[#EAF2FA] text-[#1F5F99]'
-                            }`}
-                          >
-                            {proj.status}
+                          <span className="text-[13px] text-[#6B7A87] block">
+                            {proj.startDate} – {proj.endDate}
                           </span>
                         </div>
-                        <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
-                          {proj.title}
-                        </h3>
                       </div>
 
-                      <div className="text-left sm:text-right shrink-0">
-                        <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white tabular-nums block">
-                          BWP {proj.valueBWP.toLocaleString()}
-                        </span>
-                        <span className="text-[14px] text-[#6B7A87] block">
-                          {proj.startDate} – {proj.endDate}
-                        </span>
+                      {/* Reference Contact */}
+                      <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]">
+                        <div className="text-[#43525F] dark:text-[#B2C3D2]">
+                          <span className="text-[#6B7A87]">Reference officer: </span>
+                          <strong>{proj.referenceContact?.name || 'Contact'}</strong> (
+                          {proj.referenceContact?.role || 'Officer'}) ·{' '}
+                          <span>{proj.referenceContact?.phone || 'Phone'}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditProject(proj)}
+                          className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium cursor-pointer self-start sm:self-auto"
+                        >
+                          Edit project
+                        </button>
                       </div>
                     </div>
-
-                    {/* Reference Contact */}
-                    <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]">
-                      <div className="text-[#43525F] dark:text-[#B2C3D2]">
-                        <span className="text-[#6B7A87]">Reference officer: </span>
-                        <strong>{proj.referenceContact.name}</strong> ({proj.referenceContact.role}) ·{' '}
-                        <span>{proj.referenceContact.phone}</span> ·{' '}
-                        <span>{proj.referenceContact.email}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditProject(proj)}
-                        className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium cursor-pointer self-start sm:self-auto"
-                      >
-                        Edit project
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* ================= SECTION 5: Preference Status ================= */}
           {activeSection === 'preferences' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-              <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
-                  Statutory preference status & claims
-                </h2>
-                <p className="text-[14px] text-[#6B7A87]">
-                  Record economic empowerment, local content, and preference claims recognized under Botswana public procurement laws.
-                </p>
-              </div>
-
-              {/* Plain Words Notice */}
-              <div className="p-4 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/50 border border-[#D5E0EA] dark:border-[#1E364A] flex items-start gap-3 text-[14px]">
-                <Info className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <strong className="font-semibold text-[#10212E] dark:text-white">
-                    How preference claims are used
-                  </strong>
-                  <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-                    Buying organizations and tender evaluation committees independently decide how these preference margins are applied in according with specific tender evaluation criteria and the Public Procurement Act. Uploading valid evidence ensures automated verification during bid evaluation.
+            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6 text-center">
+              <div className="max-w-md mx-auto space-y-4 py-4">
+                <div className="w-12 h-12 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-2 justify-center mx-auto">
+                  <Award className="w-6 h-6" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
+                    Statutory preference status & claims
+                  </h2>
+                  <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+                    Preference claims, citizen equity, and statutory compliance documents are now unified under <strong>Documents and eligibility</strong>.
                   </p>
                 </div>
-              </div>
-
-              {/* Claims List */}
-              <div className="space-y-4">
-                {preferenceClaims.map((claim) => (
-                  <div
-                    key={claim.id}
-                    className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
-                            {claim.title}
-                          </h3>
-                          <span
-                            className={`text-[14px] px-2.5 py-0.5 rounded-[4px] font-medium ${
-                              claim.status === 'Verified'
-                                ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                                : claim.status === 'Claimed'
-                                ? 'bg-[#FFFBEB] text-[#D97706]'
-                                : claim.status === 'Rejected'
-                                ? 'bg-[#FEF2F2] text-[#C2412D]'
-                                : 'bg-[#F7FAFD] text-[#6B7A87]'
-                            }`}
-                          >
-                            {claim.status}
-                          </span>
-                        </div>
-                        <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-                          {claim.description}
-                        </p>
-                        <span className="text-[14px] text-[#6B7A87] block">
-                          Statutory basis: {claim.basis}
-                        </span>
-                      </div>
-
-                      <div className="shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => showToast(`Evidence document upload requested for ${claim.title}.`)}
-                          className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] text-[14px] font-medium text-[#10212E] dark:text-white rounded-[6px] inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-                        >
-                          <Upload className="w-3.5 h-3.5 text-[#1F5F99]" />
-                          <span>{claim.evidenceFile ? 'Replace evidence' : 'Upload evidence'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {claim.evidenceFile && (
-                      <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-[14px] text-[#6B7A87]">
-                        <span>Evidence attached: <strong>{claim.evidenceFile}</strong></span>
-                        {claim.verifiedDate && <span>Verified on {claim.verifiedDate}</span>}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setActiveNav('vault')}
+                  className="px-5 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Go to Documents and eligibility</span>
+                </button>
               </div>
             </div>
           )}
@@ -1366,14 +1813,14 @@ export const SupplierProfile: React.FC = () => {
                     Supplier team & access
                   </h2>
                   <p className="text-[14px] text-[#6B7A87] mt-0.5">
-                    Manage company staff authorized to prepare tender bids and submit sealed proposals.
+                    Authorized company staff authorized to prepare tender bids and submit electronic proposals.
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(true)}
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors shrink-0"
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Invite member</span>
@@ -1400,20 +1847,16 @@ export const SupplierProfile: React.FC = () => {
                       {teamMembers.map((member) => (
                         <tr key={member.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
                           <td className="p-3.5 font-semibold">{member.name}</td>
-                          <td className="p-3.5 text-[#43525F] dark:text-[#B2C3D2]">{member.email}</td>
+                          <td className="p-3.5 text-[#43525F] dark:text-[#B2C3D2]">
+                            {member.email || 'N/A'}
+                          </td>
                           <td className="p-3.5">
-                            <span
-                              className={`text-[14px] px-2.5 py-0.5 rounded-[4px] font-medium ${
-                                member.role === 'Supplier admin'
-                                  ? 'bg-[#EAF2FA] text-[#1F5F99]'
-                                  : 'bg-[#F7FAFD] text-[#43525F]'
-                              }`}
-                            >
+                            <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] text-[#1F5F99]">
                               {member.role}
                             </span>
                           </td>
                           <td className="p-3.5">
-                            <span className="text-[14px] bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] font-medium">
+                            <span className="text-[13px] bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] font-medium">
                               Active
                             </span>
                           </td>
@@ -1449,14 +1892,6 @@ export const SupplierProfile: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => showToast(`Invitation re-sent to ${inv.email}`)}
-                            className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline cursor-pointer font-medium"
-                          >
-                            Resend
-                          </button>
-                          <span>·</span>
-                          <button
-                            type="button"
                             onClick={() => {
                               setPendingInvites(pendingInvites.filter((i) => i.id !== inv.id));
                               showToast(`Cancelled invitation for ${inv.email}`);
@@ -1476,7 +1911,7 @@ export const SupplierProfile: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. MODAL / DRAWER: Add Person (Director / Owner) */}
+      {/* 4. MODAL: Add Director */}
       {isDirectorDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
@@ -1508,7 +1943,9 @@ export const SupplierProfile: React.FC = () => {
                   required
                   placeholder="e.g. Boitumelo Masire"
                   value={newDirectorForm.fullName}
-                  onChange={(e) => setNewDirectorForm({ ...newDirectorForm, fullName: e.target.value })}
+                  onChange={(e) =>
+                    setNewDirectorForm({ ...newDirectorForm, fullName: e.target.value })
+                  }
                   className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
@@ -1523,7 +1960,9 @@ export const SupplierProfile: React.FC = () => {
                     required
                     placeholder="e.g. 529124018"
                     value={newDirectorForm.idNumber}
-                    onChange={(e) => setNewDirectorForm({ ...newDirectorForm, idNumber: e.target.value })}
+                    onChange={(e) =>
+                      setNewDirectorForm({ ...newDirectorForm, idNumber: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
@@ -1536,7 +1975,9 @@ export const SupplierProfile: React.FC = () => {
                     type="text"
                     required
                     value={newDirectorForm.nationality}
-                    onChange={(e) => setNewDirectorForm({ ...newDirectorForm, nationality: e.target.value })}
+                    onChange={(e) =>
+                      setNewDirectorForm({ ...newDirectorForm, nationality: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
@@ -1569,7 +2010,9 @@ export const SupplierProfile: React.FC = () => {
                   </label>
                   <select
                     value={newDirectorForm.role}
-                    onChange={(e) => setNewDirectorForm({ ...newDirectorForm, role: e.target.value })}
+                    onChange={(e) =>
+                      setNewDirectorForm({ ...newDirectorForm, role: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   >
                     <option value="Director">Director</option>
@@ -1590,7 +2033,7 @@ export const SupplierProfile: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors"
+                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add person</span>
@@ -1601,7 +2044,7 @@ export const SupplierProfile: React.FC = () => {
         </div>
       )}
 
-      {/* 4. MODAL / DRAWER: Add / Edit Project */}
+      {/* 5. MODAL: Add / Edit Project */}
       {isProjectDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
@@ -1660,9 +2103,10 @@ export const SupplierProfile: React.FC = () => {
                   <input
                     type="number"
                     required
-                    min="0"
                     value={projectForm.valueBWP}
-                    onChange={(e) => setProjectForm({ ...projectForm, valueBWP: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setProjectForm({ ...projectForm, valueBWP: Number(e.target.value) })
+                    }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                   />
                 </div>
@@ -1675,97 +2119,52 @@ export const SupplierProfile: React.FC = () => {
                     type="text"
                     placeholder="e.g. Jan 2024"
                     value={projectForm.startDate}
-                    onChange={(e) => setProjectForm({ ...projectForm, startDate: e.target.value })}
+                    onChange={(e) =>
+                      setProjectForm({ ...projectForm, startDate: e.target.value })
+                    }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    End / Completion date
+                    Status
                   </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Dec 2024"
-                    value={projectForm.endDate}
-                    onChange={(e) => setProjectForm({ ...projectForm, endDate: e.target.value })}
+                  <select
+                    value={projectForm.status}
+                    onChange={(e) =>
+                      setProjectForm({
+                        ...projectForm,
+                        status: e.target.value as 'Completed' | 'Ongoing',
+                      })
+                    }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
+                  >
+                    <option value="Completed">Completed</option>
+                    <option value="Ongoing">Ongoing</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Reference Contact */}
-              <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
-                <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                  Client reference contact
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[14px] text-[#6B7A87] block">Contact person name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Kagiso Tau"
-                      value={projectForm.referenceContact.name}
-                      onChange={(e) =>
-                        setProjectForm({
-                          ...projectForm,
-                          referenceContact: { ...projectForm.referenceContact, name: e.target.value },
-                        })
-                      }
-                      className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[14px] text-[#6B7A87] block">Designation / Role</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Senior Buyer"
-                      value={projectForm.referenceContact.role}
-                      onChange={(e) =>
-                        setProjectForm({
-                          ...projectForm,
-                          referenceContact: { ...projectForm.referenceContact, role: e.target.value },
-                        })
-                      }
-                      className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[14px] text-[#6B7A87] block">Official email</label>
-                    <input
-                      type="email"
-                      placeholder="e.g. k.tau@client.gov.bw"
-                      value={projectForm.referenceContact.email}
-                      onChange={(e) =>
-                        setProjectForm({
-                          ...projectForm,
-                          referenceContact: { ...projectForm.referenceContact, email: e.target.value },
-                        })
-                      }
-                      className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[14px] text-[#6B7A87] block">Phone number</label>
-                    <input
-                      type="tel"
-                      placeholder="e.g. +267 72 000 000"
-                      value={projectForm.referenceContact.phone}
-                      onChange={(e) =>
-                        setProjectForm({
-                          ...projectForm,
-                          referenceContact: { ...projectForm.referenceContact, phone: e.target.value },
-                        })
-                      }
-                      className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white"
-                    />
-                  </div>
-                </div>
+              <div className="space-y-1.5">
+                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                  Reference contact officer name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Kagiso Tau"
+                  value={projectForm.referenceContact?.name || ''}
+                  onChange={(e) =>
+                    setProjectForm({
+                      ...projectForm,
+                      referenceContact: {
+                        ...(projectForm.referenceContact || { role: '', email: '', phone: '' }),
+                        name: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                />
               </div>
 
               <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
@@ -1778,10 +2177,10 @@ export const SupplierProfile: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors"
+                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{editingProject ? 'Update project' : 'Save project'}</span>
+                  <span>Save project</span>
                 </button>
               </div>
             </form>
@@ -1789,7 +2188,7 @@ export const SupplierProfile: React.FC = () => {
         </div>
       )}
 
-      {/* 5. MODAL: Invite Team Member */}
+      {/* 6. MODAL: Invite Team Member */}
       {isInviteModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-md w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
@@ -1799,7 +2198,7 @@ export const SupplierProfile: React.FC = () => {
                   Invite team member
                 </h3>
                 <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
-                  Send an email invitation to join {supplier.legalName}.
+                  Grant company access to prepare bids or administer the profile.
                 </p>
               </div>
               <button
@@ -1814,29 +2213,34 @@ export const SupplierProfile: React.FC = () => {
             <form onSubmit={handleSendInvite} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                  Work email address *
+                  Colleague email address *
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="colleague@kopanobuilding.co.bw"
+                  placeholder="e.g. name@example.com, gmail.com, or any address"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
+                <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2]">
+                  Use an email you check regularly. Company and personal addresses are both fine. Supplier admins can invite staff using any email domain.
+                </p>
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                  Assigned role *
+                  Role & permissions *
                 </label>
                 <select
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as any)}
+                  onChange={(e) =>
+                    setInviteRole(e.target.value as 'Supplier admin' | 'Supplier staff')
+                  }
                   className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 >
-                  <option value="Supplier staff">Supplier staff (Draft bids & upload certificates)</option>
-                  <option value="Supplier admin">Supplier admin (Full authority & electronic signing)</option>
+                  <option value="Supplier staff">Supplier staff (Bid preparation & viewing)</option>
+                  <option value="Supplier admin">Supplier admin (Full authority & sealing bids)</option>
                 </select>
               </div>
 
@@ -1850,7 +2254,7 @@ export const SupplierProfile: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer  transition-colors"
+                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Send invitation</span>
