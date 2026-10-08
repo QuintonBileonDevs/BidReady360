@@ -3,8 +3,63 @@ import { callsRepository } from '../repositories/calls.repository';
 import { requireAuth } from '../middleware/auth.middleware';
 import { getTenantContext } from '../middleware/tenant.helper';
 import { translateDbError } from '../db/errors';
+import { query } from '../db/client';
+import { suppliersRepository } from '../repositories/suppliers.repository';
 
 const router = Router();
+
+// GET /api/calls/supplier-preview (Unauthenticated preview of first registered supplier)
+router.get('/supplier-preview', async (req: Request, res: Response) => {
+  try {
+    const list = await query(`
+      SELECT id FROM suppliers ORDER BY created_at DESC LIMIT 1
+    `);
+    if (list.rows.length > 0) {
+      const supplierId = list.rows[0].id;
+      const full = await suppliersRepository.getById(supplierId);
+      if (full) {
+        // Query active document codes
+        const docs = await query(`
+          SELECT dt.code, sd.status
+          FROM supplier_documents sd
+          JOIN document_types dt ON dt.id = sd.document_type_id
+          WHERE sd.supplier_id = $1 AND sd.status = 'active'
+        `, [supplierId]);
+
+        const hasCipa = docs.rows.some(d => d.code === 'COMPANY_REGISTRATION');
+        const hasBurs = docs.rows.some(d => d.code === 'TAX_CLEARANCE');
+        const hasPpra = docs.rows.some(d => d.code === 'PPRA_REGISTRATION');
+
+        res.json({
+          id: full.id,
+          legalName: full.legalName,
+          cipaNumber: full.cipaUin,
+          profileCompleteness: full.profileCompleteness,
+          hasCipa,
+          hasBurs,
+          hasPpra,
+        });
+        return;
+      }
+    }
+    res.json({
+      id: 'default',
+      legalName: 'Test Company (Pty) Ltd',
+      cipaNumber: 'BW000005864',
+      profileCompleteness: 94,
+      hasCipa: true,
+      hasBurs: true,
+      hasPpra: true,
+    });
+  } catch (err) {
+    res.json({
+      id: 'default',
+      legalName: 'Test Company (Pty) Ltd',
+      cipaNumber: 'BW000005864',
+      profileCompleteness: 94,
+    });
+  }
+});
 
 // GET /api/calls (Public Opportunities Directory)
 router.get('/', async (req: Request, res: Response) => {

@@ -74,7 +74,62 @@ export interface SupplierDisciplineAllocation {
 }
 
 export class SuppliersRepository {
+  async calculateCompleteness(supplierId: string): Promise<number> {
+    try {
+      const sRes = await query(
+        `SELECT trading_name, description, physical_address, primary_phone,
+                bank_name, bank_branch, citizen_owned_percentage, edd_certified
+         FROM suppliers WHERE id = $1`,
+        [supplierId]
+      );
+      if (sRes.rows.length === 0) return 0;
+      const s = sRes.rows[0];
+
+      let score = 0;
+
+      // Task 1: Basic Profile Details (up to 40%)
+      if (s.trading_name) score += 10;
+      if (s.description) score += 10;
+      if (s.physical_address) score += 10;
+      if (s.primary_phone) score += 10;
+
+      // Task 2: Financial Details (up to 15%)
+      if (s.bank_name && s.bank_branch) score += 15;
+
+      // Task 3: Citizen / Ownership Details (up to 15%)
+      if (s.citizen_owned_percentage !== null) score += 10;
+      if (s.edd_certified) score += 5;
+
+      // Task 4: Directors Roster (up to 15%)
+      const pRes = await query(
+        `SELECT COUNT(*) FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
+        [supplierId]
+      );
+      const peopleCount = parseInt(pRes.rows[0]?.count || '0', 10);
+      if (peopleCount > 0) score += 15;
+
+      // Task 5: Document Vault Compliance (up to 15%)
+      const dRes = await query(
+        `SELECT COUNT(*) FROM supplier_documents WHERE supplier_id = $1 AND status = 'active'`,
+        [supplierId]
+      );
+      const docsCount = parseInt(dRes.rows[0]?.count || '0', 10);
+      if (docsCount > 0) score += 15;
+
+      return score;
+    } catch (err) {
+      console.warn('[RECALCULATE COMPLETENESS ERROR]', err);
+      return 0;
+    }
+  }
+
   async getById(supplierId: string): Promise<SupplierProfile | null> {
+    const score = await this.calculateCompleteness(supplierId);
+    await query(
+      `UPDATE suppliers SET profile_completeness = $1 WHERE id = $2`,
+      [score, supplierId]
+    );
+
     const res = await query<SupplierProfile>(
       `SELECT s.id, s.legal_name AS "legalName", s.trading_name AS "tradingName",
               s.cipa_uin AS "cipaUin", s.burs_tin AS "bursTin", s.ppra_registration_no AS "ppraRegistrationNo",

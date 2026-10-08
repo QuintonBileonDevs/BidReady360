@@ -160,6 +160,10 @@ export const callsApi = {
       body: JSON.stringify({ question, topic }),
     });
   },
+
+  async getSupplierPreview() {
+    return apiRequest<any>('/api/calls/supplier-preview');
+  },
 };
 
 // ---------------------------------------------------------------------

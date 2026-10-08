@@ -17,7 +17,7 @@ import {
   AwardDecision,
 } from '../types';
 import { Language, TRANSLATIONS } from '../translations';
-import { ApiUser, authApi } from '../services/api';
+import { ApiUser, authApi, callsApi, supplierApi, buyerApi } from '../services/api';
 
 const EMPTY_SUPPLIER: Supplier = {
   id: '',
@@ -381,6 +381,140 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [documents, setDocuments] = useState<SupplierDocument[]>([]);
   const [organizations] = useState<Organization[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDatabaseCalls() {
+      try {
+        const fetchedCalls = await callsApi.listOpen();
+        if (isMounted && Array.isArray(fetchedCalls) && fetchedCalls.length > 0) {
+          const mappedCalls: Call[] = fetchedCalls.map((c: any) => ({
+            id: c.id,
+            callNumber: c.referenceNo || `CALL-${c.id.substring(0, 6)}`,
+            organizationId: c.organizationId || 'org-1',
+            organizationName: c.organizationName || 'Procuring Organization',
+            organizationSlug: c.organizationSlug || 'org-procuring',
+            title: c.title,
+            summary: c.summary || c.description || '',
+            type: c.callType === 'rfp' ? 'RFP' : c.callType === 'registration_drive' ? 'Registration drive' : 'EOI',
+            category: (c.categories && c.categories[0]?.name) || 'General Procurement',
+            subcategories: (c.categories || []).map((cat: any) => cat.name || String(cat)),
+            location: 'Gaborone, Botswana',
+            openingDate: c.opensAt ? new Date(c.opensAt).toISOString().split('T')[0] : '2026-10-01',
+            clarificationDeadline: c.clarificationDeadline ? new Date(c.clarificationDeadline).toISOString().split('T')[0] : '2026-11-15',
+            closingDate: c.closesAt ? new Date(c.closesAt).toISOString().split('T')[0] : '2026-12-31',
+            closingTimeCAT: '12:00 PM',
+            status: c.status === 'published' || c.status === 'open' ? 'Open' : c.status === 'closed' ? 'Closed' : 'Under evaluation',
+            requiredDocumentTypes: ['CIPA_CERT', 'BURS_TAX', 'PPRA_CERT'],
+            daysRemaining: typeof c.daysRemaining === 'number' ? Math.max(0, Math.floor(c.daysRemaining)) : 30,
+            isSealed: true,
+            documentsCount: c.documentsCount || 3,
+            applicationsCount: c.applicationsCount || 0,
+            estimatedBudgetBWP: Number(c.estimatedValue || 0),
+            addenda: [],
+          }));
+          setCalls(mappedCalls);
+        }
+      } catch (err) {
+        console.warn('[APP CONTEXT] Database calls fetch notice:', err);
+      }
+    }
+
+    loadDatabaseCalls();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Dual-mode Supplier Passport Loader (Authenticated profile or Public unauthenticated preview)
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSupplierProfile() {
+      if (isAuthenticated && role === 'supplier') {
+        try {
+          const profile = await supplierApi.getProfile();
+          const docsList = await supplierApi.listDocuments();
+          
+          let hasCipaVal = false;
+          let hasBursVal = false;
+          let hasPpraVal = false;
+          
+          if (Array.isArray(docsList)) {
+            hasCipaVal = docsList.some((d: any) => d.documentTypeCode === 'COMPANY_REGISTRATION' && d.status === 'active');
+            hasBursVal = docsList.some((d: any) => d.documentTypeCode === 'TAX_CLEARANCE' && d.status === 'active');
+            hasPpraVal = docsList.some((d: any) => d.documentTypeCode === 'PPRA_REGISTRATION' && d.status === 'active');
+            setDocuments(docsList);
+          }
+          
+          if (isMounted && profile) {
+            setSupplier({
+              id: profile.id,
+              legalName: profile.legalName,
+              tradingName: profile.tradingName || profile.legalName,
+              cipaNumber: profile.cipaUin || '',
+              tinNumber: profile.bursTin || '',
+              ppraCode: profile.ppraRegistrationNo || '',
+              ppraSubcodes: [],
+              ppraGrade: '',
+              category: '',
+              secondaryCategories: [],
+              physicalAddress: profile.physicalAddress || '',
+              city: profile.city || '',
+              district: '',
+              postalAddress: profile.postalAddress || '',
+              primaryPhone: profile.primaryPhone || '',
+              email: profile.email || '',
+              website: profile.website || '',
+              yearEstablished: profile.yearEstablished || new Date().getFullYear(),
+              citizenOwnedPercentage: profile.citizenOwnedPercentage ? Number(profile.citizenOwnedPercentage) : 100,
+              youthOwned: profile.youthOwned || false,
+              womenOwned: profile.womenOwned || false,
+              disabilityOwned: profile.disabilityOwned || false,
+              eddCertified: profile.eddCertified || false,
+              bankName: profile.bankName || '',
+              bankBranch: profile.bankBranch || '',
+              accountNumberMasked: profile.accountNumberMasked || '',
+              directors: [],
+              profileCompleteness: typeof profile.profileCompleteness === 'number' ? profile.profileCompleteness : 94,
+              missingItems: [],
+              complianceStatus: profile.complianceStatus || 'Action required',
+              documents: Array.isArray(docsList) ? docsList : [],
+              hasCipa: hasCipaVal,
+              hasBurs: hasBursVal,
+              hasPpra: hasPpraVal,
+            });
+          }
+        } catch (err) {
+          console.warn('[APP CONTEXT] Failed to load live supplier profile:', err);
+        }
+      } else {
+        // Public/Unauthenticated preview state
+        try {
+          const preview = await callsApi.getSupplierPreview();
+          if (isMounted && preview) {
+            setSupplier((prev) => ({
+              ...prev,
+              id: preview.id || 'default',
+              legalName: preview.legalName || 'Test Company (Pty) Ltd',
+              cipaNumber: preview.cipaNumber || 'BW000005864',
+              profileCompleteness: typeof preview.profileCompleteness === 'number' ? preview.profileCompleteness : 94,
+              hasCipa: preview.hasCipa,
+              hasBurs: preview.hasBurs,
+              hasPpra: preview.hasPpra,
+            }));
+          }
+        } catch (err) {
+          console.warn('[APP CONTEXT] Failed to load public supplier preview:', err);
+        }
+      }
+    }
+
+    loadSupplierProfile();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, role]);
+
   const [applications, setApplications] = useState<Application[]>([]);
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>([]);

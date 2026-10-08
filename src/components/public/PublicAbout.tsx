@@ -242,7 +242,7 @@ export const PublicAbout: React.FC = () => {
                     <div className="text-right shrink-0">
                       <span className="text-[11px] text-[#6B7A87] block">Profile score</span>
                       <span className="text-sm font-bold text-[#1F5F99] dark:text-[#6FAEE0]">
-                        {supplier.profileCompleteness > 0 ? `${supplier.profileCompleteness}%` : '94%'}
+                        {supplier.profileCompleteness}%
                       </span>
                     </div>
                   </div>
@@ -256,17 +256,29 @@ export const PublicAbout: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                         <span className="text-[#43525F] dark:text-[#B2C3D2]">CIPA registration</span>
-                        <Badge variant="verified" size="sm">Active</Badge>
+                        {supplier.hasCipa ? (
+                          <Badge variant="verified" size="sm">Active</Badge>
+                        ) : (
+                          <Badge variant="alert" size="sm">Missing</Badge>
+                        )}
                       </div>
 
                       <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                         <span className="text-[#43525F] dark:text-[#B2C3D2]">BURS tax clearance</span>
-                        <Badge variant="verified" size="sm">Valid</Badge>
+                        {supplier.hasBurs ? (
+                          <Badge variant="verified" size="sm">Valid</Badge>
+                        ) : (
+                          <Badge variant="alert" size="sm">Missing</Badge>
+                        )}
                       </div>
 
                       <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                         <span className="text-[#43525F] dark:text-[#B2C3D2]">PPRA contractor registration</span>
-                        <Badge variant="verified" size="sm">Verified</Badge>
+                        {supplier.hasPpra ? (
+                          <Badge variant="verified" size="sm">Verified</Badge>
+                        ) : (
+                          <Badge variant="alert" size="sm">Missing</Badge>
+                        )}
                       </div>
 
                       <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">

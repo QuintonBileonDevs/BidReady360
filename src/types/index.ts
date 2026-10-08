@@ -74,6 +74,9 @@ export interface Supplier {
   missingItems: string[];
   complianceStatus: 'Fully compliant' | 'Action required' | 'Non-compliant';
   documents: SupplierDocument[];
+  hasCipa?: boolean;
+  hasBurs?: boolean;
+  hasPpra?: boolean;
 }
 
 export interface Organization {
