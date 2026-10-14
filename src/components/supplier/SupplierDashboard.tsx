@@ -124,27 +124,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
   return (
     <div className="space-y-10">
-      {/* 0. Demo Mode Ribbon (if demo account) */}
-      {supplier.isDemoAccount && (
-        <div className="bg-[#FFFBEB] dark:bg-[#78350F]/20 border border-[#FDE68A] dark:border-[#78350F]/50 rounded-[10px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
-          <div className="flex items-center gap-2.5 text-[#92400E] dark:text-[#FCD34D]">
-            <Sparkles className="w-5 h-5 shrink-0" />
-            <div>
-              <span className="font-semibold">Demo Account Mode:</span>{' '}
-              <span>Currently inspecting pre-loaded demonstration data for Kopano Building Supplies.</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={resetDemoData}
-            className="px-3 py-1.5 bg-[#D97706] hover:bg-[#B45309] text-white rounded-[6px] font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-            <span>Reset demo data</span>
-          </button>
-        </div>
-      )}
-
       {/* Safeguard: Email Verification Mandatory */}
       {!supplier.emailVerified && (
         <div className="p-4 sm:p-5 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[14px]">

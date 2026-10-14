@@ -7,6 +7,7 @@ export interface Director {
   id: string;
   fullName: string;
   nationalIdOrPassport: string;
+  idType?: 'National ID (Omang)' | 'Passport' | 'Residence Permit';
   nationality: string;
   isCitizen: boolean;
   shareholdingPercentage: number;
@@ -28,11 +29,11 @@ export interface SupplierDocument {
   supplierId?: string;
   documentType: string;
   title?: string;
-  documentNumber: string;
+  documentNumber?: string;
   fileName: string;
   fileSize: string;
   issueDate: string;
-  expiryDate: string;
+  expiryDate?: string;
   status: 'Verified' | 'Pending' | 'Expiring soon' | 'Expired' | 'Rejected' | 'Cannot verify';
   statusMessage?: string;
   rejectionReason?: string;
@@ -61,10 +62,12 @@ export interface Supplier {
   physicalAddress: string;
   city: string;
   district: string;
+  districtId?: string | null;
   postalAddress: string;
   primaryPhone: string;
   email: string;
   website?: string;
+  ppraRegistrationNo?: string;
   yearEstablished: number;
   citizenOwnedPercentage: number;
   youthOwned: boolean;

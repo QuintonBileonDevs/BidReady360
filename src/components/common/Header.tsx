@@ -284,18 +284,6 @@ export const Header: React.FC = () => {
                     >
                       Document vault
                     </button>
-                    {supplier.isDemoAccount && (
-                      <button
-                        onClick={() => {
-                          resetDemoData();
-                          setIsUserMenuOpen(false);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#FFFBEB] dark:hover:bg-[#78350F]/20 text-[#D97706] font-medium transition-colors flex items-center justify-between"
-                      >
-                        <span>Reset demo data</span>
-                        <RotateCw className="w-3.5 h-3.5" />
-                      </button>
-                    )}
                     <button
                       onClick={handleSignOut}
                       className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"

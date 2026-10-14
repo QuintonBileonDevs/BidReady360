@@ -136,9 +136,31 @@ export const authApi = {
 // ---------------------------------------------------------------------
 // Reference Catalogue API
 // ---------------------------------------------------------------------
+export interface CategoryTreeNode {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  level: number;
+  parentId: string | null;
+  sortOrder: number;
+  children: {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    level: number;
+    parentId: string | null;
+    sortOrder: number;
+  }[];
+}
+
 export const referenceApi = {
   async loadAll() {
     return apiRequest('/api/reference');
+  },
+  async getCategories(): Promise<CategoryTreeNode[]> {
+    return apiRequest<CategoryTreeNode[]>('/api/reference/categories');
   },
 };
 

@@ -93,6 +93,25 @@ export interface NotificationTemplate {
   variables: string[] | null;
 }
 
+export interface CategoryTreeNode {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  level: number;
+  parentId: string | null;
+  sortOrder: number;
+  children: {
+    id: string;
+    code: string;
+    name: string;
+    description: string | null;
+    level: number;
+    parentId: string | null;
+    sortOrder: number;
+  }[];
+}
+
 export interface FullReferenceData {
   districts: GeographicDistrict[];
   documentTypes: DocumentType[];
@@ -129,7 +148,7 @@ export class ReferenceRepository {
         ),
         query<DocumentType>(
           `SELECT id, organization_id AS "organizationId", code, name, description, issuing_authority AS "issuingAuthority",
-                  requires_expiry AS "requiresExpiry", default_validity_days AS "defaultValidityDays",
+                  requires_expiry AS "requiresExpiry", requires_number AS "requiresNumber", default_validity_days AS "defaultValidityDays",
                   max_file_size_mb AS "maxFileSizeMb", allowed_mime_types AS "allowedMimeTypes",
                   verification_method AS "verificationMethod", is_mandatory_default AS "isMandatoryDefault", sort_order AS "sortOrder"
            FROM document_types WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
@@ -201,6 +220,67 @@ export class ReferenceRepository {
         notificationTemplates: [],
         loadedAt: new Date().toISOString(),
       };
+    }
+  }
+
+  /**
+   * Loads category codes and sub-codes from the PostgreSQL categories table
+   * structured as hierarchical category tree nodes.
+   */
+  async getCategoriesTree(): Promise<CategoryTreeNode[]> {
+    try {
+      const res = await query<{
+        id: string;
+        parentId: string | null;
+        code: string;
+        name: string;
+        description: string | null;
+        level: number;
+        sortOrder: number;
+      }>(
+        `SELECT id, parent_id AS "parentId", code, name, description, level, sort_order AS "sortOrder"
+         FROM categories
+         WHERE is_active = TRUE
+         ORDER BY level ASC, sort_order ASC, code ASC`
+      );
+
+      const rows = res.rows;
+      const level1 = rows.filter((r) => r.level === 1);
+      const level2 = rows.filter((r) => r.level === 2);
+
+      const tree: CategoryTreeNode[] = level1.map((parent) => {
+        const children = level2
+          .filter(
+            (c) =>
+              c.parentId === parent.id ||
+              (c.code && parent.code && c.code.startsWith(parent.code + '_'))
+          )
+          .map((c) => ({
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            description: c.description,
+            level: c.level,
+            parentId: c.parentId,
+            sortOrder: c.sortOrder,
+          }));
+
+        return {
+          id: parent.id,
+          code: parent.code,
+          name: parent.name,
+          description: parent.description,
+          level: parent.level,
+          parentId: parent.parentId,
+          sortOrder: parent.sortOrder,
+          children,
+        };
+      });
+
+      return tree;
+    } catch (err: any) {
+      console.error('[REFERENCE REPOSITORY] Failed to load categories tree:', err);
+      return [];
     }
   }
 }

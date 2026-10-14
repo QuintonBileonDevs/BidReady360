@@ -87,6 +87,36 @@ export type UserRole = 'public' | 'supplier' | 'buyer' | 'admin';
 export type BuyerSubRole = 'Org admin' | 'Procurement officer' | 'Evaluator' | 'Approver' | 'Auditor';
 export type ThemeMode = 'light' | 'dark';
 
+export const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes of inactivity before automatic logout
+export const INACTIVITY_WARNING_MS = 2 * 60 * 1000;  // 2 minutes warning countdown before expiration
+
+export interface StoredSessionData {
+  user: ApiUser;
+  activeTenant?: any;
+  role: UserRole;
+  activeNav: string;
+}
+
+export const getStoredSession = (): StoredSessionData | null => {
+  try {
+    const raw = localStorage.getItem('bidready_session');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.user) return null;
+
+    // Check inactivity
+    const lastActive = Number(localStorage.getItem('bidready_last_active') || 0);
+    const now = Date.now();
+    if (lastActive && (now - lastActive > INACTIVITY_TIMEOUT_MS)) {
+      // Inactivity timeout exceeded while page was away
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 interface AppContextType {
   role: UserRole;
   setRole: (role: UserRole, targetNav?: string) => void;
@@ -114,7 +144,10 @@ interface AppContextType {
   intendedRoute: string | null;
   setIntendedRoute: (route: string | null) => void;
   loginSuccess: (session: { user: ApiUser; activeTenant?: any; token?: string }, targetRole?: UserRole) => void;
-  logout: () => Promise<void>;
+  logout: (reason?: 'user_initiated' | 'inactivity') => Promise<void>;
+  isInactiveWarningOpen: boolean;
+  inactivitySecondsLeft: number;
+  resetInactivity: () => void;
   
   // Buyer Verification State
   buyerOrgStatus: 'Pending' | 'Approved' | 'Rejected';
@@ -142,7 +175,7 @@ interface AppContextType {
   formTemplates: FormTemplate[];
 
   // Mutators
-  updateSupplierProfile: (updates: Partial<Supplier>) => void;
+  updateSupplierProfile: (updates: Partial<Supplier>) => Promise<any> | void;
   uploadDocument: (doc: Omit<SupplierDocument, 'id'>) => void;
   replaceDocument: (docId: string, updates: Partial<SupplierDocument>) => void;
   deleteDocument: (docId: string) => void;
@@ -173,27 +206,178 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [role, setRoleState] = useState<UserRole>('public');
+  // 1. Initialize authentication and navigation from stored session
+  const initialSession = getStoredSession();
+
+  const [currentUser, setCurrentUser] = useState<ApiUser | null>(() => initialSession?.user || null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(initialSession?.user));
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [intendedRoute, setIntendedRoute] = useState<string | null>(null);
+
+  const [role, setRoleState] = useState<UserRole>(() => {
+    if (initialSession?.role) return initialSession.role;
+    const savedRole = localStorage.getItem('bidready_role') as UserRole;
+    if (savedRole && ['supplier', 'buyer', 'admin', 'public'].includes(savedRole)) return savedRole;
+    return 'public';
+  });
+
   const [buyerSubRole, setBuyerSubRole] = useState<BuyerSubRole>('Procurement officer');
   const [currentOrgSlug, setCurrentOrgSlug] = useState<string>('org-grc');
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setThemeState] = useState<ThemeMode>('light');
-  const [activeNav, setActiveNavState] = useState<string>('about');
+
+  const [activeNav, setActiveNavState] = useState<string>(() => {
+    const savedNav = localStorage.getItem('bidready_active_nav');
+    const authRoutes = [
+      'auth', 'signin', 'signup', 'register', 'supplier-login', 'supplier-signup',
+      'buyer-login', 'buyer-signup', 'org-login', 'admin-login', 'forgot-password',
+      'reset-password', 'accept-invite', 'choose-workspace',
+    ];
+    if (savedNav && !authRoutes.includes(savedNav)) {
+      return savedNav;
+    }
+    if (initialSession) {
+      if (initialSession.role === 'admin') return 'admin-dashboard';
+      if (initialSession.role === 'buyer') return 'buyer-dashboard';
+      if (initialSession.role === 'supplier') return 'dashboard';
+    }
+    return 'about';
+  });
+
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
 
-  // Authentication & Security State
-  const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [authLoading, setAuthLoading] = useState<boolean>(true);
-  const [intendedRoute, setIntendedRoute] = useState<string | null>(null);
+  // Inactivity Warning & Timeout State
+  const [isInactiveWarningOpen, setIsInactiveWarningOpen] = useState<boolean>(false);
+  const [inactivitySecondsLeft, setInactivitySecondsLeft] = useState<number>(Math.floor(INACTIVITY_WARNING_MS / 1000));
 
-  // Restore authenticated session on startup
+  const resetInactivity = () => {
+    const now = Date.now();
+    try {
+      localStorage.setItem('bidready_last_active', String(now));
+    } catch {}
+    setIsInactiveWarningOpen(false);
+    setInactivitySecondsLeft(Math.floor(INACTIVITY_WARNING_MS / 1000));
+  };
+
+  const logout = async (reason: 'user_initiated' | 'inactivity' = 'user_initiated') => {
+    try {
+      await authApi.logout();
+    } catch {}
+
+    try {
+      localStorage.removeItem('bidready_token');
+      localStorage.removeItem('bidready_session');
+      localStorage.removeItem('bidready_role');
+      localStorage.removeItem('bidready_last_active');
+    } catch {}
+
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setRoleState('public');
+    setIntendedRoute(null);
+    setIsInactiveWarningOpen(false);
+
+    if (reason === 'inactivity') {
+      setActiveNavState('session-expired');
+      try {
+        localStorage.setItem('bidready_active_nav', 'session-expired');
+      } catch {}
+    } else {
+      setActiveNavState('about');
+      try {
+        localStorage.removeItem('bidready_active_nav');
+      } catch {}
+    }
+
+    addAuditEvent({
+      actorName: currentUser?.fullName || 'Active User',
+      actorRole: role === 'supplier' ? 'Supplier' : role === 'buyer' ? 'Procurement Officer' : role === 'admin' ? 'Super Admin' : 'System',
+      organizationName: 'BidReady360 Platform',
+      action: reason === 'inactivity' ? 'Session Expired Due to Inactivity' : 'Session Terminated (Logout)',
+      entityType: role === 'buyer' ? 'Organization' : 'Supplier',
+      entityId: currentUser?.id || 'anon',
+      details: reason === 'inactivity'
+        ? 'User was automatically signed out after inactivity timeout with security warning.'
+        : 'User logged out and security session invalidated.',
+    });
+  };
+
+  // Inactivity tracking and multi-tab synchronization effect
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsInactiveWarningOpen(false);
+      return;
+    }
+
+    // Ensure last active timestamp exists
+    if (!localStorage.getItem('bidready_last_active')) {
+      try {
+        localStorage.setItem('bidready_last_active', String(Date.now()));
+      } catch {}
+    }
+
+    let lastThrottledUpdate = Date.now();
+
+    const handleUserActivity = () => {
+      const now = Date.now();
+      // Throttle localStorage writes to at most once per 3 seconds
+      if (now - lastThrottledUpdate > 3000) {
+        lastThrottledUpdate = now;
+        try {
+          localStorage.setItem('bidready_last_active', String(now));
+        } catch {}
+      }
+    };
+
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    activityEvents.forEach((evt) => window.addEventListener(evt, handleUserActivity, { passive: true }));
+
+    // Sync across browser tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'bidready_last_active' && e.newValue) {
+        lastThrottledUpdate = Number(e.newValue);
+      } else if (e.key === 'bidready_session' && !e.newValue) {
+        // Logged out in another tab
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setRoleState('public');
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Heartbeat check every 1 second
+    const interval = setInterval(() => {
+      const lastActive = Number(localStorage.getItem('bidready_last_active') || Date.now());
+      const now = Date.now();
+      const idleTime = now - lastActive;
+
+      if (idleTime >= INACTIVITY_TIMEOUT_MS) {
+        logout('inactivity');
+      } else if (idleTime >= INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS) {
+        const secondsRemaining = Math.max(0, Math.ceil((INACTIVITY_TIMEOUT_MS - idleTime) / 1000));
+        setInactivitySecondsLeft(secondsRemaining);
+        setIsInactiveWarningOpen(true);
+      } else {
+        setIsInactiveWarningOpen(false);
+      }
+    }, 1000);
+
+    return () => {
+      activityEvents.forEach((evt) => window.removeEventListener(evt, handleUserActivity));
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [isAuthenticated]);
+
+  // Background session revalidation on startup
   useEffect(() => {
     let isMounted = true;
     async function restoreSession() {
       const token = localStorage.getItem('bidready_token');
-      if (!token) {
+      const storedSession = getStoredSession();
+
+      if (!token && !storedSession) {
         if (isMounted) {
           setIsAuthenticated(false);
           setCurrentUser(null);
@@ -202,59 +386,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      try {
-        const session = await authApi.getMe();
-        if (session && session.user && isMounted) {
-          setCurrentUser(session.user);
-          setIsAuthenticated(true);
-          if (session.user.isPlatformAdmin) {
-            setRoleState('admin');
-          } else if (session.activeTenant?.tenantType === 'organization') {
-            setRoleState('buyer');
-            setBuyerOrgStatus('Approved');
-            setRegisteredBuyerOrgName(session.activeTenant.tenantName);
-            setRegisteredBuyerEmail(session.user.email);
-          } else if (session.activeTenant?.tenantType === 'supplier') {
-            setRoleState('supplier');
-            try {
-              const remoteProfile = await supplierApi.getProfile();
-              if (remoteProfile) {
-                updateSupplierProfile({
-                  id: session.activeTenant.tenantId,
-                  legalName: remoteProfile.legalName || session.activeTenant.tenantName,
-                  tradingName: remoteProfile.tradingName || session.activeTenant.tenantName,
-                  email: remoteProfile.email || session.user.email,
-                  ...(remoteProfile.cipaNumber || remoteProfile.cipaUin ? { cipaNumber: remoteProfile.cipaNumber || remoteProfile.cipaUin } : {}),
-                  ...(remoteProfile.tinNumber || remoteProfile.bursTin ? { tinNumber: remoteProfile.tinNumber || remoteProfile.bursTin } : {}),
-                  ...(remoteProfile.ppraCode || remoteProfile.ppraRegistrationNo ? { ppraCode: remoteProfile.ppraCode || remoteProfile.ppraRegistrationNo } : {}),
-                  ...(remoteProfile.physicalAddress ? { physicalAddress: remoteProfile.physicalAddress } : {}),
-                  ...(remoteProfile.city ? { city: remoteProfile.city } : {}),
-                  ...(remoteProfile.districtName || remoteProfile.districtId ? { district: remoteProfile.districtName || remoteProfile.districtId } : {}),
-                  ...(remoteProfile.postalAddress ? { postalAddress: remoteProfile.postalAddress } : {}),
-                  ...(remoteProfile.primaryPhone ? { primaryPhone: remoteProfile.primaryPhone } : {}),
-                  ...(remoteProfile.bankName ? { bankName: remoteProfile.bankName } : {}),
-                  ...(remoteProfile.bankBranch ? { bankBranch: remoteProfile.bankBranch } : {}),
-                  ...(remoteProfile.accountNumberMasked ? { accountNumberMasked: remoteProfile.accountNumberMasked } : {}),
-                  ...(remoteProfile.companyType ? { companyType: remoteProfile.companyType } : {}),
-                  ...(remoteProfile.description ? { description: remoteProfile.description } : {}),
-                  ...(remoteProfile.yearEstablished ? { yearEstablished: Number(remoteProfile.yearEstablished) } : {}),
-                  ...(remoteProfile.citizenOwnedPercentage !== undefined && remoteProfile.citizenOwnedPercentage !== null ? { citizenOwnedPercentage: Number(remoteProfile.citizenOwnedPercentage) } : {}),
-                });
-              }
-            } catch {
-              // Maintain local state if offline or endpoint fails
-            }
-          }
-        } else if (isMounted) {
-          localStorage.removeItem('bidready_token');
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-        }
-      } catch {
+      // Check inactivity
+      const lastActive = Number(localStorage.getItem('bidready_last_active') || 0);
+      const now = Date.now();
+      if (lastActive && (now - lastActive > INACTIVITY_TIMEOUT_MS)) {
         if (isMounted) {
-          localStorage.removeItem('bidready_token');
-          setIsAuthenticated(false);
-          setCurrentUser(null);
+          logout('inactivity');
+          setAuthLoading(false);
+        }
+        return;
+      }
+
+      // If we have a stored session, restore state immediately
+      if (storedSession && isMounted) {
+        setCurrentUser(storedSession.user);
+        setIsAuthenticated(true);
+        setRoleState(storedSession.role);
+        if (storedSession.activeNav && storedSession.activeNav !== 'about') {
+          setActiveNavState(storedSession.activeNav);
+        }
+      }
+
+      try {
+        if (token && !token.startsWith('demo_') && token !== 'platform_admin_session_token' && !token.startsWith('org_session_')) {
+          const session = await authApi.getMe();
+          if (session && session.user && isMounted) {
+            setCurrentUser(session.user);
+            setIsAuthenticated(true);
+            let resolvedRole: UserRole = storedSession?.role || 'supplier';
+            if (session.user.isPlatformAdmin) {
+              resolvedRole = 'admin';
+            } else if (session.activeTenant?.tenantType === 'organization') {
+              resolvedRole = 'buyer';
+              setBuyerOrgStatus('Approved');
+              setRegisteredBuyerOrgName(session.activeTenant.tenantName);
+              setRegisteredBuyerEmail(session.user.email);
+            } else if (session.activeTenant?.tenantType === 'supplier') {
+              resolvedRole = 'supplier';
+              try {
+                const remoteProfile = await supplierApi.getProfile();
+                if (remoteProfile) {
+                  updateSupplierProfile({
+                    id: session.activeTenant.tenantId,
+                    legalName: remoteProfile.legalName || session.activeTenant.tenantName,
+                    tradingName: remoteProfile.tradingName || session.activeTenant.tenantName,
+                    email: remoteProfile.email || session.user.email,
+                  });
+                }
+              } catch {}
+            }
+            setRoleState(resolvedRole);
+          }
+        }
+      } catch (err: any) {
+        // Only invalidate if backend explicitly returned 401 and we don't have a valid session
+        if (err?.status === 401 && !storedSession) {
+          if (isMounted) {
+            localStorage.removeItem('bidready_token');
+            setIsAuthenticated(false);
+            setCurrentUser(null);
+            setRoleState('public');
+          }
         }
       } finally {
         if (isMounted) {
@@ -273,9 +465,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     session: { user: ApiUser; activeTenant?: any; token?: string },
     targetRole?: UserRole
   ) => {
-    if (session.token) {
-      localStorage.setItem('bidready_token', session.token);
-    }
+    const finalToken = session.token || (
+      session.user?.isPlatformAdmin ? 'platform_admin_session_token' :
+      targetRole === 'buyer' ? `org_session_${session.activeTenant?.tenantId || 'org-grc'}` :
+      'demo_supplier_session_token'
+    );
+    try {
+      localStorage.setItem('bidready_token', finalToken);
+    } catch {}
+
     setCurrentUser(session.user);
     setIsAuthenticated(true);
 
@@ -299,13 +497,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setRoleState(resolvedRole);
 
-    if (intendedRoute) {
-      const destination = intendedRoute;
+    let destination = intendedRoute;
+    if (destination) {
       setIntendedRoute(null);
-      setActiveNavState(destination);
     } else {
-      setActiveNavState(resolvedRole === 'admin' ? 'admin-dashboard' : 'dashboard');
+      destination = resolvedRole === 'admin' ? 'admin-dashboard' : 'dashboard';
     }
+    setActiveNavState(destination);
+
+    // Save session and activity timestamp
+    const now = Date.now();
+    try {
+      localStorage.setItem('bidready_last_active', String(now));
+      localStorage.setItem('bidready_role', resolvedRole);
+      localStorage.setItem('bidready_active_nav', destination);
+      localStorage.setItem('bidready_session', JSON.stringify({
+        user: session.user,
+        activeTenant: session.activeTenant,
+        role: resolvedRole,
+        activeNav: destination,
+      }));
+    } catch {}
+
+    setIsInactiveWarningOpen(false);
+    setInactivitySecondsLeft(Math.floor(INACTIVITY_WARNING_MS / 1000));
 
     addAuditEvent({
       actorName: session.user.fullName || session.user.email,
@@ -315,30 +530,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       entityType: resolvedRole === 'buyer' ? 'Organization' : 'Supplier',
       entityId: session.user.id,
       details: `Interactive session established for ${session.user.email}. Role: ${resolvedRole}.`,
-    });
-  };
-
-  const logout = async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      // Ignore
-    }
-    localStorage.removeItem('bidready_token');
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-    setRoleState('public');
-    setActiveNavState('about');
-    setIntendedRoute(null);
-
-    addAuditEvent({
-      actorName: currentUser?.fullName || 'Active User',
-      actorRole: role === 'supplier' ? 'Supplier' : role === 'buyer' ? 'Procurement Officer' : role === 'admin' ? 'Super Admin' : 'System',
-      organizationName: 'BidReady360 Platform',
-      action: 'Session Terminated (Logout)',
-      entityType: role === 'buyer' ? 'Organization' : 'Supplier',
-      entityId: currentUser?.id || 'anon',
-      details: 'User logged out and security session invalidated.',
     });
   };
 
@@ -649,8 +840,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 bankName: profile.bankName || '',
                 bankBranch: profile.bankBranch || '',
                 accountNumberMasked: profile.accountNumberMasked || profile.bankAccountNumber || '',
+                companyType: profile.companyType || 'private_company',
+                description: profile.description || '',
+                districtId: profile.districtId || null,
                 directors: mappedDirectors,
-                profileCompleteness: 0,
+                profileCompleteness: profile.profileCompleteness !== undefined ? Number(profile.profileCompleteness) : 0,
                 missingItems: [],
                 complianceStatus: profile.complianceStatus || 'Action required',
                 documents: mappedDocs,
@@ -751,8 +945,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setRoleState(newRole);
+    try {
+      localStorage.setItem('bidready_role', newRole);
+      const raw = localStorage.getItem('bidready_session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        parsed.role = newRole;
+        localStorage.setItem('bidready_session', JSON.stringify(parsed));
+      }
+    } catch {}
+
     if (targetNav) {
-      setActiveNavState(targetNav);
+      setActiveNav(targetNav);
       return;
     }
 
@@ -769,6 +973,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setActiveNav = (nav: string) => {
     setActiveNavState(nav);
+    const ephemeralAuthRoutes = [
+      'auth', 'signin', 'signup', 'register', 'supplier-login', 'supplier-signup',
+      'buyer-login', 'buyer-signup', 'org-login', 'admin-login', 'forgot-password',
+      'reset-password', 'accept-invite', 'choose-workspace',
+    ];
+    if (!ephemeralAuthRoutes.includes(nav)) {
+      try {
+        localStorage.setItem('bidready_active_nav', nav);
+        const raw = localStorage.getItem('bidready_session');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          parsed.activeNav = nav;
+          localStorage.setItem('bidready_session', JSON.stringify(parsed));
+        }
+      } catch {}
+    }
   };
 
   const addAuditEvent = (event: Omit<AuditEvent, 'id' | 'timestamp'>) => {
@@ -780,21 +1000,105 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAuditEvents((prev) => [newEvent, ...prev]);
   };
 
-  const updateSupplierProfile = (updates: Partial<Supplier>) => {
-    setSupplier((prev) => {
-      const next = { ...prev, ...updates };
-      const completeness = calculateSupplierCompleteness(next, documents);
-      next.profileCompleteness = completeness.score;
-      next.missingItems = completeness.missingItems.map((m) => m.label);
-      saveSupplierToStorage(next);
-      return next;
-    });
+  const updateSupplierProfile = async (updates: Partial<Supplier>) => {
+    // 1. Immediately compute the synchronous merged supplier object
+    const nextMerged: Supplier = { ...supplier, ...updates };
+    const completeness = calculateSupplierCompleteness(nextMerged, documents);
+    const computedCompleteness = completeness.score;
+    const computedMissing = completeness.missingItems.map((m) => m.label);
 
+    nextMerged.profileCompleteness = computedCompleteness;
+    nextMerged.missingItems = computedMissing;
+    if (computedCompleteness >= 80) {
+      nextMerged.complianceStatus = 'Fully compliant';
+    } else {
+      nextMerged.complianceStatus = 'Action required';
+    }
+
+    saveSupplierToStorage(nextMerged);
+    setSupplier(nextMerged);
+
+    // 2. Persist to Postgres database via REST API
     const token = localStorage.getItem('bidready_token');
     if (token) {
-      supplierApi.updateProfile(updates).catch((err) => {
+      const activeDistrict = updates.district !== undefined
+        ? updates.district
+        : (nextMerged.district || (nextMerged as any).districtName || (nextMerged as any).district_id || '');
+
+      const payload: Record<string, any> = {
+        legalName: nextMerged.legalName,
+        legal_name: nextMerged.legalName,
+        tradingName: nextMerged.tradingName,
+        trading_name: nextMerged.tradingName,
+        cipaUin: nextMerged.cipaNumber || (nextMerged as any).cipaUin,
+        cipa_uin: nextMerged.cipaNumber || (nextMerged as any).cipaUin,
+        cipaNumber: nextMerged.cipaNumber,
+        bursTin: nextMerged.tinNumber || (nextMerged as any).bursTin,
+        burs_tin: nextMerged.tinNumber || (nextMerged as any).bursTin,
+        tinNumber: nextMerged.tinNumber,
+        ppraRegistrationNo: nextMerged.ppraCode || (nextMerged as any).ppraRegistrationNo,
+        ppra_registration_no: nextMerged.ppraCode || (nextMerged as any).ppraRegistrationNo,
+        ppraCode: nextMerged.ppraCode,
+        companyType: nextMerged.companyType || 'private_company',
+        company_type: nextMerged.companyType || 'private_company',
+        yearEstablished: nextMerged.yearEstablished,
+        year_established: nextMerged.yearEstablished,
+        description: nextMerged.description,
+        physicalAddress: nextMerged.physicalAddress,
+        physical_address: nextMerged.physicalAddress,
+        postalAddress: nextMerged.postalAddress,
+        postal_address: nextMerged.postalAddress,
+        city: nextMerged.city,
+        district: activeDistrict,
+        districtId: activeDistrict,
+        district_id: activeDistrict,
+        primaryPhone: nextMerged.primaryPhone,
+        primary_phone: nextMerged.primaryPhone,
+        email: nextMerged.email,
+        website: nextMerged.website,
+        bankName: nextMerged.bankName,
+        bank_name: nextMerged.bankName,
+        bankBranch: nextMerged.bankBranch,
+        bank_branch: nextMerged.bankBranch,
+        accountNumberMasked: nextMerged.accountNumberMasked,
+        account_number_masked: nextMerged.accountNumberMasked,
+        citizenOwnedPercentage: nextMerged.citizenOwnedPercentage,
+        citizen_owned_percentage: nextMerged.citizenOwnedPercentage,
+        youthOwned: nextMerged.youthOwned,
+        youth_owned: nextMerged.youthOwned,
+        womenOwned: nextMerged.womenOwned,
+        women_owned: nextMerged.womenOwned,
+        disabilityOwned: nextMerged.disabilityOwned,
+        disability_owned: nextMerged.disabilityOwned,
+        eddCertified: nextMerged.eddCertified,
+        edd_certified: nextMerged.eddCertified,
+        profileCompleteness: computedCompleteness,
+        profile_completeness: computedCompleteness,
+        complianceStatus: nextMerged.complianceStatus || 'Action required',
+        compliance_status: nextMerged.complianceStatus || 'Action required',
+        missingItems: computedMissing,
+        missing_items: computedMissing,
+        ...updates,
+      };
+
+      try {
+        const saved = await supplierApi.updateProfile(payload);
+        if (saved) {
+          setSupplier((curr) => {
+            const reMerged = {
+              ...curr,
+              district: saved.district || saved.districtName || curr.district,
+              districtId: saved.districtId || saved.district_id || curr.districtId,
+              profileCompleteness: saved.profileCompleteness ?? curr.profileCompleteness,
+              complianceStatus: saved.complianceStatus || curr.complianceStatus,
+            };
+            saveSupplierToStorage(reMerged);
+            return reMerged;
+          });
+        }
+      } catch (err) {
         console.warn('[APP CONTEXT] Server database profile update notice:', err);
-      });
+      }
     }
 
     addAuditEvent({
@@ -816,17 +1120,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextDocs = [newDoc, ...documents];
     setDocuments(nextDocs);
     saveDocumentsToStorage(nextDocs);
+    let nextCompleteness = 0;
     setSupplier((prev) => {
       const completeness = calculateSupplierCompleteness(prev, nextDocs);
+      nextCompleteness = completeness.score;
       const nextSup = {
         ...prev,
         documents: nextDocs,
         profileCompleteness: completeness.score,
         missingItems: completeness.missingItems.map((m) => m.label),
+        complianceStatus: (completeness.score >= 80 ? 'Fully compliant' : 'Action required') as 'Fully compliant' | 'Action required',
       };
       saveSupplierToStorage(nextSup);
       return nextSup;
     });
+
+    // Also update server completeness
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      supplierApi.updateProfile({
+        profileCompleteness: nextCompleteness,
+        profile_completeness: nextCompleteness,
+        complianceStatus: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
+        compliance_status: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
+      }).catch(() => {});
+    }
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
@@ -838,7 +1156,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       details: `Uploaded ${newDoc.documentType} (Exp: ${newDoc.expiryDate}).`,
     });
 
-    const token = localStorage.getItem('bidready_token');
     if (token) {
       supplierApi.uploadDocument({
         documentTypeCode: docData.documentType,
@@ -1425,6 +1742,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIntendedRoute,
         loginSuccess,
         logout,
+        isInactiveWarningOpen,
+        inactivitySecondsLeft,
+        resetInactivity,
         buyerOrgStatus,
         registeredBuyerOrgName,
         registeredBuyerEmail,

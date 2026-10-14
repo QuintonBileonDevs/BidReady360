@@ -98,7 +98,8 @@ export function calculateSupplierCompleteness(
   const hasCity = Boolean(hasSavedDetails && supplier.city && supplier.city.trim().length > 0);
 
   // 6. District
-  const hasDistrict = Boolean(hasSavedDetails && supplier.district && supplier.district.trim().length > 0);
+  const districtVal = supplier.district || (supplier as any).districtName || (supplier as any).district_id || (supplier as any).districtId;
+  const hasDistrict = Boolean(hasSavedDetails && districtVal && String(districtVal).trim().length > 0);
 
   // 7. Phone
   const rawPhone = (supplier.primaryPhone || '').replace(/\D/g, '');
@@ -150,7 +151,7 @@ export function calculateSupplierCompleteness(
   // 15. Public Liability Insurance (uploaded, not expired, not rejected)
   const hasInsuranceDoc = isDocumentValid(docs, ['public liability', 'liability insurance', 'public_liability', 'indemnity insurance']);
 
-  const items: OnboardingChecklistItem[] = [
+  const baseItems: OnboardingChecklistItem[] = [
     {
       id: 'legalName',
       label: 'Legal company name',
@@ -215,7 +216,7 @@ export function calculateSupplierCompleteness(
       targetSection: 'details',
       fieldId: 'field-district',
       description: 'Botswana administrative district used for local procurement preference margins.',
-      value: supplier.district,
+      value: districtVal || undefined,
     },
     {
       id: 'primaryPhone',
@@ -292,7 +293,11 @@ export function calculateSupplierCompleteness(
       fieldId: 'field-doc-tax',
       description: 'Current Botswana Unified Revenue Service tax clearance certificate.',
     },
-    {
+  ];
+
+  const optionalDocumentItems: OnboardingChecklistItem[] = [];
+  if (hasSafetyDoc) {
+    optionalDocumentItems.push({
       id: 'docSafety',
       label: 'Workers Compensation & Safety Certificate',
       shortLabel: 'Workers comp & safety',
@@ -301,8 +306,10 @@ export function calculateSupplierCompleteness(
       targetSection: 'vault',
       fieldId: 'field-doc-safety',
       description: 'Occupational health and workers compensation compliance certificate.',
-    },
-    {
+    });
+  }
+  if (hasInsuranceDoc) {
+    optionalDocumentItems.push({
       id: 'docInsurance',
       label: 'Public Liability Insurance Policy',
       shortLabel: 'Public liability insurance',
@@ -311,19 +318,107 @@ export function calculateSupplierCompleteness(
       targetSection: 'vault',
       fieldId: 'field-doc-insurance',
       description: 'Active commercial third-party public liability insurance schedule.',
-    },
-  ];
+    });
+  }
 
+  const items = [...baseItems, ...optionalDocumentItems];
+  const totalCount = items.length;
   const completedCount = items.filter((i) => i.isComplete).length;
-  const score = Math.round((completedCount / 15) * 100);
+  const score = Math.round((completedCount / Math.max(1, totalCount)) * 100);
   const missingItems = items.filter((i) => !i.isComplete);
 
   return {
     score,
     completedCount,
-    totalCount: 15,
+    totalCount,
     items,
     missingItems,
-    isComplete: completedCount === 15,
+    isComplete: completedCount === totalCount && totalCount > 0,
   };
 }
+
+export interface DistrictRegionGroup {
+  region: string;
+  districts: string[];
+}
+
+export const BOTSWANA_DISTRICTS_BY_REGION: DistrictRegionGroup[] = [
+  {
+    region: 'Central Region',
+    districts: [
+      'Central District',
+      'Bobirwa District',
+      'Boteti District',
+      'Mahalapye District',
+      'Orapa District',
+      'Palapye District',
+      'Selibe-Phikwe District',
+      'Serowe District',
+      'Sowa Town District',
+      'Tutume District',
+    ],
+  },
+  {
+    region: 'Chobe Region',
+    districts: ['Chobe District'],
+  },
+  {
+    region: 'Ghanzi Region',
+    districts: ['Ghanzi District', 'Charles Hill District'],
+  },
+  {
+    region: 'Kgalagadi Region',
+    districts: [
+      'Kgalagadi District',
+      'Hukuntsi District',
+      'Lethakeng District',
+      'Tsabong District',
+    ],
+  },
+  {
+    region: 'Kgatleng Region',
+    districts: ['Kgatleng District'],
+  },
+  {
+    region: 'Kweneng Region',
+    districts: ['Kweneng District', 'Mogoditshane-Thamaga District'],
+  },
+  {
+    region: 'North-East Region',
+    districts: ['North-East District', 'Francistown District', 'Tonota District'],
+  },
+  {
+    region: 'North-West Region',
+    districts: ['North-West District', 'Okavango District'],
+  },
+  {
+    region: 'South-East Region',
+    districts: [
+      'South-East District',
+      'Gaborone District',
+      'Lobatse District',
+      'Ramotswa District',
+      'Tlokweng District',
+    ],
+  },
+  {
+    region: 'Southern Region',
+    districts: [
+      'Southern District',
+      'Goodhope District',
+      'Jwaneng District',
+      'Kanye District',
+      'Mabutsane District',
+      'Moshupa District',
+    ],
+  },
+  {
+    region: 'South-West Region',
+    districts: ['South-West District'],
+  },
+];
+
+export const BOTSWANA_DISTRICTS_FLAT: string[] = BOTSWANA_DISTRICTS_BY_REGION.flatMap(
+  (g) => g.districts
+);
+

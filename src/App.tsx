@@ -26,6 +26,7 @@ import { SupplierBidSubmission } from './components/supplier/SupplierBidSubmissi
 
 // Buyer Views
 import { BuyerLayout } from './components/buyer/BuyerLayout';
+import { InactivityWarningModal } from './components/common/InactivityWarningModal';
 
 // Recognized route categories
 const AUTH_ROUTES = [

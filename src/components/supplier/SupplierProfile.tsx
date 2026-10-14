@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { supplierApi } from '../../services/api';
+import { supplierApi, referenceApi, CategoryTreeNode } from '../../services/api';
 import { Director } from '../../types';
+import { DB_CATEGORIES } from '../../data/dbCategories';
 import {
   calculateSupplierCompleteness,
   OnboardingChecklistItem,
+  BOTSWANA_DISTRICTS_BY_REGION,
+  BOTSWANA_DISTRICTS_FLAT,
 } from '../../utils/supplierOnboarding';
 import {
   Building2,
@@ -41,6 +44,7 @@ import {
   ChevronUp,
   Info,
   RotateCw,
+  Loader2,
 } from 'lucide-react';
 
 interface PastProject {
@@ -79,57 +83,13 @@ interface SupplierTeamMember {
 }
 
 interface CategoryNode {
+  id?: string;
   code: string;
   name: string;
-  children?: { code: string; name: string }[];
+  children?: { id?: string; code: string; name: string }[];
 }
 
-const CATEGORY_TREE: CategoryNode[] = [
-  {
-    code: 'Code 01',
-    name: 'Building Works & Materials',
-    children: [
-      { code: 'Subcode 01', name: 'Building Construction' },
-      { code: 'Subcode 02', name: 'Structural Timber & Roofing' },
-      { code: 'Subcode 03', name: 'General Hardware Supply' },
-      { code: 'Subcode 04', name: 'Prefabricated Structures' },
-    ],
-  },
-  {
-    code: 'Code 02',
-    name: 'Electrical Works',
-    children: [
-      { code: 'Subcode 01', name: 'Electrical Installations & High Voltage' },
-      { code: 'Subcode 02', name: 'Solar PV & Renewable Energy Systems' },
-      { code: 'Subcode 03', name: 'Street Lighting & Generators' },
-    ],
-  },
-  {
-    code: 'Code 03',
-    name: 'Civil Engineering Infrastructure',
-    children: [
-      { code: 'Subcode 01', name: 'Roads, Bridges & Paving Works' },
-      { code: 'Subcode 02', name: 'Water & Sewerage Reticulation' },
-      { code: 'Subcode 03', name: 'Earthworks & Plant Hire' },
-    ],
-  },
-  {
-    code: 'Code 104',
-    name: 'ICT, Systems & Telecommunications',
-    children: [
-      { code: 'Subcode 01', name: 'ICT Hardware, Servers & Peripherals' },
-      { code: 'Subcode 02', name: 'Software Development & ERP' },
-    ],
-  },
-  {
-    code: 'Code 318',
-    name: 'General Facility Services & Supplies',
-    children: [
-      { code: 'Subcode 01', name: 'Office Stationery & Consumables' },
-      { code: 'Subcode 02', name: 'Industrial Protective Wear & PPE' },
-    ],
-  },
-];
+const CATEGORY_TREE: CategoryNode[] = DB_CATEGORIES;
 
 export const SupplierProfile: React.FC = () => {
   const {
@@ -156,17 +116,19 @@ export const SupplierProfile: React.FC = () => {
 
   // Company Details Form State
   const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [detailsLastUpdated, setDetailsLastUpdated] = useState('Today');
   const [detailsForm, setDetailsForm] = useState({
     legalName: supplier.legalName || '',
     tradingName: supplier.tradingName || '',
     cipaNumber: supplier.cipaNumber || '',
     tinNumber: supplier.tinNumber || '',
+    ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || '',
     companyType: supplier.companyType || 'Private Company (Pty) Ltd',
     yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
     physicalAddress: supplier.physicalAddress || '',
     city: supplier.city || '',
-    district: supplier.district || '',
+    district: supplier.district || (supplier as any).districtName || '',
     postalAddress: supplier.postalAddress || '',
     primaryPhone: supplier.primaryPhone || '',
     email: supplier.email || '',
@@ -175,6 +137,10 @@ export const SupplierProfile: React.FC = () => {
     bankBranch: supplier.bankBranch || '',
     accountNumberMasked: supplier.accountNumberMasked || '',
     citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
+    youthOwned: supplier.youthOwned ?? false,
+    womenOwned: supplier.womenOwned ?? false,
+    disabilityOwned: supplier.disabilityOwned ?? false,
+    eddCertified: supplier.eddCertified ?? false,
     description: supplier.description || '',
   });
 
@@ -185,6 +151,7 @@ export const SupplierProfile: React.FC = () => {
     (supplier.directors || []).map((d) => ({
       ...d,
       idNumber: d.nationalIdOrPassport || '',
+      idType: d.idType || (d.isCitizen ? 'National ID (Omang)' : 'Passport'),
       verificationStatus: 'Verified',
     }))
   );
@@ -193,13 +160,17 @@ export const SupplierProfile: React.FC = () => {
   const [newDirectorForm, setNewDirectorForm] = useState({
     fullName: '',
     idNumber: '',
+    idType: 'National ID (Omang)' as 'National ID (Omang)' | 'Passport' | 'Residence Permit',
     nationality: 'Motswana',
     isCitizen: true,
     shareholdingPercentage: 0,
     role: 'Director',
   });
 
-  // Categories State
+  // Categories State loaded from categories table
+  const [categoriesList, setCategoriesList] = useState<CategoryNode[]>(DB_CATEGORIES);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [expandedCategoryCodes, setExpandedCategoryCodes] = useState<Record<string, boolean>>({});
   const [categorySearch, setCategorySearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     supplier.categories?.length
@@ -208,6 +179,34 @@ export const SupplierProfile: React.FC = () => {
       ? [supplier.category]
       : []
   );
+
+  // Fetch live categories from categories table on mount
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingCategories(true);
+    referenceApi.getCategories()
+      .then((tree) => {
+        if (isMounted && Array.isArray(tree) && tree.length > 0) {
+          setCategoriesList(tree as CategoryNode[]);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch categories from database:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingCategories(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const toggleCategoryExpand = (code: string) => {
+    setExpandedCategoryCodes((prev) => ({
+      ...prev,
+      [code]: !prev[code],
+    }));
+  };
 
   // Past Projects State
   const [projectsList, setProjectsList] = useState<PastProject[]>(
@@ -273,11 +272,12 @@ export const SupplierProfile: React.FC = () => {
         tradingName: supplier.tradingName || '',
         cipaNumber: supplier.cipaNumber || '',
         tinNumber: supplier.tinNumber || '',
+        ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || '',
         companyType: supplier.companyType || 'Private Company (Pty) Ltd',
         yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
         physicalAddress: supplier.physicalAddress || '',
         city: supplier.city || '',
-        district: supplier.district || '',
+        district: supplier.district || (supplier as any).districtName || '',
         postalAddress: supplier.postalAddress || '',
         primaryPhone: supplier.primaryPhone || '',
         email: supplier.email || '',
@@ -286,6 +286,10 @@ export const SupplierProfile: React.FC = () => {
         bankBranch: supplier.bankBranch || '',
         accountNumberMasked: supplier.accountNumberMasked || '',
         citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
+        youthOwned: supplier.youthOwned ?? false,
+        womenOwned: supplier.womenOwned ?? false,
+        disabilityOwned: supplier.disabilityOwned ?? false,
+        eddCertified: supplier.eddCertified ?? false,
         description: supplier.description || '',
       });
     }
@@ -454,32 +458,47 @@ export const SupplierProfile: React.FC = () => {
   };
 
   // Save Company Details
-  const handleSaveDetails = (e: React.FormEvent) => {
+  const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSupplierProfile({
-      legalName: detailsForm.legalName.trim(),
-      tradingName: detailsForm.tradingName.trim(),
-      cipaNumber: detailsForm.cipaNumber.trim(),
-      tinNumber: detailsForm.tinNumber.trim(),
-      yearEstablished: Number(detailsForm.yearEstablished),
-      physicalAddress: detailsForm.physicalAddress.trim(),
-      city: detailsForm.city.trim(),
-      district: detailsForm.district.trim(),
-      postalAddress: detailsForm.postalAddress.trim(),
-      primaryPhone: detailsForm.primaryPhone.trim(),
-      email: detailsForm.email.trim(),
-      website: detailsForm.website.trim(),
-      bankName: detailsForm.bankName.trim(),
-      bankBranch: detailsForm.bankBranch.trim(),
-      accountNumberMasked: detailsForm.accountNumberMasked.trim(),
-      citizenOwnedPercentage: Number(detailsForm.citizenOwnedPercentage),
-      citizenOwnershipSet: true,
-      description: detailsForm.description.trim(),
-      detailsSaved: true,
-    });
-    setDetailsLastUpdated('Just now');
-    setIsEditingDetails(false);
-    showToast('Company details saved and profile completeness updated.');
+    setIsSavingDetails(true);
+    try {
+      await updateSupplierProfile({
+        legalName: detailsForm.legalName.trim(),
+        tradingName: detailsForm.tradingName.trim(),
+        cipaNumber: detailsForm.cipaNumber.trim(),
+        tinNumber: detailsForm.tinNumber.trim(),
+        ppraCode: detailsForm.ppraCode.trim(),
+        ppraRegistrationNo: detailsForm.ppraCode.trim(),
+        companyType: detailsForm.companyType,
+        yearEstablished: Number(detailsForm.yearEstablished),
+        physicalAddress: detailsForm.physicalAddress.trim(),
+        city: detailsForm.city.trim(),
+        district: detailsForm.district.trim(),
+        districtId: detailsForm.district.trim(),
+        postalAddress: detailsForm.postalAddress.trim(),
+        primaryPhone: detailsForm.primaryPhone.trim(),
+        email: detailsForm.email.trim(),
+        website: detailsForm.website.trim(),
+        bankName: detailsForm.bankName.trim(),
+        bankBranch: detailsForm.bankBranch.trim(),
+        accountNumberMasked: detailsForm.accountNumberMasked.trim(),
+        citizenOwnedPercentage: Number(detailsForm.citizenOwnedPercentage),
+        citizenOwnershipSet: true,
+        youthOwned: detailsForm.youthOwned,
+        womenOwned: detailsForm.womenOwned,
+        disabilityOwned: detailsForm.disabilityOwned,
+        eddCertified: detailsForm.eddCertified,
+        description: detailsForm.description.trim(),
+        detailsSaved: true,
+      });
+      setDetailsLastUpdated('Just now');
+      setIsEditingDetails(false);
+      showToast('Company details and district saved to database successfully.');
+    } catch {
+      showToast('Error saving details to database. Please try again.');
+    } finally {
+      setIsSavingDetails(false);
+    }
   };
 
   // Add Director
@@ -492,6 +511,7 @@ export const SupplierProfile: React.FC = () => {
       fullName: newDirectorForm.fullName.trim(),
       nationalIdOrPassport: newDirectorForm.idNumber.trim(),
       idNumber: newDirectorForm.idNumber.trim(),
+      idType: newDirectorForm.idType,
       nationality: newDirectorForm.nationality,
       isCitizen: newDirectorForm.isCitizen,
       shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
@@ -506,6 +526,7 @@ export const SupplierProfile: React.FC = () => {
         id: d.id,
         fullName: d.fullName,
         nationalIdOrPassport: d.nationalIdOrPassport,
+        idType: d.idType,
         nationality: d.nationality,
         isCitizen: d.isCitizen,
         shareholdingPercentage: d.shareholdingPercentage,
@@ -517,6 +538,7 @@ export const SupplierProfile: React.FC = () => {
     setNewDirectorForm({
       fullName: '',
       idNumber: '',
+      idType: 'National ID (Omang)',
       nationality: 'Motswana',
       isCitizen: true,
       shareholdingPercentage: 0,
@@ -533,6 +555,7 @@ export const SupplierProfile: React.FC = () => {
         id: d.id,
         fullName: d.fullName,
         nationalIdOrPassport: d.nationalIdOrPassport,
+        idType: d.idType,
         nationality: d.nationality,
         isCitizen: d.isCitizen,
         shareholdingPercentage: d.shareholdingPercentage,
@@ -641,27 +664,6 @@ export const SupplierProfile: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* 0. Demo Mode Ribbon (if demo account) */}
-      {supplier.isDemoAccount && (
-        <div className="bg-[#FFFBEB] dark:bg-[#78350F]/20 border border-[#FDE68A] dark:border-[#78350F]/50 rounded-[10px] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
-          <div className="flex items-center gap-2.5 text-[#92400E] dark:text-[#FCD34D]">
-            <Sparkles className="w-5 h-5 shrink-0" />
-            <div>
-              <span className="font-semibold">Demo Account Mode:</span>{' '}
-              <span>Inspecting sample data for Kopano Building Supplies (Pty) Ltd.</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={resetDemoData}
-            className="px-3 py-1.5 bg-[#D97706] hover:bg-[#B45309] text-white rounded-[6px] font-medium text-[13px] inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-            <span>Reset demo data</span>
-          </button>
-        </div>
-      )}
-
       {/* 1. Onboarding Checklist Banner (Shown until completeness is 100%) */}
       {!completeness.isComplete && (
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 shadow-subtle space-y-4">
@@ -1046,6 +1048,64 @@ export const SupplierProfile: React.FC = () => {
 
                     <div className="space-y-1.5">
                       <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        PPRA registration #
+                      </label>
+                      <input
+                        id="field-ppraCode"
+                        type="text"
+                        placeholder="e.g. PPRA-2024-8891 or Code 01"
+                        value={detailsForm.ppraCode}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, ppraCode: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        Company structure *
+                      </label>
+                      <select
+                        id="field-companyType"
+                        value={detailsForm.companyType}
+                        onChange={(e) =>
+                          setDetailsForm({ ...detailsForm, companyType: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      >
+                        <option value="Private Company (Pty) Ltd">Private Company (Pty) Ltd</option>
+                        <option value="Public Company Ltd">Public Company Ltd</option>
+                        <option value="Close Corporation">Close Corporation</option>
+                        <option value="Sole Proprietorship">Sole Proprietorship</option>
+                        <option value="Partnership">Partnership</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        Year established
+                      </label>
+                      <input
+                        id="field-yearEstablished"
+                        type="number"
+                        min="1950"
+                        max={new Date().getFullYear()}
+                        value={detailsForm.yearEstablished}
+                        onChange={(e) =>
+                          setDetailsForm({
+                            ...detailsForm,
+                            yearEstablished: Number(e.target.value),
+                          })
+                        }
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                         Citizen ownership % *
                       </label>
                       <input
@@ -1063,6 +1123,51 @@ export const SupplierProfile: React.FC = () => {
                         }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
+                    </div>
+                  </div>
+
+                  {/* Statutory Preference Eligibility Checkboxes */}
+                  <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2.5">
+                    <span className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
+                      Statutory Preference Eligibility
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px]">
+                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
+                        <input
+                          type="checkbox"
+                          checked={detailsForm.youthOwned}
+                          onChange={(e) => setDetailsForm({ ...detailsForm, youthOwned: e.target.checked })}
+                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                        />
+                        <span>Youth-owned</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
+                        <input
+                          type="checkbox"
+                          checked={detailsForm.womenOwned}
+                          onChange={(e) => setDetailsForm({ ...detailsForm, womenOwned: e.target.checked })}
+                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                        />
+                        <span>Women-owned</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
+                        <input
+                          type="checkbox"
+                          checked={detailsForm.disabilityOwned}
+                          onChange={(e) => setDetailsForm({ ...detailsForm, disabilityOwned: e.target.checked })}
+                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                        />
+                        <span>Disability-owned</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
+                        <input
+                          type="checkbox"
+                          checked={detailsForm.eddCertified}
+                          onChange={(e) => setDetailsForm({ ...detailsForm, eddCertified: e.target.checked })}
+                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                        />
+                        <span>EDD certified</span>
+                      </label>
                     </div>
                   </div>
 
@@ -1102,20 +1207,35 @@ export const SupplierProfile: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                      <label htmlFor="field-district" className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                         District *
                       </label>
-                      <input
+                      <select
                         id="field-district"
-                        type="text"
                         required
-                        placeholder="e.g. South East District"
                         value={detailsForm.district}
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, district: e.target.value })
                         }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                      />
+                      >
+                        <option value="">Select district...</option>
+                        {BOTSWANA_DISTRICTS_BY_REGION.map((grp) => (
+                          <optgroup key={grp.region} label={grp.region}>
+                            {grp.districts.map((d) => (
+                              <option key={d} value={d}>
+                                {d}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        {detailsForm.district &&
+                          !BOTSWANA_DISTRICTS_FLAT.includes(detailsForm.district) && (
+                            <optgroup label="Other / Recorded">
+                              <option value={detailsForm.district}>{detailsForm.district}</option>
+                            </optgroup>
+                          )}
+                      </select>
                     </div>
                   </div>
 
@@ -1263,10 +1383,20 @@ export const SupplierProfile: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                      disabled={isSavingDetails}
+                      className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                     >
-                      <Save className="w-4 h-4" />
-                      <span>Save changes</span>
+                      {isSavingDetails ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Saving to database...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Save changes</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -1337,6 +1467,63 @@ export const SupplierProfile: React.FC = () => {
                           ? `${detailsForm.bankName} (${detailsForm.bankBranch || 'Active'})`
                           : 'Not provided'}
                       </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Company structure</span>
+                      <span className="font-medium text-[#10212E] dark:text-white block">
+                        {detailsForm.companyType || 'Private Company (Pty) Ltd'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Year established</span>
+                      <span className="font-medium text-[#10212E] dark:text-white block tabular-nums">
+                        {detailsForm.yearEstablished || 'Not specified'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">PPRA registration #</span>
+                      <span className="font-medium text-[#10212E] dark:text-white block">
+                        {detailsForm.ppraCode || 'Not recorded'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Website</span>
+                      <span className="font-medium text-[#1F5F99] dark:text-[#6FAEE0] block">
+                        {detailsForm.website || 'Not specified'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Statutory preferences</span>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {detailsForm.youthOwned && (
+                          <span className="text-[11px] font-medium bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded-[4px]">
+                            Youth-owned
+                          </span>
+                        )}
+                        {detailsForm.womenOwned && (
+                          <span className="text-[11px] font-medium bg-[#FCE7F3] text-[#BE185D] px-2 py-0.5 rounded-[4px]">
+                            Women-owned
+                          </span>
+                        )}
+                        {detailsForm.disabilityOwned && (
+                          <span className="text-[11px] font-medium bg-[#F3E8FF] text-[#7E22CE] px-2 py-0.5 rounded-[4px]">
+                            Disability-owned
+                          </span>
+                        )}
+                        {detailsForm.eddCertified && (
+                          <span className="text-[11px] font-medium bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px]">
+                            EDD certified
+                          </span>
+                        )}
+                        {!detailsForm.youthOwned && !detailsForm.womenOwned && !detailsForm.disabilityOwned && !detailsForm.eddCertified && (
+                          <span className="text-[12px] text-[#6B7A87]">None claimed</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1471,25 +1658,30 @@ export const SupplierProfile: React.FC = () => {
                             </td>
 
                             <td className="p-4">
-                              <div className="flex items-center gap-2 tabular-nums">
-                                <span className="font-medium">
-                                  {isRevealed ? dir.idNumber : maskedId}
-                                </span>
-                                {!isRevealed ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRevealId(dir.id, dir.fullName)}
-                                    className="text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                                    title="Unmask identity number (action logged)"
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                    <span>Reveal</span>
-                                  </button>
-                                ) : (
-                                  <span className="text-[12px] text-[#2F8F5B] bg-[#ECFDF5] px-1.5 py-0.5 rounded">
-                                    Audit logged
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 tabular-nums">
+                                  <span className="font-medium">
+                                    {isRevealed ? dir.idNumber : maskedId}
                                   </span>
-                                )}
+                                  {!isRevealed ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRevealId(dir.id, dir.fullName)}
+                                      className="text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                                      title="Unmask identity number (action logged)"
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                      <span>Reveal</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[12px] text-[#2F8F5B] bg-[#ECFDF5] px-1.5 py-0.5 rounded">
+                                      Audit logged
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium inline-block">
+                                  {dir.idType || (dir.isCitizen ? 'National ID (Omang)' : 'Passport')}
+                                </span>
                               </div>
                             </td>
 
@@ -1582,78 +1774,147 @@ export const SupplierProfile: React.FC = () => {
                 </div>
 
                 <div className="space-y-2 max-h-96 overflow-y-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] p-3">
-                  {CATEGORY_TREE.map((node) => {
-                    const matchesSearch =
-                      !categorySearch ||
-                      node.name.toLowerCase().includes(categorySearch.toLowerCase()) ||
-                      node.code.toLowerCase().includes(categorySearch.toLowerCase()) ||
-                      (node.children || []).some((c) =>
-                        c.name.toLowerCase().includes(categorySearch.toLowerCase())
+                  {isLoadingCategories && categoriesList.length === 0 ? (
+                    <div className="py-8 text-center text-[#6B7A87] flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+                      <p className="text-[13px]">Loading categories from database...</p>
+                    </div>
+                  ) : (() => {
+                    const q = categorySearch.trim().toLowerCase();
+                    const filtered = categoriesList.filter((node) => {
+                      if (!q) return true;
+                      return (
+                        node.name.toLowerCase().includes(q) ||
+                        node.code.toLowerCase().includes(q) ||
+                        (node.children || []).some(
+                          (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+                        )
                       );
+                    });
 
-                    if (!matchesSearch) return null;
-
-                    const isNodeSelected = selectedCategories.includes(
-                      `${node.code} — ${node.name}`
-                    );
-
-                    return (
-                      <div
-                        key={node.code}
-                        className="p-3 bg-[#F7FAFD]/60 dark:bg-[#10212E]/60 rounded-[6px] space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                            {node.code} — {node.name}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggleCategory(`${node.code} — ${node.name}`)
-                            }
-                            className={`px-2.5 py-1 rounded-[4px] text-[12px] font-medium cursor-pointer transition-colors ${
-                              isNodeSelected
-                                ? 'bg-[#2F8F5B] text-white'
-                                : 'bg-[#1F5F99] text-white hover:bg-[#184c7a]'
-                            }`}
-                          >
-                            {isNodeSelected ? 'Selected' : '+ Add Code'}
-                          </button>
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="py-8 text-center text-[#6B7A87]">
+                          <p className="text-[14px]">No category codes or sub-codes match "{categorySearch}".</p>
                         </div>
+                      );
+                    }
 
-                        {node.children && (
-                          <div className="pl-4 space-y-1 pt-1 border-l-2 border-[#D5E0EA] dark:border-[#1E364A]">
-                            {node.children.map((child) => {
-                              const childLabel = `${child.code}: ${child.name}`;
-                              const isChildSelected = selectedCategories.includes(childLabel);
+                    return filtered.map((node) => {
+                      const nodeLabel = `${node.code} — ${node.name}`;
+                      const isNodeSelected =
+                        selectedCategories.includes(nodeLabel) ||
+                        selectedCategories.includes(`${node.code}: ${node.name}`) ||
+                        selectedCategories.includes(node.code);
 
-                              return (
-                                <div
-                                  key={child.code}
-                                  className="flex items-center justify-between text-[13px] py-1"
+                      const hasChildren = Boolean(node.children && node.children.length > 0);
+                      const isExpanded =
+                        expandedCategoryCodes[node.code] ??
+                        (Boolean(q) || hasChildren);
+
+                      const matchingChildren = (node.children || []).filter((child) => {
+                        if (!q) return true;
+                        return (
+                          node.name.toLowerCase().includes(q) ||
+                          node.code.toLowerCase().includes(q) ||
+                          child.name.toLowerCase().includes(q) ||
+                          child.code.toLowerCase().includes(q)
+                        );
+                      });
+
+                      return (
+                        <div
+                          key={node.code}
+                          className="p-3 bg-[#F7FAFD]/60 dark:bg-[#10212E]/60 rounded-[6px] space-y-2 border border-[#E2E8F0]/40 dark:border-[#1E364A]/40"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {hasChildren ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleCategoryExpand(node.code)}
+                                  className="p-1 -ml-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer transition-colors"
+                                  title={isExpanded ? 'Collapse sub-codes' : 'Expand sub-codes'}
                                 >
-                                  <span className="text-[#43525F] dark:text-[#B2C3D2]">
-                                    {childLabel}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleCategory(childLabel)}
-                                    className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer transition-colors ${
-                                      isChildSelected
-                                        ? 'bg-[#2F8F5B] text-white'
-                                        : 'bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-[#1F5F99] hover:bg-[#F7FAFD]'
-                                    }`}
-                                  >
-                                    {isChildSelected ? 'Selected' : '+ Select'}
-                                  </button>
-                                </div>
-                              );
-                            })}
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4" />
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="w-4" />
+                              )}
+                              <span className="px-2 py-0.5 rounded font-mono text-[12px] font-semibold bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] whitespace-nowrap">
+                                {node.code}
+                              </span>
+                              <span className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
+                                {node.name}
+                              </span>
+                              {hasChildren && (
+                                <span className="text-[12px] text-[#6B7A87] dark:text-[#94A3B8] whitespace-nowrap hidden sm:inline">
+                                  ({node.children!.length} sub-codes)
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCategory(nodeLabel)}
+                              className={`px-2.5 py-1 rounded-[4px] text-[12px] font-medium cursor-pointer transition-colors whitespace-nowrap ${
+                                isNodeSelected
+                                  ? 'bg-[#2F8F5B] text-white'
+                                  : 'bg-[#1F5F99] text-white hover:bg-[#184c7a]'
+                              }`}
+                            >
+                              {isNodeSelected ? 'Selected' : '+ Add Code'}
+                            </button>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+
+                          {hasChildren && isExpanded && (
+                            <div className="pl-5 space-y-1 pt-1 border-l-2 border-[#D5E0EA] dark:border-[#1E364A] ml-2">
+                              {matchingChildren.map((child) => {
+                                const childCodeFormatted = child.code.length <= 2 ? `Sub-code ${child.code}` : child.code;
+                                const childLabel = child.code.length <= 2 ? `${node.code}/${child.code}: ${child.name}` : `${child.code}: ${child.name}`;
+                                const isChildSelected =
+                                  selectedCategories.includes(childLabel) ||
+                                  selectedCategories.includes(`${child.code}: ${child.name}`) ||
+                                  selectedCategories.includes(`${child.code} — ${child.name}`) ||
+                                  selectedCategories.includes(`${node.code}/${child.code}: ${child.name}`) ||
+                                  selectedCategories.includes(child.name);
+
+                                return (
+                                  <div
+                                    key={child.code}
+                                    className="flex items-center justify-between gap-2 text-[13px] py-1 px-2 rounded hover:bg-white/80 dark:hover:bg-[#172D3F]/70 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="px-1.5 py-0.5 rounded font-mono text-[11px] font-medium bg-[#E2E8F0] dark:bg-[#1E293B] text-[#334155] dark:text-[#CBD5E1] whitespace-nowrap">
+                                        {childCodeFormatted}
+                                      </span>
+                                      <span className="text-[#43525F] dark:text-[#B2C3D2] truncate">
+                                        {child.name}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleCategory(childLabel)}
+                                      className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer transition-colors whitespace-nowrap ${
+                                        isChildSelected
+                                          ? 'bg-[#2F8F5B] text-white'
+                                          : 'bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-[#1F5F99] hover:bg-[#F7FAFD]'
+                                      }`}
+                                    >
+                                      {isChildSelected ? 'Selected' : '+ Select'}
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>
@@ -1953,18 +2214,20 @@ export const SupplierProfile: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    National ID / Omang *
+                    ID Document Type *
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 529124018"
-                    value={newDirectorForm.idNumber}
-                    onChange={(e) =>
-                      setNewDirectorForm({ ...newDirectorForm, idNumber: e.target.value })
-                    }
+                  <select
+                    value={newDirectorForm.idType}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setNewDirectorForm({ ...newDirectorForm, idType: val });
+                    }}
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
+                  >
+                    <option value="National ID (Omang)">National ID (Omang)</option>
+                    <option value="Passport">Passport (Foreign / Local)</option>
+                    <option value="Residence Permit">Residence Permit</option>
+                  </select>
                 </div>
 
                 <div className="space-y-1.5">
@@ -1975,12 +2238,45 @@ export const SupplierProfile: React.FC = () => {
                     type="text"
                     required
                     value={newDirectorForm.nationality}
-                    onChange={(e) =>
-                      setNewDirectorForm({ ...newDirectorForm, nationality: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const nat = e.target.value;
+                      const isMot = nat.toLowerCase().includes('botswana') || nat.toLowerCase().includes('motswana');
+                      setNewDirectorForm({
+                        ...newDirectorForm,
+                        nationality: nat,
+                        isCitizen: isMot,
+                        idType: isMot ? newDirectorForm.idType : 'Passport',
+                      });
+                    }}
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                  {newDirectorForm.idType === 'Passport'
+                    ? 'Passport Number *'
+                    : newDirectorForm.idType === 'Residence Permit'
+                    ? 'Residence Permit Number *'
+                    : 'National ID / Omang *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={
+                    newDirectorForm.idType === 'Passport'
+                      ? 'e.g. BW9876543 or GB123456'
+                      : newDirectorForm.idType === 'Residence Permit'
+                      ? 'e.g. RP887766'
+                      : 'e.g. 529124018'
+                  }
+                  value={newDirectorForm.idNumber}
+                  onChange={(e) =>
+                    setNewDirectorForm({ ...newDirectorForm, idNumber: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

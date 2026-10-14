@@ -405,6 +405,7 @@ CREATE TABLE IF NOT EXISTS document_types (
   description           VARCHAR(500),
   issuing_authority     VARCHAR(200),
   requires_expiry       BOOLEAN NOT NULL DEFAULT FALSE,
+  requires_number       BOOLEAN NOT NULL DEFAULT TRUE,
   default_validity_days INTEGER,
   max_file_size_mb      SMALLINT NOT NULL DEFAULT 10,
   allowed_mime_types    TEXT[],
@@ -1632,24 +1633,24 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO document_types (
   organization_id, code, name, description, issuing_authority, 
-  requires_expiry, default_validity_days, verification_method, is_mandatory_default
+  requires_expiry, requires_number, default_validity_days, verification_method, is_mandatory_default
 ) VALUES
-(NULL, 'COMPANY_REGISTRATION', 'CIPA Certificate of Incorporation', 'Proof the company is legally registered', 'Companies and Intellectual Property Authority (CIPA)', FALSE, NULL, 'registry_api', TRUE),
-(NULL, 'TAX_CLEARANCE', 'BURS Tax Clearance Certificate', 'Proof of tax compliance', 'Botswana Unified Revenue Service (BURS)', TRUE, 365, 'registry_api', TRUE),
-(NULL, 'VAT_REGISTRATION', 'VAT Registration Certificate', 'Proof of VAT registration', 'Botswana Unified Revenue Service (BURS)', FALSE, NULL, 'manual', FALSE),
-(NULL, 'BUSINESS_LICENCE', 'Trading Licence', 'Licence to operate in the sector or locality', 'Licensing authority', TRUE, 365, 'manual', FALSE),
-(NULL, 'PPRA_REGISTRATION', 'PPRA Registration Certificate', 'Public procurement registration', 'Public Procurement Regulatory Authority (PPRA)', TRUE, 730, 'registry_api', TRUE),
-(NULL, 'PROOF_OF_ADDRESS', 'Proof of Address', 'Evidence of business premises', NULL, FALSE, NULL, 'manual', FALSE),
-(NULL, 'BANK_CONFIRMATION', 'Bank Confirmation Letter', 'Letter confirming the company bank account', 'Bank', FALSE, NULL, 'manual', FALSE),
-(NULL, 'FINANCIAL_STATEMENTS', 'Audited Financial Statements', 'Recent audited accounts', NULL, FALSE, NULL, 'manual', FALSE),
-(NULL, 'COMPANY_PROFILE', 'Company Profile', 'Capability statement or company profile', NULL, FALSE, NULL, 'manual', FALSE),
-(NULL, 'DIRECTOR_ID', 'Director Identity Document', 'Copy of each director identity document', NULL, TRUE, NULL, 'manual', FALSE),
-(NULL, 'WORKERS_COMPENSATION', 'Workers Compensation & Safety Compliance', 'Safety compliance evidence', 'Department of Occupational Health & Safety', TRUE, 365, 'manual', TRUE),
-(NULL, 'PROFESSIONAL_LICENCE', 'Professional or Trade Licence', 'Sector-specific professional registration', NULL, TRUE, NULL, 'manual', FALSE),
-(NULL, 'PUBLIC_LIABILITY_INSURANCE', 'Public Liability Insurance Policy', 'Proof of public liability cover', 'Insurance company', TRUE, 365, 'manual', TRUE),
-(NULL, 'BANK_RATING_LETTER', 'Bank Rating Letter', 'Bank-issued credit rating', 'Bank', TRUE, 365, 'manual', FALSE),
-(NULL, 'PREFERENCE_EVIDENCE', 'Preference Status Evidence', 'Evidence for preference claims', NULL, FALSE, NULL, 'manual', FALSE),
-(NULL, 'EDD_CERTIFICATE', 'EDD Certificate', 'Economic Diversification Drive certificate', 'Ministry of Investment, Trade and Industry', TRUE, 365, 'manual', FALSE)
+(NULL, 'COMPANY_REGISTRATION', 'CIPA Certificate of Incorporation', 'Proof the company is legally registered', 'Companies and Intellectual Property Authority (CIPA)', FALSE, TRUE, NULL, 'registry_api', TRUE),
+(NULL, 'TAX_CLEARANCE', 'BURS Tax Clearance Certificate', 'Proof of tax compliance', 'Botswana Unified Revenue Service (BURS)', TRUE, TRUE, 365, 'registry_api', TRUE),
+(NULL, 'VAT_REGISTRATION', 'VAT Registration Certificate', 'Proof of VAT registration', 'Botswana Unified Revenue Service (BURS)', FALSE, TRUE, NULL, 'manual', FALSE),
+(NULL, 'BUSINESS_LICENCE', 'Trading Licence', 'Licence to operate in the sector or locality', 'Licensing authority', TRUE, TRUE, 365, 'manual', FALSE),
+(NULL, 'PPRA_REGISTRATION', 'PPRA Registration Certificate', 'Public procurement registration', 'Public Procurement Regulatory Authority (PPRA)', TRUE, TRUE, 730, 'registry_api', TRUE),
+(NULL, 'PROOF_OF_ADDRESS', 'Proof of Address', 'Evidence of business premises', NULL, FALSE, FALSE, NULL, 'manual', FALSE),
+(NULL, 'BANK_CONFIRMATION', 'Bank Confirmation Letter', 'Letter confirming the company bank account', 'Bank', FALSE, FALSE, NULL, 'manual', FALSE),
+(NULL, 'FINANCIAL_STATEMENTS', 'Audited Financial Statements', 'Recent audited accounts', NULL, FALSE, FALSE, NULL, 'manual', FALSE),
+(NULL, 'COMPANY_PROFILE', 'Company Profile', 'Capability statement or company profile', NULL, FALSE, FALSE, NULL, 'manual', FALSE),
+(NULL, 'DIRECTOR_ID', 'Director Identity Document', 'Copy of each director identity document', NULL, TRUE, TRUE, NULL, 'manual', FALSE),
+(NULL, 'WORKERS_COMPENSATION', 'Workers Compensation & Safety Compliance', 'Safety compliance evidence', 'Department of Occupational Health & Safety', TRUE, TRUE, 365, 'manual', TRUE),
+(NULL, 'PROFESSIONAL_LICENCE', 'Professional or Trade Licence', 'Sector-specific professional registration', NULL, TRUE, TRUE, NULL, 'manual', FALSE),
+(NULL, 'PUBLIC_LIABILITY_INSURANCE', 'Public Liability Insurance Policy', 'Proof of public liability cover', 'Insurance company', TRUE, TRUE, 365, 'manual', TRUE),
+(NULL, 'BANK_RATING_LETTER', 'Bank Rating Letter', 'Bank-issued credit rating', 'Bank', TRUE, FALSE, 365, 'manual', FALSE),
+(NULL, 'PREFERENCE_EVIDENCE', 'Preference Status Evidence', 'Evidence for preference claims', NULL, FALSE, FALSE, NULL, 'manual', FALSE),
+(NULL, 'EDD_CERTIFICATE', 'EDD Certificate', 'Economic Diversification Drive certificate', 'Ministry of Investment, Trade and Industry', TRUE, TRUE, 365, 'manual', FALSE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO procurement_disciplines (code, title, description, sort_order) VALUES

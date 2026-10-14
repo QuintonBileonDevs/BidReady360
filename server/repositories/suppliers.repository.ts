@@ -73,6 +73,229 @@ export interface SupplierDisciplineAllocation {
   isPrimary: boolean;
 }
 
+export async function resolveDistrictId(input?: string | null): Promise<string | null> {
+  if (!input || typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  // Check if already a valid UUID
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) {
+    try {
+      const uuidCheck = await query<{ id: string }>(`SELECT id FROM geographic_districts WHERE id = $1 LIMIT 1`, [trimmed]);
+      if (uuidCheck.rows.length > 0) return uuidCheck.rows[0].id;
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    // Strip parenthetical text like "(Gaborone)" and trailing "District"
+    const cleanName = trimmed.replace(/\s*\([^)]*\)/g, '').trim();
+    const withoutDistrict = cleanName.replace(/\s+district$/i, '').trim();
+
+    // Exact or partial name match against geographic_districts
+    const res = await query<{ id: string }>(
+      `SELECT id FROM geographic_districts 
+       WHERE LOWER(name) = LOWER($1)
+          OR LOWER(name) = LOWER($2)
+          OR LOWER(name) = LOWER($3)
+          OR LOWER(administrative_region) = LOWER($1)
+          OR LOWER(administrative_region) = LOWER($2)
+          OR LOWER(name) LIKE LOWER($4)
+       ORDER BY CASE 
+         WHEN LOWER(name) = LOWER($1) THEN 1
+         WHEN LOWER(name) = LOWER($2) THEN 2
+         WHEN LOWER(administrative_region) = LOWER($1) THEN 3
+         ELSE 4 END
+       LIMIT 1`,
+      [trimmed, cleanName, withoutDistrict, `%${withoutDistrict || cleanName}%`]
+    );
+    if (res.rows.length > 0) {
+      return res.rows[0].id;
+    }
+
+    // Common regional aliases in Botswana
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.includes('gaborone') ||
+      lower.includes('south-east') ||
+      lower.includes('south east') ||
+      lower.includes('tlokweng') ||
+      lower.includes('ramotswa')
+    ) {
+      const gRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%South-East%' LIMIT 1`
+      );
+      if (gRes.rows[0]) return gRes.rows[0].id;
+    }
+    if (lower.includes('francistown')) {
+      const fRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Francistown%' LIMIT 1`
+      );
+      if (fRes.rows[0]) return fRes.rows[0].id;
+    }
+    if (lower.includes('lobatse')) {
+      const lRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Lobatse%' LIMIT 1`
+      );
+      if (lRes.rows[0]) return lRes.rows[0].id;
+    }
+    if (lower.includes('jwaneng')) {
+      const jRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Jwaneng%' LIMIT 1`
+      );
+      if (jRes.rows[0]) return jRes.rows[0].id;
+    }
+    if (lower.includes('orapa')) {
+      const oRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Orapa%' LIMIT 1`
+      );
+      if (oRes.rows[0]) return oRes.rows[0].id;
+    }
+    if (lower.includes('selibe') || lower.includes('selebi') || lower.includes('phikwe')) {
+      const sRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Selibe%' LIMIT 1`
+      );
+      if (sRes.rows[0]) return sRes.rows[0].id;
+    }
+    if (lower.includes('sowa')) {
+      const swRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Sowa%' LIMIT 1`
+      );
+      if (swRes.rows[0]) return swRes.rows[0].id;
+    }
+    if (
+      lower.includes('central') ||
+      lower.includes('serowe') ||
+      lower.includes('palapye') ||
+      lower.includes('mahalapye') ||
+      lower.includes('bobonong') ||
+      lower.includes('tutume')
+    ) {
+      const cRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Central%' LIMIT 1`
+      );
+      if (cRes.rows[0]) return cRes.rows[0].id;
+    }
+    if (
+      lower.includes('kweneng') ||
+      lower.includes('molepolole') ||
+      lower.includes('mogoditshane') ||
+      lower.includes('thamaga')
+    ) {
+      const kwRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Kweneng%' LIMIT 1`
+      );
+      if (kwRes.rows[0]) return kwRes.rows[0].id;
+    }
+    if (lower.includes('kgatleng') || lower.includes('mochudi')) {
+      const kgRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Kgatleng%' LIMIT 1`
+      );
+      if (kgRes.rows[0]) return kgRes.rows[0].id;
+    }
+    if (lower.includes('southern') || lower.includes('kanye') || lower.includes('moshupa')) {
+      const soRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Southern%' LIMIT 1`
+      );
+      if (soRes.rows[0]) return soRes.rows[0].id;
+    }
+    if (lower.includes('north-east') || lower.includes('north east') || lower.includes('masunga')) {
+      const neRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%North-East%' LIMIT 1`
+      );
+      if (neRes.rows[0]) return neRes.rows[0].id;
+    }
+    if (
+      lower.includes('north-west') ||
+      lower.includes('north west') ||
+      lower.includes('maun') ||
+      lower.includes('ngamiland')
+    ) {
+      const nwRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%North-West%' LIMIT 1`
+      );
+      if (nwRes.rows[0]) return nwRes.rows[0].id;
+    }
+    if (lower.includes('chobe') || lower.includes('kasane')) {
+      const chRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Chobe%' LIMIT 1`
+      );
+      if (chRes.rows[0]) return chRes.rows[0].id;
+    }
+    if (lower.includes('ghanzi')) {
+      const ghRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Ghanzi%' LIMIT 1`
+      );
+      if (ghRes.rows[0]) return ghRes.rows[0].id;
+    }
+    if (lower.includes('kgalagadi') || lower.includes('tsabong') || lower.includes('hukuntsi')) {
+      const kglRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%Kgalagadi%' LIMIT 1`
+      );
+      if (kglRes.rows[0]) return kglRes.rows[0].id;
+    }
+    if (lower.includes('south-west') || lower.includes('south west')) {
+      const swRes = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE name ILIKE '%South-West%' LIMIT 1`
+      );
+      if (swRes.rows[0]) return swRes.rows[0].id;
+    }
+
+    // If still not matched, persist custom district into geographic_districts so it's guaranteed to have a valid foreign key:
+    try {
+      const insertRes = await query<{ id: string }>(
+        `INSERT INTO geographic_districts (name, administrative_region, country_code, is_active, sort_order)
+         VALUES ($1, $1, 'BW', true, 0)
+         RETURNING id`,
+        [cleanName || trimmed]
+      );
+      if (insertRes.rows[0]?.id) {
+        return insertRes.rows[0].id;
+      }
+    } catch {
+      // If concurrent insert or collision, re-fetch
+      const retry = await query<{ id: string }>(
+        `SELECT id FROM geographic_districts WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+        [cleanName || trimmed]
+      );
+      if (retry.rows[0]?.id) return retry.rows[0].id;
+    }
+
+    // Safe fallback to first district in table
+    const fallback = await query<{ id: string }>(`SELECT id FROM geographic_districts LIMIT 1`);
+    if (fallback.rows[0]?.id) return fallback.rows[0].id;
+  } catch (err) {
+    console.warn('[RESOLVE DISTRICT ID NOTICE]', err);
+  }
+
+  return null;
+}
+
+export function normalizeCompanyType(input?: string | null): string {
+  if (!input) return 'private_company';
+  const lower = String(input).toLowerCase().trim();
+  if (lower.includes('sole')) return 'sole_proprietor';
+  if (lower.includes('partner')) return 'partnership';
+  if (lower.includes('public')) return 'public_company';
+  if (lower.includes('coop')) return 'cooperative';
+  if (lower.includes('ngo') || lower.includes('non-profit')) return 'ngo';
+  if (lower.includes('joint') || lower.includes('jv')) return 'joint_venture';
+  if (lower.includes('other')) return 'other';
+  if (lower.includes('private') || lower.includes('pty') || lower.includes('ltd') || lower.includes('close')) return 'private_company';
+  const allowed = ['sole_proprietor', 'partnership', 'private_company', 'public_company', 'cooperative', 'ngo', 'joint_venture', 'other'];
+  if (allowed.includes(lower)) return lower;
+  return 'private_company';
+}
+
+export function normalizeComplianceStatus(input?: string | null): string {
+  if (!input) return 'Action required';
+  const trimmed = String(input).trim();
+  if (trimmed === 'Fully compliant' || trimmed.toLowerCase() === 'compliant') return 'Fully compliant';
+  if (trimmed === 'Non-compliant') return 'Non-compliant';
+  return 'Action required';
+}
+
 export class SuppliersRepository {
   async calculateCompleteness(supplierId: string): Promise<number> {
     try {
@@ -86,6 +309,7 @@ export class SuppliersRepository {
       if (sRes.rows.length === 0) return 0;
       const s = sRes.rows[0];
 
+      let totalCount = 13;
       let completedCount = 0;
 
       // 10 Company items
@@ -112,7 +336,7 @@ export class SuppliersRepository {
         }
       }
 
-      // 4 Document items: CIPA, Tax Clearance, Workers Comp, Public Liability
+      // Document items: CIPA, Tax Clearance (mandatory), Workers Comp, Public Liability (optional if uploaded)
       const dRes = await query(
         `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until
          FROM supplier_documents sd
@@ -135,10 +359,17 @@ export class SuppliersRepository {
 
       if (isValid(['cipa', 'incorporation', 'company_reg'])) completedCount++;
       if (isValid(['tax', 'burs'])) completedCount++;
-      if (isValid(['safety', 'compensation', 'wca'])) completedCount++;
-      if (isValid(['insurance', 'liability'])) completedCount++;
 
-      return Math.round((completedCount / 15) * 100);
+      if (isValid(['safety', 'compensation', 'wca'])) {
+        totalCount++;
+        completedCount++;
+      }
+      if (isValid(['insurance', 'liability'])) {
+        totalCount++;
+        completedCount++;
+      }
+
+      return Math.round((completedCount / Math.max(1, totalCount)) * 100);
     } catch (err) {
       console.warn('[RECALCULATE COMPLETENESS ERROR]', err);
       return 0;
@@ -147,25 +378,47 @@ export class SuppliersRepository {
 
   async getById(supplierId: string): Promise<SupplierProfile | null> {
     const score = await this.calculateCompleteness(supplierId);
-    await query(
-      `UPDATE suppliers SET profile_completeness = $1 WHERE id = $2`,
-      [score, supplierId]
-    );
+    if (score > 0) {
+      await query(
+        `UPDATE suppliers SET profile_completeness = $1 WHERE id = $2`,
+        [score, supplierId]
+      );
+    }
 
     const res = await query<SupplierProfile>(
-      `SELECT s.id, s.legal_name AS "legalName", s.trading_name AS "tradingName",
-              s.cipa_uin AS "cipaUin", s.cipa_uin AS "cipaNumber", s.burs_tin AS "bursTin", s.burs_tin AS "tinNumber",
-              s.ppra_registration_no AS "ppraRegistrationNo", s.ppra_registration_no AS "ppraCode",
-              s.company_type AS "companyType", s.year_established AS "yearEstablished", s.description,
-              s.physical_address AS "physicalAddress", s.postal_address AS "postalAddress", s.city,
-              s.district_id AS "districtId", gd.name AS "districtName",
-              s.primary_phone AS "primaryPhone", s.email, s.website,
-              s.bank_name AS "bankName", s.bank_branch AS "bankBranch", s.account_number_masked AS "accountNumberMasked",
-              s.employee_count_band AS "employeeCountBand", s.citizen_owned_percentage AS "citizenOwnedPercentage",
-              s.youth_owned AS "youthOwned", s.women_owned AS "womenOwned", s.disability_owned AS "disabilityOwned",
-              s.edd_certified AS "eddCertified", s.edd_certificate_no AS "eddCertificateNo", s.edd_valid_until AS "eddValidUntil",
-              s.status, s.verification_status AS "verificationStatus", s.compliance_status AS "complianceStatus",
-              s.profile_completeness AS "profileCompleteness"
+      `SELECT s.id, 
+              s.legal_name AS "legalName", s.legal_name,
+              s.trading_name AS "tradingName", s.trading_name,
+              s.cipa_uin AS "cipaUin", s.cipa_uin AS "cipaNumber", s.cipa_uin,
+              s.burs_tin AS "bursTin", s.burs_tin AS "tinNumber", s.burs_tin,
+              s.ppra_registration_no AS "ppraRegistrationNo", s.ppra_registration_no AS "ppraCode", s.ppra_registration_no,
+              s.company_type AS "companyType", s.company_type,
+              s.year_established AS "yearEstablished", s.year_established,
+              s.description,
+              s.physical_address AS "physicalAddress", s.physical_address,
+              s.postal_address AS "postalAddress", s.postal_address,
+              s.city,
+              s.district_id AS "districtId", s.district_id,
+              gd.name AS "districtName", gd.name AS "district",
+              s.primary_phone AS "primaryPhone", s.primary_phone,
+              s.email,
+              s.website,
+              s.bank_name AS "bankName", s.bank_name,
+              s.bank_branch AS "bankBranch", s.bank_branch,
+              s.account_number_masked AS "accountNumberMasked", s.account_number_masked,
+              s.employee_count_band AS "employeeCountBand",
+              s.citizen_owned_percentage AS "citizenOwnedPercentage", s.citizen_owned_percentage,
+              s.youth_owned AS "youthOwned", s.youth_owned,
+              s.women_owned AS "womenOwned", s.women_owned,
+              s.disability_owned AS "disabilityOwned", s.disability_owned,
+              s.edd_certified AS "eddCertified", s.edd_certified,
+              s.edd_certificate_no AS "eddCertificateNo", s.edd_certificate_no,
+              s.edd_valid_until AS "eddValidUntil",
+              s.status,
+              s.verification_status AS "verificationStatus", s.verification_status,
+              s.compliance_status AS "complianceStatus", s.compliance_status,
+              s.profile_completeness AS "profileCompleteness", s.profile_completeness,
+              s.missing_items AS "missingItems", s.missing_items
        FROM suppliers s
        LEFT JOIN geographic_districts gd ON gd.id = s.district_id
        WHERE s.id = $1 AND s.deleted_at IS NULL`,
@@ -178,101 +431,202 @@ export class SuppliersRepository {
     const fields: string[] = [];
     const params: any[] = [supplierId];
 
-    if (data.legalName !== undefined) {
-      params.push(data.legalName);
+    // 1. legal_name
+    const legalName = data.legal_name !== undefined ? data.legal_name : data.legalName;
+    if (legalName !== undefined) {
+      params.push(legalName ? String(legalName).trim() : null);
       fields.push(`legal_name = $${params.length}`);
     }
-    if (data.tradingName !== undefined) {
-      params.push(data.tradingName);
+
+    // 2. trading_name
+    const tradingName = data.trading_name !== undefined ? data.trading_name : data.tradingName;
+    if (tradingName !== undefined) {
+      params.push(tradingName ? String(tradingName).trim() : null);
       fields.push(`trading_name = $${params.length}`);
     }
-    if (data.bursTin !== undefined || data.tinNumber !== undefined) {
-      params.push(data.bursTin || data.tinNumber);
-      fields.push(`burs_tin = $${params.length}`);
-    }
-    if (data.cipaUin !== undefined || data.cipaNumber !== undefined) {
-      params.push(data.cipaUin || data.cipaNumber);
+
+    // 3. cipa_uin
+    const cipaUin = data.cipa_uin !== undefined ? data.cipa_uin : (data.cipaUin !== undefined ? data.cipaUin : data.cipaNumber);
+    if (cipaUin !== undefined) {
+      params.push(cipaUin ? String(cipaUin).trim() : null);
       fields.push(`cipa_uin = $${params.length}`);
     }
-    if (data.ppraRegistrationNo !== undefined || data.ppraCode !== undefined) {
-      params.push(data.ppraRegistrationNo || data.ppraCode);
+
+    // 4. burs_tin
+    const bursTin = data.burs_tin !== undefined ? data.burs_tin : (data.bursTin !== undefined ? data.bursTin : data.tinNumber);
+    if (bursTin !== undefined) {
+      params.push(bursTin ? String(bursTin).trim() : null);
+      fields.push(`burs_tin = $${params.length}`);
+    }
+
+    // 5. ppra_registration_no
+    const ppraReg = data.ppra_registration_no !== undefined ? data.ppra_registration_no : (data.ppraRegistrationNo !== undefined ? data.ppraRegistrationNo : data.ppraCode);
+    if (ppraReg !== undefined) {
+      params.push(ppraReg ? String(ppraReg).trim() : null);
       fields.push(`ppra_registration_no = $${params.length}`);
     }
-    if (data.bankName !== undefined) {
-      params.push(data.bankName);
-      fields.push(`bank_name = $${params.length}`);
-    }
-    if (data.bankBranch !== undefined) {
-      params.push(data.bankBranch);
-      fields.push(`bank_branch = $${params.length}`);
-    }
-    if (data.accountNumberMasked !== undefined) {
-      params.push(data.accountNumberMasked);
-      fields.push(`account_number_masked = $${params.length}`);
-    }
-    if (data.companyType !== undefined) {
-      params.push(data.companyType);
+
+    // 6. company_type
+    const rawCompanyType = data.company_type !== undefined ? data.company_type : data.companyType;
+    if (rawCompanyType !== undefined) {
+      params.push(normalizeCompanyType(rawCompanyType));
       fields.push(`company_type = $${params.length}`);
     }
-    if (data.yearEstablished !== undefined) {
-      params.push(data.yearEstablished);
+
+    // 7. year_established
+    const yearEstablished = data.year_established !== undefined ? data.year_established : data.yearEstablished;
+    if (yearEstablished !== undefined) {
+      const num = Number(yearEstablished);
+      params.push(!isNaN(num) && num > 0 ? num : null);
       fields.push(`year_established = $${params.length}`);
     }
+
+    // 8. description
     if (data.description !== undefined) {
-      params.push(data.description);
+      params.push(data.description ? String(data.description).trim() : null);
       fields.push(`description = $${params.length}`);
     }
-    if (data.physicalAddress !== undefined) {
-      params.push(data.physicalAddress);
+
+    // 9. physical_address
+    const physicalAddress = data.physical_address !== undefined ? data.physical_address : data.physicalAddress;
+    if (physicalAddress !== undefined) {
+      params.push(physicalAddress ? String(physicalAddress).trim() : null);
       fields.push(`physical_address = $${params.length}`);
     }
-    if (data.postalAddress !== undefined) {
-      params.push(data.postalAddress);
+
+    // 10. postal_address
+    const postalAddress = data.postal_address !== undefined ? data.postal_address : data.postalAddress;
+    if (postalAddress !== undefined) {
+      params.push(postalAddress ? String(postalAddress).trim() : null);
       fields.push(`postal_address = $${params.length}`);
     }
+
+    // 11. city
     if (data.city !== undefined) {
-      params.push(data.city);
+      params.push(data.city ? String(data.city).trim() : null);
       fields.push(`city = $${params.length}`);
     }
-    if (data.districtId !== undefined || data.district !== undefined) {
-      params.push(data.districtId || data.district);
+
+    // 12. district_id (safely resolved to geographic_districts foreign key UUID)
+    const rawDistrict = (typeof data.district === 'string' && data.district.trim())
+      ? data.district.trim()
+      : (typeof data.district_id === 'string' && data.district_id.trim())
+        ? data.district_id.trim()
+        : (typeof data.districtId === 'string' && data.districtId.trim())
+          ? data.districtId.trim()
+          : (data.district !== undefined ? data.district : (data.district_id !== undefined ? data.district_id : data.districtId));
+    if (rawDistrict !== undefined) {
+      const resolvedDistrictId = await resolveDistrictId(rawDistrict);
+      params.push(resolvedDistrictId);
       fields.push(`district_id = $${params.length}`);
     }
-    if (data.primaryPhone !== undefined) {
-      params.push(data.primaryPhone);
+
+    // 13. primary_phone
+    const primaryPhone = data.primary_phone !== undefined ? data.primary_phone : (data.primaryPhone !== undefined ? data.primaryPhone : data.phone);
+    if (primaryPhone !== undefined) {
+      params.push(primaryPhone ? String(primaryPhone).trim() : null);
       fields.push(`primary_phone = $${params.length}`);
     }
+
+    // 14. email
     if (data.email !== undefined) {
-      params.push(data.email);
+      params.push(data.email ? String(data.email).trim().toLowerCase() : null);
       fields.push(`email = $${params.length}`);
     }
+
+    // 15. website
     if (data.website !== undefined) {
-      params.push(data.website);
+      params.push(data.website ? String(data.website).trim() : null);
       fields.push(`website = $${params.length}`);
     }
-    if (data.citizenOwnedPercentage !== undefined) {
-      params.push(data.citizenOwnedPercentage);
+
+    // 16. bank_name
+    const bankName = data.bank_name !== undefined ? data.bank_name : data.bankName;
+    if (bankName !== undefined) {
+      params.push(bankName ? String(bankName).trim() : null);
+      fields.push(`bank_name = $${params.length}`);
+    }
+
+    // 17. bank_branch
+    const bankBranch = data.bank_branch !== undefined ? data.bank_branch : data.bankBranch;
+    if (bankBranch !== undefined) {
+      params.push(bankBranch ? String(bankBranch).trim() : null);
+      fields.push(`bank_branch = $${params.length}`);
+    }
+
+    // 18. account_number_masked
+    const accountMasked = data.account_number_masked !== undefined
+      ? data.account_number_masked
+      : (data.accountNumberMasked !== undefined
+          ? data.accountNumberMasked
+          : (data.bankAccountNumber !== undefined ? data.bankAccountNumber : data.accountNumber));
+    if (accountMasked !== undefined) {
+      params.push(accountMasked ? String(accountMasked).trim() : null);
+      fields.push(`account_number_masked = $${params.length}`);
+    }
+
+    // 19. citizen_owned_percentage
+    const citizenPct = data.citizen_owned_percentage !== undefined ? data.citizen_owned_percentage : data.citizenOwnedPercentage;
+    if (citizenPct !== undefined) {
+      const num = Number(citizenPct);
+      params.push(!isNaN(num) ? num : 0);
       fields.push(`citizen_owned_percentage = $${params.length}`);
     }
-    if (data.youthOwned !== undefined) {
-      params.push(data.youthOwned);
+
+    // 20. youth_owned
+    const youthOwned = data.youth_owned !== undefined ? data.youth_owned : data.youthOwned;
+    if (youthOwned !== undefined) {
+      params.push(Boolean(youthOwned));
       fields.push(`youth_owned = $${params.length}`);
     }
-    if (data.womenOwned !== undefined) {
-      params.push(data.womenOwned);
+
+    // 21. women_owned
+    const womenOwned = data.women_owned !== undefined ? data.women_owned : data.womenOwned;
+    if (womenOwned !== undefined) {
+      params.push(Boolean(womenOwned));
       fields.push(`women_owned = $${params.length}`);
     }
-    if (data.disabilityOwned !== undefined) {
-      params.push(data.disabilityOwned);
+
+    // 22. disability_owned
+    const disabilityOwned = data.disability_owned !== undefined ? data.disability_owned : data.disabilityOwned;
+    if (disabilityOwned !== undefined) {
+      params.push(Boolean(disabilityOwned));
       fields.push(`disability_owned = $${params.length}`);
     }
-    if (data.eddCertified !== undefined) {
-      params.push(data.eddCertified);
+
+    // 23. edd_certified
+    const eddCertified = data.edd_certified !== undefined ? data.edd_certified : data.eddCertified;
+    if (eddCertified !== undefined) {
+      params.push(Boolean(eddCertified));
       fields.push(`edd_certified = $${params.length}`);
     }
-    if (data.eddCertificateNo !== undefined) {
-      params.push(data.eddCertificateNo);
+
+    // 24. profile_completeness
+    const profileCompleteness = data.profile_completeness !== undefined ? data.profile_completeness : data.profileCompleteness;
+    if (profileCompleteness !== undefined) {
+      const num = Math.min(100, Math.max(0, Math.round(Number(profileCompleteness) || 0)));
+      params.push(num);
+      fields.push(`profile_completeness = $${params.length}`);
+    }
+
+    // 25. compliance_status
+    const rawComplianceStatus = data.compliance_status !== undefined ? data.compliance_status : data.complianceStatus;
+    if (rawComplianceStatus !== undefined) {
+      params.push(normalizeComplianceStatus(rawComplianceStatus));
+      fields.push(`compliance_status = $${params.length}`);
+    }
+
+    // Optional auxiliary attributes:
+    if (data.edd_certificate_no !== undefined || data.eddCertificateNo !== undefined) {
+      const eddNo = data.edd_certificate_no !== undefined ? data.edd_certificate_no : data.eddCertificateNo;
+      params.push(eddNo ? String(eddNo).trim() : null);
       fields.push(`edd_certificate_no = $${params.length}`);
+    }
+
+    if (data.missing_items !== undefined || data.missingItems !== undefined) {
+      const missing = data.missing_items !== undefined ? data.missing_items : data.missingItems;
+      params.push(Array.isArray(missing) ? missing : []);
+      fields.push(`missing_items = $${params.length}`);
     }
 
     if (!fields.length) {

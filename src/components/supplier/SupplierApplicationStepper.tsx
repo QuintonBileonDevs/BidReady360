@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Call, FormField, PriceLineItem, ApplicationResponse, SupplierDocument } from '../../types';
 import { StatusChip } from '../common/StatusChip';
@@ -77,6 +77,17 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   const [quickUploadDocType, setQuickUploadDocType] = useState<SupplierDocument['documentType'] | null>(null);
   const [quickUploadFileName, setQuickUploadFileName] = useState('');
   const [quickUploadDocNumber, setQuickUploadDocNumber] = useState('');
+  const quickUploadInputRef = useRef<HTMLInputElement>(null);
+
+  const handleQuickUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setQuickUploadFileName(file.name);
+      if (!quickUploadDocNumber) {
+        setQuickUploadDocNumber(`CERT-${Math.floor(1000 + Math.random() * 9000)}`);
+      }
+    }
+  };
 
   // Step 2: Selected documents to package with submission
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>(
@@ -165,7 +176,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     if (!matched) return { status: 'Missing' };
 
     const ref = new Date('2026-10-05').getTime();
-    const exp = new Date(matched.expiryDate).getTime();
+    const exp = matched.expiryDate ? new Date(matched.expiryDate).getTime() : Infinity;
     if (exp < ref || matched.status === 'Expired') {
       return { doc: matched, status: 'Expired' };
     }
@@ -1519,15 +1530,36 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
               <div className="space-y-1.5">
                 <label className="font-semibold text-[#10212E] dark:text-white block">
-                  File name *
+                  Upload actual document *
                 </label>
                 <input
-                  type="text"
-                  placeholder="e.g. Tax_Clearance_2026_Certified.pdf"
-                  value={quickUploadFileName}
-                  onChange={(e) => setQuickUploadFileName(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  type="file"
+                  ref={quickUploadInputRef}
+                  onChange={handleQuickUploadFileChange}
+                  className="hidden"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
                 />
+                <div
+                  onClick={() => quickUploadInputRef.current?.click()}
+                  className="p-4 border-2 border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center cursor-pointer hover:border-[#1F5F99] transition-colors bg-[#F7FAFD] dark:bg-[#10212E]"
+                >
+                  {quickUploadFileName ? (
+                    <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium">
+                      <FileCheck className="w-5 h-5" />
+                      <span>{quickUploadFileName}</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="w-6 h-6 text-[#1F5F99] dark:text-[#38BDF8] mx-auto" />
+                      <p className="text-[14px] font-medium text-[#10212E] dark:text-white">
+                        Click to browse actual document from your device
+                      </p>
+                      <p className="text-[12px] text-[#6B7A87]">
+                        PDF, PNG, JPG, DOC up to 10 MB
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="p-3 bg-[#EAF2FA] dark:bg-[#1E364A]/50 rounded-[6px] text-[#1F5F99] dark:text-[#6FAEE0] text-[14px] flex items-center gap-2">

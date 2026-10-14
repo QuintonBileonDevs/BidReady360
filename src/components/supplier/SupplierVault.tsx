@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { referenceApi, apiRequest } from '../../services/api';
 import { SupplierDocument } from '../../types';
 import {
   FileText,
@@ -25,6 +26,7 @@ import {
   HelpCircle,
   Check,
   Layers,
+  Plus,
 } from 'lucide-react';
 
 interface ExtractedFieldValues {
@@ -63,9 +65,22 @@ export const SupplierVault: React.FC = () => {
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [replacingDoc, setReplacingDoc] = useState<SupplierDocument | null>(null);
   const [previewDoc, setPreviewDoc] = useState<SupplierDocument | null>(null);
+  const [dbDocumentTypes, setDbDocumentTypes] = useState<any[]>([]);
+  const [activeOptionalDocs, setActiveOptionalDocs] = useState<string[]>([]);
+  const [isAddingOptional, setIsAddingOptional] = useState<boolean>(false);
+  const [selectedOptionalType, setSelectedOptionalType] = useState<string>('Company Profile');
+
+  useEffect(() => {
+    referenceApi.loadAll().then(data => {
+      if (data && data.documentTypes) {
+        setDbDocumentTypes(data.documentTypes);
+      }
+    }).catch(err => console.error('Failed to load document types from database', err));
+  }, []);
 
   // Upload Drawer Form State
   const [drawerDocType, setDrawerDocType] = useState<string>('CIPA Certificate of Incorporation');
+  const [customDocType, setCustomDocType] = useState<string>('');
   const [drawerDocNumber, setDrawerDocNumber] = useState('');
   const [drawerIssueDate, setDrawerIssueDate] = useState('2026-01-15');
   const [drawerExpiryDate, setDrawerExpiryDate] = useState('2027-01-15');
@@ -75,6 +90,34 @@ export const SupplierVault: React.FC = () => {
   const [drawerCertificationDate, setDrawerCertificationDate] = useState('2026-09-20');
   const [isFileUploaded, setIsFileUploaded] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedDocTypeObj = dbDocumentTypes.find(dt => dt.name === drawerDocType || dt.code === drawerDocType);
+  const requiresNumber = selectedDocTypeObj ? (selectedDocTypeObj.requiresNumber ?? true) : true;
+  const requiresExpiry = selectedDocTypeObj ? (selectedDocTypeObj.requiresExpiry ?? true) : true;
+
+  const processSelectedFile = (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('File size exceeds 10 MB limit.');
+      return;
+    }
+    const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
+      showToast('Please upload a PDF, PNG, or JPG file.');
+      return;
+    }
+
+    setIsFileUploaded(true);
+    setDrawerFileName(file.name);
+    setDrawerFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
+  };
 
   // "Check the values we read before saving" AI readout
   const [extractedFields, setExtractedFields] = useState<ExtractedFieldValues>({
@@ -254,20 +297,24 @@ export const SupplierVault: React.FC = () => {
     };
   };
 
-  // Check Directors' and Shareholders' ID readiness
+  // Check Directors' and Shareholders' ID readiness (Smart Logic with Actual Uploads & Multiple Directors)
   const directorsList = supplier.directors || [];
   const directorsCount = directorsList.length;
-  const directorsWithIdCount = directorsList.filter(
-    (d) => d.nationalIdOrPassport && d.nationalIdOrPassport.trim().length > 0
-  ).length;
-  const directorDoc = findDoc(['director id', 'director_id', 'shareholder id', 'identity']);
-  const isDirectorsReady = directorsCount > 0 && (directorsWithIdCount === directorsCount || Boolean(directorDoc));
+  const directorDocs = documents.filter((doc) => {
+    const t = (doc.documentType || '').toLowerCase();
+    const title = (doc.title || '').toLowerCase();
+    return t.includes('director') || t.includes('shareholder') || t.includes('identity') || title.includes('director') || title.includes('shareholder');
+  });
+  const directorDoc = directorDocs[0];
+  const isDirectorsReady = directorsCount > 0 && directorDocs.length > 0 && (directorDoc?.status === 'Verified' || directorDoc?.status === 'Pending' || directorDoc?.status === 'Expiring soon');
 
   const directorsStatusLabel = directorsCount === 0
-    ? 'Missing (No directors in Profile)'
-    : directorsWithIdCount === directorsCount || directorDoc
-    ? 'Verified'
-    : `Incomplete (${directorsWithIdCount}/${directorsCount} IDs in Profile)`;
+    ? 'Missing (No directors registered)'
+    : directorDocs.length === 0
+    ? 'Missing (Not uploaded)'
+    : directorDocs.length >= directorsCount
+    ? (directorDoc?.status || 'Verified')
+    : `Incomplete (${directorDocs.length}/${directorsCount} IDs uploaded)`;
 
   // Documents matching
   const cipaDoc = findDoc(['cipa', 'incorporation']);
@@ -311,9 +358,6 @@ export const SupplierVault: React.FC = () => {
   if (youthOwned) {
     conditionalItems.push({ name: 'Youth ownership preference evidence', isReady: getPreferenceStatus(true, youthDoc).isReady });
   }
-  if (womenOwned) {
-    conditionalItems.push({ name: 'Women ownership preference evidence', isReady: getPreferenceStatus(true, womenDoc).isReady });
-  }
   if (disabilityOwned) {
     conditionalItems.push({ name: 'Disability ownership preference evidence', isReady: getPreferenceStatus(true, disabilityDoc).isReady });
   }
@@ -338,8 +382,34 @@ export const SupplierVault: React.FC = () => {
   // Open Drawer Helper
   const handleOpenUploadDrawer = (docType: string, existingDoc?: SupplierDocument) => {
     setReplacingDoc(existingDoc || null);
-    setDrawerDocType(docType);
-    setDrawerDocNumber(existingDoc?.documentNumber || `DOC-${Date.now().toString().slice(-6)}`);
+
+    const actualType = existingDoc?.documentType || docType;
+    const matchedDt = dbDocumentTypes.find(dt => 
+      dt.name.toLowerCase() === actualType.toLowerCase() || 
+      dt.code?.toLowerCase() === actualType.toLowerCase() ||
+      dt.name.toLowerCase().includes(actualType.toLowerCase()) ||
+      actualType.toLowerCase().includes(dt.name.toLowerCase())
+    );
+
+    let resolvedType = 'CIPA Certificate of Incorporation';
+    let resolvedCustom = '';
+
+    if (matchedDt) {
+      resolvedType = matchedDt.name;
+    } else if (actualType) {
+      const found = dbDocumentTypes.find(dt => dt.name === actualType);
+      if (found) {
+        resolvedType = found.name;
+      } else {
+        resolvedType = 'Other (Custom)';
+        resolvedCustom = actualType;
+      }
+    }
+
+    setDrawerDocType(resolvedType);
+    setCustomDocType(resolvedCustom);
+
+    setDrawerDocNumber(existingDoc?.documentNumber || '');
     setDrawerIssueDate(existingDoc?.issueDate || '2026-01-15');
     setDrawerExpiryDate(existingDoc?.expiryDate || '2027-01-15');
     setDrawerFileName(existingDoc ? existingDoc.fileName : '');
@@ -349,10 +419,10 @@ export const SupplierVault: React.FC = () => {
     setIsFileUploaded(Boolean(existingDoc));
 
     setExtractedFields({
-      documentNumber: existingDoc?.documentNumber || `DOC-${Date.now().toString().slice(-6)}`,
+      documentNumber: existingDoc?.documentNumber || '',
       issueDate: existingDoc?.issueDate || '2026-01-15',
       expiryDate: existingDoc?.expiryDate || '2027-01-15',
-      authorityName: getAuthorityForType(docType),
+      authorityName: getAuthorityForType(resolvedType === 'Other (Custom)' ? resolvedCustom : resolvedType),
     });
 
     setIsUploadDrawerOpen(true);
@@ -374,50 +444,51 @@ export const SupplierVault: React.FC = () => {
   const handleSaveDrawerDocument = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!drawerDocNumber || !drawerIssueDate) {
-      alert('Please fill out document number and issue date.');
+    if (!drawerIssueDate) {
+      alert('Please fill out issue date.');
       return;
     }
 
-    const finalFileName = drawerFileName || `${drawerDocType.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    const finalDocType = drawerDocType === 'Other (Custom)' ? (customDocType.trim() || 'Custom Document') : drawerDocType;
+    const finalFileName = drawerFileName || `${finalDocType.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
     const finalFileSize = drawerFileSize || '1.5 MB';
 
     if (replacingDoc) {
       replaceDocument(replacingDoc.id, {
-        documentNumber: drawerDocNumber,
+        documentType: finalDocType,
+        documentNumber: drawerDocNumber || undefined,
         fileName: finalFileName,
         fileSize: finalFileSize,
         issueDate: drawerIssueDate,
-        expiryDate: drawerExpiryDate,
+        expiryDate: requiresExpiry ? drawerExpiryDate : undefined,
         status: 'Pending',
         statusMessage: 'Pending verification by procurement registry officers.',
         rejectionReason: undefined,
         certifiedCopy: drawerCertifiedCopy,
         certificationDate: drawerCertifiedCopy ? drawerCertificationDate : undefined,
       });
-      showToast(`Replaced version for ${drawerDocType}. Status set to Pending review.`);
+      showToast(`Replaced version for ${finalDocType}. Status set to Pending review.`);
     } else {
       uploadDocument({
         supplierId: supplier.id,
-        documentType: drawerDocType,
-        documentNumber: drawerDocNumber,
+        documentType: finalDocType,
+        documentNumber: drawerDocNumber || undefined,
         fileName: finalFileName,
         fileSize: finalFileSize,
         issueDate: drawerIssueDate,
-        expiryDate: drawerExpiryDate,
+        expiryDate: requiresExpiry ? drawerExpiryDate : undefined,
         status: 'Pending',
         statusMessage: 'Pending verification by procurement registry officers.',
         downloadUrl: '#',
         certifiedCopy: drawerCertifiedCopy,
         certificationDate: drawerCertifiedCopy ? drawerCertificationDate : undefined,
         extractedFields: {
-          'Document number': drawerDocNumber,
-          'Issuing authority': extractedFields.authorityName,
+          ...(drawerDocNumber ? { 'Document number': drawerDocNumber } : {}),
           'Issue date': drawerIssueDate,
-          'Valid through': drawerExpiryDate,
+          ...(requiresExpiry ? { 'Valid through': drawerExpiryDate } : { 'Validity': 'Does not expire (Perpetual)' }),
         },
       });
-      showToast(`Uploaded ${drawerDocType} to vault. Status set to Pending review.`);
+      showToast(`Uploaded ${finalDocType} to vault. Status set to Pending review.`);
     }
 
     setIsUploadDrawerOpen(false);
@@ -537,40 +608,92 @@ export const SupplierVault: React.FC = () => {
             onDelete={() => bursDoc && deleteDocument(bursDoc.id)}
           />
 
-          {/* Row 3: Directors & Shareholders ID */}
-          <div className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">
+          {/* Row 3: Directors & Shareholders ID (Multi-document support) */}
+          <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
                     Directors' and shareholders' ID
                   </h3>
-                  <span
-                    className={`text-[12px] px-2.5 py-0.5 rounded-[4px] font-medium ${
-                      isDirectorsReady
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                        : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                    }`}
-                  >
+                  <span className={`text-[12px] px-2.5 py-0.5 rounded-[4px] font-medium ${isDirectorsReady ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}`}>
                     {directorsStatusLabel}
                   </span>
                 </div>
                 <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-                  Identity documents for directors and beneficial owners listed in profile ({directorsWithIdCount}/{directorsCount} IDs completed).
+                  Mandatory statutory identity documents / passports for all registered directors and beneficial shareholders. You can upload multiple ID documents (one for each director/shareholder).
                 </p>
+                {directorsCount > 0 && (
+                  <span className="text-[12px] text-[#6B7A87] italic block">
+                    Registered Directors ({directorsCount}): {directorsList.map(d => `${d.fullName} (${d.role}, ${d.shareholdingPercentage}%)`).join(' · ')}
+                  </span>
+                )}
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setActiveNav('profile')}
-                  className="px-3.5 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>Manage Directors in Profile</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenUploadDrawer('Directors and Shareholders ID')}
+                className="px-3.5 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Director/Shareholder ID</span>
+              </button>
             </div>
+
+            {/* List of uploaded director ID documents */}
+            {directorDocs.length > 0 ? (
+              <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+                {directorDocs.map((dDoc, idx) => (
+                  <div key={dDoc.id || idx} className="flex items-center justify-between p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] gap-3">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-[14px] text-[#10212E] dark:text-white truncate">
+                          {dDoc.fileName}
+                        </span>
+                        <span className="text-[11px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium">
+                          #{dDoc.documentNumber}
+                        </span>
+                        <span className="text-[11px] px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded font-medium">
+                          {dDoc.status}
+                        </span>
+                      </div>
+                      <p className="text-[12px] text-[#6B7A87]">
+                        Size: {dDoc.fileSize} · Uploaded: {dDoc.issueDate || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc(dDoc)}
+                        className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>View</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenUploadDrawer('Directors and Shareholders ID', dDoc)}
+                        className="px-2.5 py-1 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                        <span>Replace</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteDocument(dDoc.id)}
+                        className="p-1 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-[4px] cursor-pointer"
+                        title="Remove ID document"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 text-center text-[13px] text-[#6B7A87] italic bg-white/50 dark:bg-[#132635]/50 rounded-[6px]">
+                No director or shareholder ID documents uploaded yet. Click "Add Director/Shareholder ID" to upload.
+              </div>
+            )}
           </div>
 
           {/* Row 4: Trading Licence */}
@@ -705,19 +828,6 @@ export const SupplierVault: React.FC = () => {
             />
           )}
 
-          {womenOwned && (
-            <PreferenceRow
-              title="Women ownership preference evidence"
-              whyNeeded="Proves women equity or management participation for empowerment preferences."
-              isClaimed={true}
-              doc={womenDoc}
-              onUpload={() => handleOpenUploadDrawer('Women Preference Evidence', womenDoc)}
-              onReplace={() => handleOpenUploadDrawer('Women Preference Evidence', womenDoc)}
-              onView={() => setPreviewDoc(womenDoc || null)}
-              onDelete={() => womenDoc && deleteDocument(womenDoc.id)}
-            />
-          )}
-
           {disabilityOwned && (
             <PreferenceRow
               title="Disability ownership preference evidence"
@@ -799,45 +909,115 @@ export const SupplierVault: React.FC = () => {
 
       {/* ================= SECTION 3: Optional extras ================= */}
       <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-          <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
-            Optional extras
-          </h2>
-          <p className="text-[14px] text-[#6B7A87]">
-            Additional corporate documentation to enhance buyer evaluation, technical scoring, and financial threshold grading.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="space-y-1">
+            <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
+              Optional extras
+            </h2>
+            <p className="text-[14px] text-[#6B7A87]">
+              Additional corporate documentation to enhance buyer evaluation, technical scoring, and financial threshold grading.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAddingOptional(true)}
+            className="px-3.5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add optional document</span>
+          </button>
         </div>
 
+        {/* Modal / Selector for adding optional document */}
+        {isAddingOptional && (
+          <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+            <h3 className="font-medium text-[14px] text-[#10212E] dark:text-white">Select optional document type to add</h3>
+            <div className="flex items-center gap-3">
+              <select
+                value={selectedOptionalType}
+                onChange={(e) => setSelectedOptionalType(e.target.value)}
+                className="flex-1 px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[14px] text-[#10212E] dark:text-white"
+              >
+                <option value="Company Profile">Company profile</option>
+                <option value="CIPA Company Extract">CIPA company extract</option>
+                <option value="Audited Financial Statements">Audited financial statements</option>
+                <option value="Bank Rating Letter">Bank rating letter</option>
+                <option value="Professional or Trade Licence">Professional or trade licence</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!activeOptionalDocs.includes(selectedOptionalType)) {
+                    setActiveOptionalDocs([...activeOptionalDocs, selectedOptionalType]);
+                  }
+                  setIsAddingOptional(false);
+                }}
+                className="px-4 py-2 bg-[#2F8F5B] hover:bg-[#25754b] text-white rounded-[6px] text-[13px] font-medium cursor-pointer"
+              >
+                Show document
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAddingOptional(false)}
+                className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87] hover:bg-white rounded-[6px] text-[13px] cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-4">
-          <DocumentRow
-            title="Company profile"
-            whyNeeded="Corporate capabilities, past performance summary, and executive presentation."
-            doc={companyProfileDoc}
-            onUpload={() => handleOpenUploadDrawer('Company Profile', companyProfileDoc)}
-            onReplace={() => handleOpenUploadDrawer('Company Profile', companyProfileDoc)}
-            onView={() => setPreviewDoc(companyProfileDoc || null)}
-            onDelete={() => companyProfileDoc && deleteDocument(companyProfileDoc.id)}
-          />
+          {(Boolean(companyProfileDoc) || activeOptionalDocs.includes('Company Profile')) && (
+            <DocumentRow
+              title="Company profile"
+              whyNeeded="Corporate capabilities, past performance summary, and executive presentation."
+              doc={companyProfileDoc}
+              onUpload={() => handleOpenUploadDrawer('Company Profile', companyProfileDoc)}
+              onReplace={() => handleOpenUploadDrawer('Company Profile', companyProfileDoc)}
+              onView={() => setPreviewDoc(companyProfileDoc || null)}
+              onDelete={() => {
+                if (companyProfileDoc) deleteDocument(companyProfileDoc.id);
+                setActiveOptionalDocs(activeOptionalDocs.filter(t => t !== 'Company Profile'));
+              }}
+            />
+          )}
 
-          <DocumentRow
-            title="CIPA company extract"
-            whyNeeded="Detailed current company extract from CIPA registry."
-            doc={cipaExtractDoc}
-            onUpload={() => handleOpenUploadDrawer('CIPA Company Extract', cipaExtractDoc)}
-            onReplace={() => handleOpenUploadDrawer('CIPA Company Extract', cipaExtractDoc)}
-            onView={() => setPreviewDoc(cipaExtractDoc || null)}
-            onDelete={() => cipaExtractDoc && deleteDocument(cipaExtractDoc.id)}
-          />
+          {(Boolean(cipaExtractDoc) || activeOptionalDocs.includes('CIPA Company Extract')) && (
+            <DocumentRow
+              title="CIPA company extract"
+              whyNeeded="Detailed current company extract from CIPA registry."
+              doc={cipaExtractDoc}
+              onUpload={() => handleOpenUploadDrawer('CIPA Company Extract', cipaExtractDoc)}
+              onReplace={() => handleOpenUploadDrawer('CIPA Company Extract', cipaExtractDoc)}
+              onView={() => setPreviewDoc(cipaExtractDoc || null)}
+              onDelete={() => {
+                if (cipaExtractDoc) deleteDocument(cipaExtractDoc.id);
+                setActiveOptionalDocs(activeOptionalDocs.filter(t => t !== 'CIPA Company Extract'));
+              }}
+            />
+          )}
 
-          <DocumentRow
-            title="Audited financial statements"
-            whyNeeded="Certified annual financial report signed by a registered accountant."
-            doc={auditedFinancialsDoc}
-            onUpload={() => handleOpenUploadDrawer('Audited Financial Statements', auditedFinancialsDoc)}
-            onReplace={() => handleOpenUploadDrawer('Audited Financial Statements', auditedFinancialsDoc)}
-            onView={() => setPreviewDoc(auditedFinancialsDoc || null)}
-            onDelete={() => auditedFinancialsDoc && deleteDocument(auditedFinancialsDoc.id)}
-          />
+          {(Boolean(auditedFinancialsDoc) || activeOptionalDocs.includes('Audited Financial Statements')) && (
+            <DocumentRow
+              title="Audited financial statements"
+              whyNeeded="Certified annual financial report signed by a registered accountant."
+              doc={auditedFinancialsDoc}
+              onUpload={() => handleOpenUploadDrawer('Audited Financial Statements', auditedFinancialsDoc)}
+              onReplace={() => handleOpenUploadDrawer('Audited Financial Statements', auditedFinancialsDoc)}
+              onView={() => setPreviewDoc(auditedFinancialsDoc || null)}
+              onDelete={() => {
+                if (auditedFinancialsDoc) deleteDocument(auditedFinancialsDoc.id);
+                setActiveOptionalDocs(activeOptionalDocs.filter(t => t !== 'Audited Financial Statements'));
+              }}
+            />
+          )}
+
+          {!Boolean(companyProfileDoc) && !Boolean(cipaExtractDoc) && !Boolean(auditedFinancialsDoc) && activeOptionalDocs.length === 0 && (
+            <div className="p-6 rounded-[8px] border border-dashed border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+              No optional documents selected by default. Click "Add optional document" above to include company profile, extracts, or financial statements.
+            </div>
+          )}
         </div>
       </div>
 
@@ -866,35 +1046,65 @@ export const SupplierVault: React.FC = () => {
 
               <form id="drawer-form" onSubmit={handleSaveDrawerDocument} className="space-y-5 text-[14px]">
                 {/* Document Type */}
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
-                    Document type
+                    Document type (from database catalogue or custom)
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={drawerDocType}
                     onChange={(e) => setDrawerDocType(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A] text-[#10212E] dark:text-white"
-                  />
+                  >
+                    {dbDocumentTypes.length > 0 ? (
+                      dbDocumentTypes.map((dt: any) => (
+                        <option key={dt.code || dt.id} value={dt.name}>
+                          {dt.name} {dt.category ? `(${dt.category})` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="CIPA Certificate of Incorporation">CIPA Certificate of Incorporation</option>
+                        <option value="BURS Tax Clearance Certificate">BURS Tax Clearance Certificate</option>
+                        <option value="Trading Licence">Trading Licence</option>
+                        <option value="Bank Confirmation Letter">Bank Confirmation Letter</option>
+                      </>
+                    )}
+                    <option value="Other (Custom)">Other (Specify custom document type)</option>
+                  </select>
+
+                  {drawerDocType === 'Other (Custom)' && (
+                    <div className="pt-1">
+                      <label className="block text-[12px] font-medium text-[#6B7A87] pb-1">
+                        Enter custom document type name <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customDocType}
+                        onChange={(e) => setCustomDocType(e.target.value)}
+                        placeholder="e.g. Environmental Impact Assessment Certificate"
+                        required
+                        className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white text-[13px]"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                {/* Document Number */}
+                {/* Document Number - Optional */}
                 <div className="space-y-1">
                   <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
-                    Document or certificate number <span className="text-rose-500">*</span>
+                    Document or certificate number <span className="text-[12px] font-normal text-[#6B7A87]">(optional if not applicable)</span>
                   </label>
                   <input
                     type="text"
                     value={drawerDocNumber}
                     onChange={(e) => setDrawerDocNumber(e.target.value)}
-                    placeholder="e.g. BURS-TX-2026-9921"
-                    required
+                    placeholder="e.g. BURS-TX-2026-9921 (leave blank if none)"
                     className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#1F5F99]"
                   />
                 </div>
 
-                {/* Dates */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Dates - Conditional Expiry */}
+                <div className={`grid ${requiresExpiry ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
                   <div className="space-y-1">
                     <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
                       Issue date <span className="text-rose-500">*</span>
@@ -908,17 +1118,26 @@ export const SupplierVault: React.FC = () => {
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
-                      Expiry date
-                    </label>
-                    <input
-                      type="date"
-                      value={drawerExpiryDate}
-                      onChange={(e) => setDrawerExpiryDate(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
-                    />
-                  </div>
+                  {requiresExpiry ? (
+                    <div className="space-y-1">
+                      <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
+                        Expiry date <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={drawerExpiryDate}
+                        onChange={(e) => setDrawerExpiryDate(e.target.value)}
+                        required
+                        className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1 flex flex-col justify-end">
+                      <div className="p-2.5 rounded-[6px] bg-[#EAF2FA] dark:bg-[#1E364A] border border-[#BDE0FE] dark:border-[#2C4D63] text-[12px] font-medium text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1.5">
+                        <span>♾️ Does not expire (Perpetual document)</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* File Upload Drop Zone */}
@@ -926,6 +1145,14 @@ export const SupplierVault: React.FC = () => {
                   <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
                     Select file (PDF, PNG, JPG, max 10 MB)
                   </label>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                  />
 
                   <div
                     onDragOver={(e) => {
@@ -936,14 +1163,13 @@ export const SupplierVault: React.FC = () => {
                     onDrop={(e) => {
                       e.preventDefault();
                       setIsDragOver(false);
-                      setIsFileUploaded(true);
-                      setDrawerFileName('Uploaded_Certificate_2026.pdf');
-                      setDrawerFileSize('1.8 MB');
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) {
+                        processSelectedFile(file);
+                      }
                     }}
                     onClick={() => {
-                      setIsFileUploaded(true);
-                      setDrawerFileName('Uploaded_Certificate_2026.pdf');
-                      setDrawerFileSize('1.8 MB');
+                      fileInputRef.current?.click();
                     }}
                     className={`p-6 border-2 border-dashed rounded-[8px] text-center cursor-pointer transition-colors ${
                       isDragOver
@@ -1002,27 +1228,7 @@ export const SupplierVault: React.FC = () => {
                   )}
                 </div>
 
-                {/* AI Preview Notice Box */}
-                <div className="p-4 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A] border border-[#BDE0FE] dark:border-[#2C4D63] space-y-2">
-                  <div className="flex items-center gap-2 text-[#1F5F99] dark:text-[#38BDF8] font-semibold text-[13px]">
-                    <Sparkles className="w-4 h-4" />
-                    <span>Check the values we read before saving</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-[12px] text-[#43525F] dark:text-[#B2C3D2]">
-                    <div>
-                      <span className="text-[#6B7A87]">Document #:</span> {drawerDocNumber || 'Not set'}
-                    </div>
-                    <div>
-                      <span className="text-[#6B7A87]">Issue date:</span> {drawerIssueDate}
-                    </div>
-                    <div>
-                      <span className="text-[#6B7A87]">Expiry date:</span> {drawerExpiryDate || 'None'}
-                    </div>
-                    <div>
-                      <span className="text-[#6B7A87]">Issuing authority:</span> {getAuthorityForType(drawerDocType)}
-                    </div>
-                  </div>
-                </div>
+
               </form>
             </div>
 
@@ -1049,11 +1255,14 @@ export const SupplierVault: React.FC = () => {
       {/* ================= PREVIEW MODAL ================= */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6 shadow-2xl">
+          <div className="w-full max-w-3xl bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
               <div>
-                <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
-                  {previewDoc.documentType}
+                <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white flex items-center gap-2">
+                  <span>{previewDoc.documentType}</span>
+                  <span className="text-[11px] px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded font-medium">
+                    {previewDoc.status}
+                  </span>
                 </h3>
                 <p className="text-[13px] text-[#6B7A87]">
                   Document #{previewDoc.documentNumber} · File: {previewDoc.fileName}
@@ -1068,24 +1277,58 @@ export const SupplierVault: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] text-center space-y-3">
-              <FileCheck className="w-12 h-12 text-[#1F5F99] dark:text-[#38BDF8] mx-auto" />
-              <div className="space-y-1">
-                <p className="font-semibold text-[#10212E] dark:text-white text-[15px]">
-                  {previewDoc.fileName}
-                </p>
-                <p className="text-[13px] text-[#6B7A87]">
-                  {previewDoc.fileSize} · Uploaded to BidReady360 Vault
-                </p>
+            {/* Document Viewer Screen */}
+            <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
+              <div className="flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#1E364A] pb-3">
+                <div className="flex items-center gap-2 text-[13px] font-semibold text-[#10212E] dark:text-white">
+                  <FileCheck className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
+                  <span>Secure Document Viewer & Metadata</span>
+                </div>
+                <span className="text-[12px] text-[#6B7A87]">
+                  {previewDoc.fileSize} · Verified Secure Vault
+                </span>
               </div>
-              <div className="pt-2 flex justify-center gap-4 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-                <div><span className="text-[#6B7A87]">Issue:</span> {previewDoc.issueDate || 'N/A'}</div>
-                <div><span className="text-[#6B7A87]">Expiry:</span> {previewDoc.expiryDate || 'N/A'}</div>
-                <div><span className="text-[#6B7A87]">Status:</span> {previewDoc.status}</div>
+
+              {/* Simulated Document Page Rendering */}
+              <div className="p-8 bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner space-y-4 text-center">
+                <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
+                  PDF
+                </div>
+                <div>
+                  <h4 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
+                    {previewDoc.fileName}
+                  </h4>
+                  <p className="text-[13px] text-[#6B7A87] mt-0.5">
+                    Official Regulatory Filing / Identity Document
+                  </p>
+                </div>
+                <div className="pt-2 flex flex-wrap justify-center gap-6 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                  <div><span className="text-[#6B7A87]">Document Number:</span> <strong>{previewDoc.documentNumber}</strong></div>
+                  <div><span className="text-[#6B7A87]">Issue Date:</span> <strong>{previewDoc.issueDate || 'N/A'}</strong></div>
+                  <div><span className="text-[#6B7A87]">Expiry Date:</span> <strong>{previewDoc.expiryDate || 'N/A'}</strong></div>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const blob = new Blob([`Mock document content for ${previewDoc.fileName}\nDoc#: ${previewDoc.documentNumber}\nIssued: ${previewDoc.issueDate}`], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = previewDoc.fileName;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  showToast(`Downloaded ${previewDoc.fileName} successfully.`);
+                }}
+                className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Document</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}

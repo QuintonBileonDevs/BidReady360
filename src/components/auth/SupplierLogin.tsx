@@ -315,20 +315,6 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
               Register company
             </button>
           </div>
-
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                loadDemoSupplier();
-                setRole('supplier', 'dashboard');
-              }}
-              className="w-full py-2.5 px-3 bg-[#FFFBEB] hover:bg-[#FEF3C7] dark:bg-[#78350F]/20 dark:hover:bg-[#78350F]/30 border border-[#FDE68A] dark:border-[#78350F]/50 rounded-[8px] text-[13px] text-[#92400E] dark:text-[#FCD34D] font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4 text-[#D97706]" />
-              <span>Explore labelled demo account (Kopano)</span>
-            </button>
-          </div>
         </div>
       </div>
     </AuthLayout>
