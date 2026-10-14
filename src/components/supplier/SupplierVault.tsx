@@ -61,6 +61,28 @@ export const SupplierVault: React.FC = () => {
   const [eddCertified, setEddCertified] = useState<boolean>(supplier.eddCertified ?? false);
   const [biddingPublicTenders, setBiddingPublicTenders] = useState<boolean>(supplier.biddingPublicTenders ?? false);
 
+  // Synchronize state when supplier updates from Profile page or storage
+  useEffect(() => {
+    setVatRegistered(supplier.vatRegistered ?? false);
+    setCitizenOwned(
+      (supplier.citizenOwnedPercentage && supplier.citizenOwnedPercentage > 0) || supplier.citizenOwnershipSet || false
+    );
+    setYouthOwned(supplier.youthOwned ?? false);
+    setWomenOwned(supplier.womenOwned ?? false);
+    setDisabilityOwned(supplier.disabilityOwned ?? false);
+    setEddCertified(supplier.eddCertified ?? false);
+    setBiddingPublicTenders(supplier.biddingPublicTenders ?? false);
+  }, [
+    supplier.vatRegistered,
+    supplier.citizenOwnedPercentage,
+    supplier.citizenOwnershipSet,
+    supplier.youthOwned,
+    supplier.womenOwned,
+    supplier.disabilityOwned,
+    supplier.eddCertified,
+    supplier.biddingPublicTenders,
+  ]);
+
   // Drawers & Modals state
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [replacingDoc, setReplacingDoc] = useState<SupplierDocument | null>(null);
@@ -151,22 +173,22 @@ export const SupplierVault: React.FC = () => {
       case 'youthOwned':
         setYouthOwned(value);
         updateSupplierProfile({ youthOwned: value });
-        showToast(value ? 'Youth-owned preference claim activated.' : 'Youth-owned preference claim deactivated.');
+        showToast(value ? 'Youth-owned preference claim activated. Synced with Profile & Documents.' : 'Youth-owned preference claim deactivated.');
         break;
       case 'womenOwned':
         setWomenOwned(value);
         updateSupplierProfile({ womenOwned: value });
-        showToast(value ? 'Women-owned preference claim activated.' : 'Women-owned preference claim deactivated.');
+        showToast(value ? 'Women-owned preference claim activated. Synced with Profile & Documents.' : 'Women-owned preference claim deactivated.');
         break;
       case 'disabilityOwned':
         setDisabilityOwned(value);
         updateSupplierProfile({ disabilityOwned: value });
-        showToast(value ? 'Disability-owned preference claim activated.' : 'Disability-owned preference claim deactivated.');
+        showToast(value ? 'Disability-owned preference claim activated. Synced with Profile & Documents.' : 'Disability-owned preference claim deactivated.');
         break;
       case 'eddCertified':
         setEddCertified(value);
         updateSupplierProfile({ eddCertified: value });
-        showToast(value ? 'EDD preference claim activated.' : 'EDD preference claim deactivated.');
+        showToast(value ? 'EDD preference claim activated. Synced with Profile & Documents.' : 'EDD preference claim deactivated.');
         break;
       case 'biddingPublicTenders':
         setBiddingPublicTenders(value);
@@ -358,6 +380,9 @@ export const SupplierVault: React.FC = () => {
   if (youthOwned) {
     conditionalItems.push({ name: 'Youth ownership preference evidence', isReady: getPreferenceStatus(true, youthDoc).isReady });
   }
+  if (womenOwned) {
+    conditionalItems.push({ name: 'Women ownership preference evidence', isReady: getPreferenceStatus(true, womenDoc).isReady });
+  }
   if (disabilityOwned) {
     conditionalItems.push({ name: 'Disability ownership preference evidence', isReady: getPreferenceStatus(true, disabilityDoc).isReady });
   }
@@ -373,10 +398,11 @@ export const SupplierVault: React.FC = () => {
     conditionalItems.push({ name: 'PPRA registration certificate', isReady: getDerivedStatus(ppraDoc).isReady });
   }
 
-  const allActiveItems = [...mandatoryItems, ...conditionalItems];
-  const totalActiveCount = allActiveItems.length;
-  const readyCount = allActiveItems.filter((i) => i.isReady).length;
-  const missingItemNames = allActiveItems.filter((i) => !i.isReady).map((i) => i.name);
+  // Document completeness is strictly evaluated against documents required for everyone (5 items).
+  // Conditional and preference documents do not make up part of this completeness.
+  const totalRequiredCount = mandatoryItems.length;
+  const readyCount = mandatoryItems.filter((i) => i.isReady).length;
+  const missingItemNames = mandatoryItems.filter((i) => !i.isReady).map((i) => i.name);
   const isReadyToApply = missingItemNames.length === 0;
 
   // Open Drawer Helper
@@ -532,17 +558,22 @@ export const SupplierVault: React.FC = () => {
         <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
           <div className="flex items-center justify-between text-[14px]">
             <span className="font-semibold text-[#10212E] dark:text-white">
-              {readyCount} of {totalActiveCount} required documents ready
+              {readyCount} of {totalRequiredCount} required documents ready
             </span>
             <span className="text-[#6B7A87] font-mono text-[13px]">
-              {Math.round((readyCount / Math.max(1, totalActiveCount)) * 100)}%
+              {Math.round((readyCount / Math.max(1, totalRequiredCount)) * 100)}%
             </span>
           </div>
           <div className="w-full h-2.5 bg-[#D5E0EA] dark:bg-[#1E364A] rounded-full overflow-hidden">
             <div
               className="h-full bg-[#1F5F99] dark:bg-[#38BDF8] transition-all duration-300 rounded-full"
-              style={{ width: `${Math.round((readyCount / Math.max(1, totalActiveCount)) * 100)}%` }}
+              style={{ width: `${Math.round((readyCount / Math.max(1, totalRequiredCount)) * 100)}%` }}
             />
+          </div>
+
+          <div className="flex items-center justify-between text-[12px] text-[#6B7A87]">
+            <span>Based on statutory documents required for everyone (5 items)</span>
+            <span>{isReadyToApply ? 'All mandatory statutory documents ready' : `${missingItemNames.length} missing`}</span>
           </div>
 
           {missingItemNames.length > 0 && (
@@ -758,24 +789,32 @@ export const SupplierVault: React.FC = () => {
             description="Is your company majority youth-owned or managed?"
             checked={youthOwned}
             onChange={(val) => handleToggleAttribute('youthOwned', val)}
+            badge="Linked to Profile: Statutory Preference"
+            onBadgeClick={() => setActiveNav('profile')}
           />
           <SwitchCard
             label="Women-owned business?"
             description="Is your company majority women-owned or managed?"
             checked={womenOwned}
             onChange={(val) => handleToggleAttribute('womenOwned', val)}
+            badge="Linked to Profile: Statutory Preference"
+            onBadgeClick={() => setActiveNav('profile')}
           />
           <SwitchCard
             label="Disability-owned business?"
             description="Is your company majority disability-owned or managed?"
             checked={disabilityOwned}
             onChange={(val) => handleToggleAttribute('disabilityOwned', val)}
+            badge="Linked to Profile: Statutory Preference"
+            onBadgeClick={() => setActiveNav('profile')}
           />
           <SwitchCard
             label="Economic Diversification (EDD) registered?"
             description="Are you certified under the EDD local manufacturing scheme?"
             checked={eddCertified}
             onChange={(val) => handleToggleAttribute('eddCertified', val)}
+            badge="Linked to Profile: Statutory Preference"
+            onBadgeClick={() => setActiveNav('profile')}
           />
           <SwitchCard
             label="Bidding on public-body tenders?"
@@ -825,6 +864,21 @@ export const SupplierVault: React.FC = () => {
               onReplace={() => handleOpenUploadDrawer('Youth Preference Evidence', youthDoc)}
               onView={() => setPreviewDoc(youthDoc || null)}
               onDelete={() => youthDoc && deleteDocument(youthDoc.id)}
+              onNavigateToProfile={() => setActiveNav('profile')}
+            />
+          )}
+
+          {womenOwned && (
+            <PreferenceRow
+              title="Women ownership preference evidence"
+              whyNeeded="Proves women equity or management participation for empowerment preferences."
+              isClaimed={true}
+              doc={womenDoc}
+              onUpload={() => handleOpenUploadDrawer('Women Preference Evidence', womenDoc)}
+              onReplace={() => handleOpenUploadDrawer('Women Preference Evidence', womenDoc)}
+              onView={() => setPreviewDoc(womenDoc || null)}
+              onDelete={() => womenDoc && deleteDocument(womenDoc.id)}
+              onNavigateToProfile={() => setActiveNav('profile')}
             />
           )}
 
@@ -838,6 +892,7 @@ export const SupplierVault: React.FC = () => {
               onReplace={() => handleOpenUploadDrawer('Disability Preference Evidence', disabilityDoc)}
               onView={() => setPreviewDoc(disabilityDoc || null)}
               onDelete={() => disabilityDoc && deleteDocument(disabilityDoc.id)}
+              onNavigateToProfile={() => setActiveNav('profile')}
             />
           )}
 
@@ -851,6 +906,7 @@ export const SupplierVault: React.FC = () => {
               onReplace={() => handleOpenUploadDrawer('EDD Certificate', eddDoc)}
               onView={() => setPreviewDoc(eddDoc || null)}
               onDelete={() => eddDoc && deleteDocument(eddDoc.id)}
+              onNavigateToProfile={() => setActiveNav('profile')}
             />
           )}
 
@@ -1515,6 +1571,7 @@ interface PreferenceRowProps {
   onReplace: () => void;
   onView: () => void;
   onDelete: () => void;
+  onNavigateToProfile?: () => void;
 }
 
 const PreferenceRow: React.FC<PreferenceRowProps> = ({
@@ -1526,6 +1583,7 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
   onReplace,
   onView,
   onDelete,
+  onNavigateToProfile,
 }) => {
   const prefStatus = useMemo(() => {
     if (!isClaimed) {
@@ -1569,12 +1627,22 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
             <span className={`text-[12px] px-2.5 py-0.5 rounded-[4px] font-medium ${prefStatus.chipClass}`}>
               {prefStatus.label}
             </span>
+            {onNavigateToProfile && (
+              <button
+                type="button"
+                onClick={onNavigateToProfile}
+                className="text-[11px] px-2 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] hover:underline cursor-pointer inline-flex items-center gap-1"
+                title="View corresponding preference in Profile"
+              >
+                <span>Linked to Profile</span>
+              </button>
+            )}
           </div>
           <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
             {whyNeeded}
           </p>
           <span className="text-[12px] text-[#6B7A87] italic block">
-            Each buyer decides how to use these claims.
+            Each buyer decides how to use these claims under BidReady360.
           </span>
           {doc?.expiryDate && (
             <div className="text-[12px] text-[#6B7A87] flex items-center gap-1.5 pt-0.5">
@@ -1634,6 +1702,8 @@ interface SwitchCardProps {
   description: string;
   checked: boolean;
   onChange: (val: boolean) => void;
+  badge?: string;
+  onBadgeClick?: () => void;
 }
 
 const SwitchCard: React.FC<SwitchCardProps> = ({
@@ -1641,13 +1711,27 @@ const SwitchCard: React.FC<SwitchCardProps> = ({
   description,
   checked,
   onChange,
+  badge,
+  onBadgeClick,
 }) => {
   return (
     <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/40 flex items-center justify-between gap-3">
       <div className="space-y-0.5">
-        <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
-          {label}
-        </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
+            {label}
+          </span>
+          {badge && (
+            <button
+              type="button"
+              onClick={onBadgeClick}
+              className="text-[11px] px-2 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] hover:underline cursor-pointer inline-flex items-center gap-0.5"
+              title="Click to view corresponding setting in Profile"
+            >
+              {badge}
+            </button>
+          )}
+        </div>
         <p className="text-[12px] text-[#6B7A87]">
           {description}
         </p>

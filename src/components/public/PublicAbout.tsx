@@ -26,10 +26,100 @@ import {
   FileText,
   UserCheck,
   Check,
+  Scan,
+  Copy,
+  X,
+  RefreshCw,
 } from 'lucide-react';
+
+// Strictly Demo Data for Hero Product Preview (Safe from client confidential data)
+const DEMO_PASSPORT_DOCS = [
+  {
+    id: 'doc-cipa',
+    title: 'CIPA Certificate of Incorporation',
+    filename: 'CIPA_Cert_BW00008492019.pdf',
+    authority: 'Companies and Intellectual Property Authority (CIPA)',
+    type: 'Statutory Registry',
+    status: 'Verified (API Sync)',
+    size: '1.4 MB',
+    date: '02 Oct 2026',
+    expiry: 'Perpetual Standing',
+    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    ocrConfidence: '99.8%',
+  },
+  {
+    id: 'doc-tax',
+    title: 'BURS Tax Clearance Certificate',
+    filename: 'BURS_TCC_Q4_2026.pdf',
+    authority: 'Botswana Unified Revenue Service (BURS)',
+    type: 'Revenue & Tax Compliance',
+    status: 'Valid to 31 Dec 2026',
+    size: '820 KB',
+    date: '04 Oct 2026',
+    expiry: '31 Dec 2026',
+    sha256: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+    ocrConfidence: '100%',
+  },
+  {
+    id: 'doc-ppra',
+    title: 'PPRA Contractor Registration',
+    filename: 'PPRA_Code01_Building_GradeE.pdf',
+    authority: 'Public Procurement Regulatory Authority (PPRA)',
+    type: 'Works Contractor Accreditation',
+    status: 'Grade E Active',
+    size: '1.8 MB',
+    date: '05 Oct 2026',
+    expiry: '30 Sep 2027',
+    sha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
+    ocrConfidence: '99.4%',
+  },
+  {
+    id: 'doc-bank',
+    title: 'Bank Account Confirmation Letter',
+    filename: 'Absa_Bank_Letter_Confirmed.pdf',
+    authority: 'Absa Bank Botswana Limited',
+    type: 'Financial Soundness',
+    status: 'KYC Cleared',
+    size: '410 KB',
+    date: '01 Oct 2026',
+    expiry: 'Valid (Issued < 3 months)',
+    sha256: 'ef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d',
+    ocrConfidence: '99.1%',
+  },
+  {
+    id: 'doc-omang',
+    title: 'Certified Omang IDs (Resident Directors)',
+    filename: 'Directors_Omang_Certified_2026.pdf',
+    authority: 'Department of Civil & National Registration',
+    type: 'Beneficial Ownership Verification',
+    status: '100% Equity Verified',
+    size: '2.6 MB',
+    date: '01 Oct 2026',
+    expiry: 'Valid to 14 Aug 2031',
+    sha256: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+    ocrConfidence: '99.9%',
+  },
+];
+
 export const PublicAbout: React.FC = () => {
-  const { calls, setRole, setActiveNav, supplier, setSelectedCallId } = useApp();
+  const { calls, setRole, setActiveNav, setSelectedCallId } = useApp();
   const [howItWorksTab, setHowItWorksTab] = useState<'suppliers' | 'buyers'>('suppliers');
+  const [previewTab, setPreviewTab] = useState<'documents' | 'sharing' | 'security'>('documents');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false);
+  const [copiedHash, setCopiedHash] = useState(false);
+  const [selectedDemoDoc, setSelectedDemoDoc] = useState<any | null>(null);
+
+  const handleTriggerScan = () => {
+    if (isScanning) return;
+    setIsScanning(true);
+    setScanSuccess(false);
+    setTimeout(() => {
+      setIsScanning(false);
+      setScanSuccess(true);
+      setTimeout(() => setScanSuccess(false), 4000);
+    }, 1600);
+  };
 
   const openAuth = (tenant: 'supplier' | 'buyer', mode: 'signin' | 'signup') => {
     if (tenant === 'buyer') {
@@ -201,101 +291,396 @@ export const PublicAbout: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Composed Product Preview Built In Code From Real UI Pieces */}
+          {/* Right Column: Composed Product Preview Built With Demo-Only Data & Fluid Animations */}
           <div className="lg:col-span-6">
-            <div className="relative">
-              {/* Outer Subtle Frame */}
-              <Card variant="default" padding="none" className="overflow-hidden shadow-elevated border-hairline">
+            <div className="relative group">
+              {/* Animated Ambient Backlight Glow */}
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-[#1F5F99]/25 via-[#2F8F5B]/20 to-[#6FAEE0]/25 rounded-[16px] blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-700 animate-pulse-slow -z-10 pointer-events-none" />
+
+              {/* Outer Frame with Smooth Hover Elevation */}
+              <Card
+                variant="default"
+                padding="none"
+                className="overflow-hidden shadow-elevated border-hairline transition-all duration-300 hover:shadow-2xl hover:border-[#1F5F99]/40 relative bg-white dark:bg-[#132635]"
+              >
+                {/* Active Laser Scanner Beam across the card during scan */}
+                {isScanning && (
+                  <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#2F8F5B] to-transparent shadow-[0_0_18px_#2F8F5B] z-30 pointer-events-none animate-scan-beam" />
+                )}
+
                 {/* Simulated UI Window Header */}
-                <div className="bg-[#F7FAFD] dark:bg-[#10212E] px-4 py-3 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#D5E0EA] dark:bg-slate-700" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#D5E0EA] dark:bg-slate-700" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#D5E0EA] dark:bg-slate-700" />
-                    <span className="ml-2 text-[11px] font-mono font-medium text-[#6B7A87]">
-                      bidready360.co.bw / supplier-passport
+                <div className="bg-[#F7FAFD] dark:bg-[#10212E] px-4 py-3 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#E5484D]/80 hover:scale-125 transition-transform cursor-pointer" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#E8A33D]/80 hover:scale-125 transition-transform cursor-pointer" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#2F8F5B]/80 hover:scale-125 transition-transform cursor-pointer" />
+                    <span className="ml-2 text-[11px] font-mono font-medium text-[#6B7A87] truncate hidden sm:inline">
+                      bidready360.co.bw / supplier-passport / BW00008492019
                     </span>
                   </div>
-                  <Badge variant="verified" size="sm">
-                    Verified Standing
-                  </Badge>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Interactive Scan Trigger Button */}
+                    <button
+                      type="button"
+                      onClick={handleTriggerScan}
+                      disabled={isScanning}
+                      className="px-2 py-1 rounded-[6px] text-[11px] font-semibold bg-[#1F5F99]/10 hover:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] border border-[#1F5F99]/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                      title="Trigger real-time cryptographic vault verification"
+                    >
+                      <Scan className={`w-3.5 h-3.5 ${isScanning ? 'animate-radar-spin text-[#2F8F5B]' : ''}`} />
+                      <span>{isScanning ? 'Verifying...' : 'Scan Vault'}</span>
+                    </button>
+
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#ECFDF5] dark:bg-emerald-950/60 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                      </span>
+                      DEMO VERIFIED
+                    </span>
+                  </div>
                 </div>
 
-                {/* Composed Passport Preview Content */}
-                <div className="p-5 sm:p-6 space-y-4 bg-white dark:bg-[#132635]">
-                  {/* Company Header Row */}
+                {/* Scan Success Animated Alert */}
+                {scanSuccess && (
+                  <div className="bg-emerald-500 text-white px-4 py-2 text-xs font-medium flex items-center justify-between gap-2 animate-fade-in shadow-inner">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
+                      <span>All 5 SHA-256 cryptographic hashes verified untampered via live CIPA API!</span>
+                    </div>
+                    <span className="font-mono text-[10px] bg-emerald-600 px-1.5 py-0.5 rounded text-white">
+                      0.04s
+                    </span>
+                  </div>
+                )}
+
+                {/* Composed Passport Preview Content - Strictly Demo Data */}
+                <div className="p-5 sm:p-6 space-y-4 bg-white dark:bg-[#132635] relative">
+                  {/* Company Profile Header Row */}
                   <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-heading font-semibold text-[#10212E] dark:text-white">
-                          {supplier.legalName || 'Kgalagadi Heavy Infrastructure (Pty) Ltd'}
-                        </h4>
-                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0]">
-                          100% Citizen (EDD)
-                        </span>
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-[8px] bg-gradient-to-br from-[#1F5F99] via-[#164875] to-[#10212E] text-white flex items-center justify-center font-heading font-bold text-sm shrink-0 shadow-md relative overflow-hidden group/avatar">
+                        <span>MS</span>
+                        <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover/avatar:translate-x-full transition-transform duration-700" />
                       </div>
-                      <p className="text-xs text-[#6B7A87]">
-                        CIPA: {supplier.cipaNumber || 'BW00001234567'} · Building & Civil Construction
-                      </p>
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-[15px] font-heading font-semibold text-[#10212E] dark:text-white leading-tight">
+                            Morama Solutions (Pty) Ltd
+                          </h4>
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#ECFDF5] dark:bg-emerald-950/40 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
+                            100% Citizen (EDD)
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#6B7A87]">
+                          CIPA: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">BW00008492019</span> · BURS TIN: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">C9018472-01</span>
+                        </p>
+                        <p className="text-[11px] text-[#6B7A87]">
+                          Gaborone West Industrial · Building Works, Civil Engineering & ICT Supplies
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <span className="text-[11px] text-[#6B7A87] block">Profile score</span>
-                      <span className="text-sm font-bold text-[#1F5F99] dark:text-[#6FAEE0]">
-                        {supplier.profileCompleteness}%
+                    <div className="text-right shrink-0 pl-2">
+                      <span className="text-[10px] uppercase font-semibold tracking-wider text-[#6B7A87] block">
+                        Passport Score
+                      </span>
+                      <div className="relative overflow-hidden inline-block px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 my-0.5">
+                        <span className="text-lg font-heading font-bold text-[#2F8F5B] dark:text-emerald-400 tabular-nums">
+                          100%
+                        </span>
+                        <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer pointer-events-none" />
+                      </div>
+                      <span className="text-[10px] font-medium text-[#2F8F5B] dark:text-emerald-400 block">
+                        Audit Cleared
                       </span>
                     </div>
                   </div>
 
-                  {/* Status Chips List */}
-                  <div className="space-y-2">
-                    <span className="text-[11px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
-                      Statutory vault compliance
+                  {/* Interactive Tab Navigation */}
+                  <div className="flex items-center gap-1 p-1 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab('documents')}
+                      className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        previewTab === 'documents'
+                          ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
+                          : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
+                      }`}
+                    >
+                      <FileCheck2 className="w-3.5 h-3.5" />
+                      <span>Uploaded Docs (5)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab('sharing')}
+                      className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        previewTab === 'sharing'
+                          ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
+                          : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
+                      }`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Buyer Sharing (3)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab('security')}
+                      className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        previewTab === 'security'
+                          ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
+                          : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Vault Integrity</span>
+                    </button>
+                  </div>
+
+                  {/* TAB 1: UPLOADED DOCUMENTS LIST */}
+                  {previewTab === 'documents' && (
+                    <div className="space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between text-xs text-[#6B7A87] px-0.5">
+                        <span className="font-semibold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                          <span>Statutory & Prequalification Vault</span>
+                          <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+                            (Click doc to inspect cryptographic hash)
+                          </span>
+                        </span>
+                        <span className="text-[11px] text-[#2F8F5B] font-medium flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          5 verified files
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 max-h-[230px] overflow-y-auto pr-0.5">
+                        {DEMO_PASSPORT_DOCS.map((doc, idx) => (
+                          <div
+                            key={doc.id}
+                            onClick={() => setSelectedDemoDoc(doc)}
+                            className="p-2.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs hover:border-[#1F5F99] hover:bg-white dark:hover:bg-[#162C3E] hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 cursor-pointer group/row"
+                            title="Click to inspect cryptographic seal & OCR confidence"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-7 h-7 rounded-[6px] bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 flex items-center justify-center shrink-0 font-bold text-[10px] group-hover/row:scale-105 transition-transform">
+                                PDF
+                              </div>
+                              <div className="min-w-0 space-y-0.5">
+                                <span className="font-semibold text-[#10212E] dark:text-white truncate block group-hover/row:text-[#1F5F99] dark:group-hover/row:text-[#38BDF8] transition-colors">
+                                  {doc.title}
+                                </span>
+                                <div className="text-[11px] text-[#6B7A87] flex items-center gap-2 truncate">
+                                  <span>{doc.filename}</span>
+                                  <span>·</span>
+                                  <span>{doc.size}</span>
+                                  <span>·</span>
+                                  <span className="font-mono text-[10px] text-slate-500">
+                                    SHA-256:{doc.sha256.substring(0, 8)}...
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-[#2F8F5B] text-[11px] font-semibold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                                <Check className="w-3 h-3" />
+                                {doc.status}
+                              </span>
+                              <ChevronRight className="w-3.5 h-3.5 text-[#6B7A87] opacity-0 group-hover/row:opacity-100 group-hover/row:translate-x-0.5 transition-all" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: BUYER SHARING */}
+                  {previewTab === 'sharing' && (
+                    <div className="space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between text-xs text-[#6B7A87] px-0.5">
+                        <span className="font-semibold uppercase tracking-wider text-[10px]">
+                          Authorized Public & Private Buyers
+                        </span>
+                        <span className="text-[11px] text-[#1F5F99] dark:text-[#38BDF8] font-medium flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#1F5F99] dark:bg-[#38BDF8] animate-pulse" />
+                          3 Active Consents
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 max-h-[230px] overflow-y-auto">
+                        <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-[#10212E] dark:text-white">
+                              Gaborone Regional Council (GRC)
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2F8F5B] text-[10px] font-semibold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#2F8F5B]" />
+                              Consent Active
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#6B7A87]">
+                            Scope: Statutory documents & bank details · Valid until Sep 2027
+                          </p>
+                        </div>
+
+                        <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-[#10212E] dark:text-white">
+                              Debswana Diamond Company
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2F8F5B] text-[10px] font-semibold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#2F8F5B]" />
+                              Consent Active
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#6B7A87]">
+                            Scope: Prequalification Vault & PPRA certificates · Valid until Mar 2027
+                          </p>
+                        </div>
+
+                        <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-[#10212E] dark:text-white">
+                              Water Utilities Corporation (WUC)
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2F8F5B] text-[10px] font-semibold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#2F8F5B]" />
+                              Consent Active
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#6B7A87]">
+                            Scope: Full compliance passport · Valid until Oct 2027
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: VAULT INTEGRITY */}
+                  {previewTab === 'security' && (
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2 text-xs">
+                        <div className="flex items-center gap-2 text-[#10212E] dark:text-white font-semibold">
+                          <div className="p-1 rounded bg-[#1F5F99]/10 text-[#1F5F99] dark:text-[#38BDF8]">
+                            <Lock className="w-3.5 h-3.5 animate-pulse" />
+                          </div>
+                          <span>Asymmetric Sealed Bidding</span>
+                        </div>
+                        <p className="text-[#6B7A87] text-[11px] leading-relaxed">
+                          Tender bids and commercial envelopes remain client-side encrypted until the official tender closing date and dual-key opening ceremony.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="p-2.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                          <span className="text-[11px] text-[#6B7A87] block">Ledger Integrity</span>
+                          <span className="font-mono text-xs font-semibold text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B]" />
+                            SHA-256 Hashed
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                          <span className="text-[11px] text-[#6B7A87] block">Access Control</span>
+                          <span className="text-xs font-semibold text-[#2F8F5B] flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5 text-[#2F8F5B]" />
+                            Consent-Gated
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confidential Data Protection Footer */}
+                  <div className="p-2.5 rounded-[6px] bg-[#F0F5FA] dark:bg-[#162C3E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-xs text-[#6B7A87]">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0" strokeWidth={1.5} />
+                      <span className="text-[11px]">
+                        Demo mockup data · Live client data is strictly segregated and never exposed
+                      </span>
+                    </div>
+                    <span className="font-mono text-[10px] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold shrink-0">
+                      AES-256
                     </span>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
-                        <span className="text-[#43525F] dark:text-[#B2C3D2]">CIPA registration</span>
-                        {supplier.hasCipa ? (
-                          <Badge variant="verified" size="sm">Active</Badge>
-                        ) : (
-                          <Badge variant="alert" size="sm">Missing</Badge>
-                        )}
-                      </div>
-
-                      <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
-                        <span className="text-[#43525F] dark:text-[#B2C3D2]">BURS tax clearance</span>
-                        {supplier.hasBurs ? (
-                          <Badge variant="verified" size="sm">Valid</Badge>
-                        ) : (
-                          <Badge variant="alert" size="sm">Missing</Badge>
-                        )}
-                      </div>
-
-                      <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
-                        <span className="text-[#43525F] dark:text-[#B2C3D2]">PPRA contractor registration</span>
-                        {supplier.hasPpra ? (
-                          <Badge variant="verified" size="sm">Verified</Badge>
-                        ) : (
-                          <Badge variant="alert" size="sm">Missing</Badge>
-                        )}
-                      </div>
-
-                      <div className="p-2 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
-                        <span className="text-[#43525F] dark:text-[#B2C3D2]">Sealed Bid Envelope</span>
-                        <Badge variant="pula" size="sm">SHA-256</Badge>
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Active Consent Shared strip */}
-                  <div className="p-2.5 rounded-[6px] bg-[#EAF2FA]/70 dark:bg-[#162C3E] border border-[#C9D9E8] dark:border-[#1E364A] flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-[#1F5F99] dark:text-[#6FAEE0] font-medium">
-                      <Share2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      <span>Shared with 4 Buying Roster Databases</span>
+                  {/* Interactive Document Inspection Modal (Opens on document click) */}
+                  {selectedDemoDoc && (
+                    <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+                      <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] shadow-2xl max-w-sm w-full p-4 space-y-3 animate-fade-in text-xs">
+                        <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                          <div className="space-y-0.5">
+                            <span className="font-heading font-semibold text-sm text-[#10212E] dark:text-white block">
+                              {selectedDemoDoc.title}
+                            </span>
+                            <span className="text-[11px] text-[#6B7A87] block">
+                              {selectedDemoDoc.authority}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDemoDoc(null)}
+                            className="p-1 rounded text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="p-2 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-semibold text-[#6B7A87]">
+                                Cryptographic SHA-256 Hash
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(selectedDemoDoc.sha256);
+                                  setCopiedHash(true);
+                                  setTimeout(() => setCopiedHash(false), 2000);
+                                }}
+                                className="text-[10px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>{copiedHash ? 'Copied!' : 'Copy'}</span>
+                              </button>
+                            </div>
+                            <span className="font-mono text-[10px] text-slate-700 dark:text-slate-300 break-all block leading-tight">
+                              {selectedDemoDoc.sha256}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="p-2 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+                              <span className="text-[10px] text-[#6B7A87] block">OCR Confidence</span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
+                                {selectedDemoDoc.ocrConfidence}
+                              </span>
+                            </div>
+                            <div className="p-2 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+                              <span className="text-[10px] text-[#6B7A87] block">File Size</span>
+                              <span className="font-semibold text-[#10212E] dark:text-white text-xs">
+                                {selectedDemoDoc.size}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>Digital Signature & Timestamp Validated</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDemoDoc(null)}
+                          className="w-full py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] font-semibold text-xs transition-colors cursor-pointer"
+                        >
+                          Close Details
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-[11px] text-[#6B7A87]">Consent Active</span>
-                  </div>
+                  )}
                 </div>
               </Card>
             </div>

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Call, FormField, PriceLineItem, ApplicationResponse, SupplierDocument } from '../../types';
 import { StatusChip } from '../common/StatusChip';
+import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
+import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -66,6 +68,20 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   const [selectedCall, setSelectedCall] = useState<Call | undefined>(
     calls.find((c) => c.id === activeCallId) || calls[0]
   );
+
+  const completeness = calculateSupplierCompleteness(supplier, documents);
+  if (completeness.score < 100) {
+    return (
+      <ApplicationsLockedPrompt
+        completeness={completeness}
+        onNavigateToProfile={() => setActiveNav('profile')}
+        onNavigateToVault={() => setActiveNav('vault')}
+        onNavigateToDashboard={onCancel}
+        intendedAction="apply"
+        callTitle={selectedCall?.title}
+      />
+    );
+  }
 
   // Stepper state: 1: Check eligibility, 2: Choose what to share, 3: Answer questions, 4: Review, 5: Submit
   const [currentStep, setCurrentStep] = useState<number>(1);

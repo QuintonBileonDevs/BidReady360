@@ -321,7 +321,9 @@ export function calculateSupplierCompleteness(
     });
   }
 
-  const items = [...baseItems, ...optionalDocumentItems];
+  // Document and profile completeness is strictly for items required for everyone.
+  // Conditional and preference documents do not make up part of the completeness.
+  const items = [...baseItems];
   const totalCount = items.length;
   const completedCount = items.filter((i) => i.isComplete).length;
   const score = Math.round((completedCount / Math.max(1, totalCount)) * 100);

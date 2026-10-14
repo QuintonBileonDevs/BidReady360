@@ -143,32 +143,13 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
             <span>{backLinkText}</span>
           </button>
 
-          {/* Language Toggle */}
-          <div className="flex items-center gap-1.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-            <Globe className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
-            <button
-              type="button"
-              onClick={() => setLanguage('en')}
-              className={`font-semibold cursor-pointer min-h-[44px] inline-flex items-center ${
-                language === 'en'
-                  ? 'text-[#1F5F99] dark:text-[#6FAEE0] underline'
-                  : 'text-[#6B7A87] hover:text-[#10212E]'
-              }`}
-            >
-              EN
-            </button>
-            <span>/</span>
-            <button
-              type="button"
-              onClick={() => setLanguage('tn')}
-              className={`font-semibold cursor-pointer min-h-[44px] inline-flex items-center ${
-                language === 'tn'
-                  ? 'text-[#1F5F99] dark:text-[#6FAEE0] underline'
-                  : 'text-[#6B7A87] hover:text-[#10212E]'
-              }`}
-            >
-              TN
-            </button>
+          {/* Language Indicator: Defaulted to EN */}
+          <div
+            className="flex items-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#B2C3D2] px-2.5 py-1 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]"
+            title="Language: English (EN)"
+          >
+            <Globe className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+            <span className="font-semibold text-[#10212E] dark:text-white">EN</span>
           </div>
         </div>
 

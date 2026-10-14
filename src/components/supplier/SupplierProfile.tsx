@@ -18,6 +18,7 @@ import {
   Phone,
   Mail,
   Globe,
+  Edit2,
   Edit3,
   Plus,
   Trash2,
@@ -45,6 +46,7 @@ import {
   Info,
   RotateCw,
   Loader2,
+  ExternalLink,
 } from 'lucide-react';
 
 interface PastProject {
@@ -91,7 +93,11 @@ interface CategoryNode {
 
 const CATEGORY_TREE: CategoryNode[] = DB_CATEGORIES;
 
-export const SupplierProfile: React.FC = () => {
+interface SupplierProfileProps {
+  initialSection?: 'details' | 'directors' | 'categories' | 'projects' | 'preferences' | 'team';
+}
+
+export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection }) => {
   const {
     supplier,
     documents,
@@ -104,7 +110,13 @@ export const SupplierProfile: React.FC = () => {
   // Active section state
   const [activeSection, setActiveSection] = useState<
     'details' | 'directors' | 'categories' | 'projects' | 'preferences' | 'team'
-  >('details');
+  >(initialSection || 'details');
+
+  useEffect(() => {
+    if (initialSection) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
 
   // Checklist Filter State ('All' | 'Company' | 'People' | 'Documents')
   const [checklistFilter, setChecklistFilter] = useState<'All' | 'Company' | 'People' | 'Documents'>('All');
@@ -157,6 +169,7 @@ export const SupplierProfile: React.FC = () => {
   );
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [isDirectorDrawerOpen, setIsDirectorDrawerOpen] = useState(false);
+  const [editingDirector, setEditingDirector] = useState<any | null>(null);
   const [newDirectorForm, setNewDirectorForm] = useState({
     fullName: '',
     idNumber: '',
@@ -264,35 +277,79 @@ export const SupplierProfile: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // Sync state when supplier context updates (e.g. on reset demo or profile reload)
-  useEffect(() => {
-    if (!isEditingDetails) {
-      setDetailsForm({
-        legalName: supplier.legalName || '',
-        tradingName: supplier.tradingName || '',
-        cipaNumber: supplier.cipaNumber || '',
-        tinNumber: supplier.tinNumber || '',
-        ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || '',
-        companyType: supplier.companyType || 'Private Company (Pty) Ltd',
-        yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
-        physicalAddress: supplier.physicalAddress || '',
-        city: supplier.city || '',
-        district: supplier.district || (supplier as any).districtName || '',
-        postalAddress: supplier.postalAddress || '',
-        primaryPhone: supplier.primaryPhone || '',
-        email: supplier.email || '',
-        website: supplier.website || '',
-        bankName: supplier.bankName || '',
-        bankBranch: supplier.bankBranch || '',
-        accountNumberMasked: supplier.accountNumberMasked || '',
-        citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
-        youthOwned: supplier.youthOwned ?? false,
-        womenOwned: supplier.womenOwned ?? false,
-        disabilityOwned: supplier.disabilityOwned ?? false,
-        eddCertified: supplier.eddCertified ?? false,
-        description: supplier.description || '',
-      });
+  // Preference Evidence Document Matching from Vault
+  const findEvidenceDoc = (keywords: string[]) => {
+    return documents.find((doc) => {
+      const typeLower = (doc.documentType || '').toLowerCase();
+      const titleLower = (doc.title || '').toLowerCase();
+      return keywords.some(
+        (kw) => typeLower.includes(kw.toLowerCase()) || titleLower.includes(kw.toLowerCase())
+      );
+    });
+  };
+
+  const youthDoc = findEvidenceDoc(['youth']);
+  const womenDoc = findEvidenceDoc(['women']);
+  const disabilityDoc = findEvidenceDoc(['disability']);
+  const eddDoc = findEvidenceDoc(['edd', 'economic diversification']);
+
+  // Handle immediate toggle and save of Statutory Preferences (synced with Documents page)
+  const handleTogglePreference = async (
+    key: 'youthOwned' | 'womenOwned' | 'disabilityOwned' | 'eddCertified',
+    value: boolean
+  ) => {
+    setDetailsForm((prev) => ({ ...prev, [key]: value }));
+    try {
+      await updateSupplierProfile({ [key]: value });
+      const labels: Record<string, string> = {
+        youthOwned: 'Youth-owned business preference',
+        womenOwned: 'Women-owned business preference',
+        disabilityOwned: 'Disability-owned business preference',
+        eddCertified: 'Economic Diversification Drive (EDD) preference',
+      };
+      showToast(
+        value
+          ? `${labels[key]} activated. Linked to Documents & Eligibility.`
+          : `${labels[key]} deactivated.`
+      );
+    } catch (err) {
+      console.error('Failed to save preference:', err);
+      showToast('Could not save preference change. Please try again.');
     }
+  };
+
+  // Sync state when supplier context updates (e.g. on toggle in Documents, reset demo, or profile reload)
+  useEffect(() => {
+    setDetailsForm((prev) => ({
+      ...prev,
+      youthOwned: supplier.youthOwned ?? false,
+      womenOwned: supplier.womenOwned ?? false,
+      disabilityOwned: supplier.disabilityOwned ?? false,
+      eddCertified: supplier.eddCertified ?? false,
+      ...(isEditingDetails
+        ? {}
+        : {
+            legalName: supplier.legalName || '',
+            tradingName: supplier.tradingName || '',
+            cipaNumber: supplier.cipaNumber || '',
+            tinNumber: supplier.tinNumber || '',
+            ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || '',
+            companyType: supplier.companyType || 'Private Company (Pty) Ltd',
+            yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
+            physicalAddress: supplier.physicalAddress || '',
+            city: supplier.city || '',
+            district: supplier.district || (supplier as any).districtName || '',
+            postalAddress: supplier.postalAddress || '',
+            primaryPhone: supplier.primaryPhone || '',
+            email: supplier.email || '',
+            website: supplier.website || '',
+            bankName: supplier.bankName || '',
+            bankBranch: supplier.bankBranch || '',
+            accountNumberMasked: supplier.accountNumberMasked || '',
+            citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
+            description: supplier.description || '',
+          }),
+    }));
 
     setDirectorsList(
       (supplier.directors || []).map((d) => ({
@@ -315,7 +372,7 @@ export const SupplierProfile: React.FC = () => {
     if (supplier.teamMembers?.length) {
       setTeamMembers(supplier.teamMembers);
     }
-  }, [supplier]);
+  }, [supplier, isEditingDetails]);
 
   // Total shareholding calculation
   const totalOwnership = directorsList.reduce(
@@ -501,40 +558,8 @@ export const SupplierProfile: React.FC = () => {
     }
   };
 
-  // Add Director
-  const handleAddDirectorSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDirectorForm.fullName || !newDirectorForm.idNumber) return;
-
-    const newDir = {
-      id: `dir-${Date.now()}`,
-      fullName: newDirectorForm.fullName.trim(),
-      nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-      idNumber: newDirectorForm.idNumber.trim(),
-      idType: newDirectorForm.idType,
-      nationality: newDirectorForm.nationality,
-      isCitizen: newDirectorForm.isCitizen,
-      shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
-      role: newDirectorForm.role,
-      verificationStatus: 'Verified' as const,
-    };
-
-    const updated = [...directorsList, newDir];
-    setDirectorsList(updated);
-    updateSupplierProfile({
-      directors: updated.map((d) => ({
-        id: d.id,
-        fullName: d.fullName,
-        nationalIdOrPassport: d.nationalIdOrPassport,
-        idType: d.idType,
-        nationality: d.nationality,
-        isCitizen: d.isCitizen,
-        shareholdingPercentage: d.shareholdingPercentage,
-        role: d.role,
-      })),
-    });
-
-    setIsDirectorDrawerOpen(false);
+  const handleOpenAddDirector = () => {
+    setEditingDirector(null);
     setNewDirectorForm({
       fullName: '',
       idNumber: '',
@@ -544,10 +569,137 @@ export const SupplierProfile: React.FC = () => {
       shareholdingPercentage: 0,
       role: 'Director',
     });
-    showToast(`Added ${newDir.fullName}. Ownership & completeness recalculated.`);
+    setIsDirectorDrawerOpen(true);
   };
 
-  const handleDeleteDirector = (dirId: string) => {
+  const handleEditDirector = (dir: any) => {
+    setEditingDirector(dir);
+    setNewDirectorForm({
+      fullName: dir.fullName || '',
+      idNumber: dir.idNumber || dir.nationalIdOrPassport || '',
+      idType: dir.idType || (dir.isCitizen ? 'National ID (Omang)' : 'Passport'),
+      nationality: dir.nationality || (dir.isCitizen ? 'Motswana' : 'Foreign'),
+      isCitizen: dir.isCitizen ?? true,
+      shareholdingPercentage: dir.shareholdingPercentage ?? 0,
+      role: dir.role || 'Director',
+    });
+    setIsDirectorDrawerOpen(true);
+  };
+
+  // Add or Edit Director
+  const handleAddDirectorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDirectorForm.fullName || !newDirectorForm.idNumber) return;
+
+    if (editingDirector) {
+      const updated = directorsList.map((d) => {
+        if (d.id === editingDirector.id) {
+          return {
+            ...d,
+            fullName: newDirectorForm.fullName.trim(),
+            nationalIdOrPassport: newDirectorForm.idNumber.trim(),
+            idNumber: newDirectorForm.idNumber.trim(),
+            idType: newDirectorForm.idType,
+            nationality: newDirectorForm.nationality,
+            isCitizen: newDirectorForm.isCitizen,
+            shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
+            role: newDirectorForm.role,
+          };
+        }
+        return d;
+      });
+
+      setDirectorsList(updated);
+      updateSupplierProfile({
+        directors: updated.map((d) => ({
+          id: d.id,
+          fullName: d.fullName,
+          nationalIdOrPassport: d.nationalIdOrPassport,
+          idType: d.idType,
+          nationality: d.nationality,
+          isCitizen: d.isCitizen,
+          shareholdingPercentage: d.shareholdingPercentage,
+          role: d.role,
+        })),
+      });
+
+      try {
+        if (editingDirector.id && !editingDirector.id.startsWith('dir-')) {
+          await supplierApi.updatePerson(editingDirector.id, {
+            fullName: newDirectorForm.fullName.trim(),
+            personRole: newDirectorForm.role?.toLowerCase() || 'director',
+            ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
+            nationality: newDirectorForm.nationality,
+            isCitizen: newDirectorForm.isCitizen,
+            identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+          });
+        }
+      } catch (err) {
+        console.warn('Could not sync director update to API:', err);
+      }
+
+      setIsDirectorDrawerOpen(false);
+      const savedName = newDirectorForm.fullName;
+      setEditingDirector(null);
+      showToast(`Updated ${savedName}. Ownership & completeness recalculated.`);
+    } else {
+      const newDir = {
+        id: `dir-${Date.now()}`,
+        fullName: newDirectorForm.fullName.trim(),
+        nationalIdOrPassport: newDirectorForm.idNumber.trim(),
+        idNumber: newDirectorForm.idNumber.trim(),
+        idType: newDirectorForm.idType,
+        nationality: newDirectorForm.nationality,
+        isCitizen: newDirectorForm.isCitizen,
+        shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
+        role: newDirectorForm.role,
+        verificationStatus: 'Verified' as const,
+      };
+
+      const updated = [...directorsList, newDir];
+      setDirectorsList(updated);
+      updateSupplierProfile({
+        directors: updated.map((d) => ({
+          id: d.id,
+          fullName: d.fullName,
+          nationalIdOrPassport: d.nationalIdOrPassport,
+          idType: d.idType,
+          nationality: d.nationality,
+          isCitizen: d.isCitizen,
+          shareholdingPercentage: d.shareholdingPercentage,
+          role: d.role,
+        })),
+      });
+
+      try {
+        await supplierApi.addPerson({
+          fullName: newDir.fullName,
+          personRole: newDir.role?.toLowerCase() || 'director',
+          ownershipPercent: newDir.shareholdingPercentage,
+          nationality: newDir.nationality,
+          isCitizen: newDir.isCitizen,
+          identityType: newDir.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+        });
+      } catch (err) {
+        console.warn('Could not sync new director to API:', err);
+      }
+
+      setIsDirectorDrawerOpen(false);
+      showToast(`Added ${newDir.fullName}. Ownership & completeness recalculated.`);
+    }
+
+    setNewDirectorForm({
+      fullName: '',
+      idNumber: '',
+      idType: 'National ID (Omang)',
+      nationality: 'Motswana',
+      isCitizen: true,
+      shareholdingPercentage: 0,
+      role: 'Director',
+    });
+  };
+
+  const handleDeleteDirector = async (dirId: string) => {
     const updated = directorsList.filter((d) => d.id !== dirId);
     setDirectorsList(updated);
     updateSupplierProfile({
@@ -562,6 +714,14 @@ export const SupplierProfile: React.FC = () => {
         role: d.role,
       })),
     });
+
+    try {
+      if (dirId && !dirId.startsWith('dir-')) {
+        await supplierApi.deletePerson(dirId);
+      }
+    } catch (err) {
+      console.warn('Could not sync director deletion to API:', err);
+    }
     showToast('Director removed and completeness recalculated.');
   };
 
@@ -1127,47 +1287,126 @@ export const SupplierProfile: React.FC = () => {
                   </div>
 
                   {/* Statutory Preference Eligibility Checkboxes */}
-                  <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2.5">
-                    <span className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                      Statutory Preference Eligibility
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px]">
-                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
-                        <input
-                          type="checkbox"
-                          checked={detailsForm.youthOwned}
-                          onChange={(e) => setDetailsForm({ ...detailsForm, youthOwned: e.target.checked })}
-                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                        />
-                        <span>Youth-owned</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
-                        <input
-                          type="checkbox"
-                          checked={detailsForm.womenOwned}
-                          onChange={(e) => setDetailsForm({ ...detailsForm, womenOwned: e.target.checked })}
-                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                        />
-                        <span>Women-owned</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
-                        <input
-                          type="checkbox"
-                          checked={detailsForm.disabilityOwned}
-                          onChange={(e) => setDetailsForm({ ...detailsForm, disabilityOwned: e.target.checked })}
-                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                        />
-                        <span>Disability-owned</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8]">
-                        <input
-                          type="checkbox"
-                          checked={detailsForm.eddCertified}
-                          onChange={(e) => setDetailsForm({ ...detailsForm, eddCertified: e.target.checked })}
-                          className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                        />
-                        <span>EDD certified</span>
-                      </label>
+                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="space-y-0.5">
+                        <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                          Statutory Preference Eligibility
+                        </span>
+                        <span className="text-[12px] text-[#6B7A87]">
+                          Toggles save immediately and automatically update conditional requirements and evidence in Documents.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveNav('vault')}
+                        className="text-[12px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Manage in Documents</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* Youth-owned */}
+                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.youthOwned}
+                            onChange={(e) => handleTogglePreference('youthOwned', e.target.checked)}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                          <span>Youth-owned business</span>
+                        </label>
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                          <span>Req: Youth preference evidence</span>
+                          {detailsForm.youthOwned ? (
+                            youthDoc ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">⚠️ Missing in vault</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Inactive</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Women-owned */}
+                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.womenOwned}
+                            onChange={(e) => handleTogglePreference('womenOwned', e.target.checked)}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                          <span>Women-owned business</span>
+                        </label>
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                          <span>Req: Women preference evidence</span>
+                          {detailsForm.womenOwned ? (
+                            womenDoc ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">⚠️ Missing in vault</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Inactive</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Disability-owned */}
+                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.disabilityOwned}
+                            onChange={(e) => handleTogglePreference('disabilityOwned', e.target.checked)}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                          <span>Disability-owned business</span>
+                        </label>
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                          <span>Req: Disability preference evidence</span>
+                          {detailsForm.disabilityOwned ? (
+                            disabilityDoc ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">⚠️ Missing in vault</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Inactive</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* EDD Certified */}
+                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.eddCertified}
+                            onChange={(e) => handleTogglePreference('eddCertified', e.target.checked)}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                          <span>EDD certified</span>
+                        </label>
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                          <span>Req: EDD certificate & evidence</span>
+                          {detailsForm.eddCertified ? (
+                            eddDoc ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ Uploaded</span>
+                            ) : (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">⚠️ Missing in vault</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Inactive</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -1498,7 +1737,7 @@ export const SupplierProfile: React.FC = () => {
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Statutory preferences</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block">Statutory preference claims</span>
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {detailsForm.youthOwned && (
                           <span className="text-[11px] font-medium bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded-[4px]">
@@ -1523,6 +1762,201 @@ export const SupplierProfile: React.FC = () => {
                         {!detailsForm.youthOwned && !detailsForm.womenOwned && !detailsForm.disabilityOwned && !detailsForm.eddCertified && (
                           <span className="text-[12px] text-[#6B7A87]">None claimed</span>
                         )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Statutory Preference Eligibility - Interactive & Linked to Documents */}
+                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Award className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
+                          <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
+                            Statutory Preference Eligibility
+                          </span>
+                          <span className="text-[11px] px-2 py-0.5 bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] rounded font-medium">
+                            Synced with Documents & Vault
+                          </span>
+                        </div>
+                        <p className="text-[12px] text-[#6B7A87]">
+                          Click any preference to toggle. Changes save immediately to your profile and automatically update conditional requirements and evidence in Documents.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveNav('vault')}
+                        className="text-[12px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-medium inline-flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <span>Manage in Documents</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                      {/* Youth */}
+                      <div
+                        onClick={() => handleTogglePreference('youthOwned', !detailsForm.youthOwned)}
+                        className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
+                          detailsForm.youthOwned
+                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-semibold text-[#10212E] dark:text-white">
+                            Youth-owned
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.youthOwned}
+                            onChange={(e) => handleTogglePreference('youthOwned', e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                        </div>
+                        <div className="text-[11px] space-y-1">
+                          <div className="text-[#6B7A87]">Req: Youth preference evidence</div>
+                          {detailsForm.youthOwned ? (
+                            youthDoc ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Evidence uploaded</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Evidence missing</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Claim inactive</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Women */}
+                      <div
+                        onClick={() => handleTogglePreference('womenOwned', !detailsForm.womenOwned)}
+                        className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
+                          detailsForm.womenOwned
+                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-semibold text-[#10212E] dark:text-white">
+                            Women-owned
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.womenOwned}
+                            onChange={(e) => handleTogglePreference('womenOwned', e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                        </div>
+                        <div className="text-[11px] space-y-1">
+                          <div className="text-[#6B7A87]">Req: Women preference evidence</div>
+                          {detailsForm.womenOwned ? (
+                            womenDoc ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Evidence uploaded</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Evidence missing</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Claim inactive</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Disability */}
+                      <div
+                        onClick={() => handleTogglePreference('disabilityOwned', !detailsForm.disabilityOwned)}
+                        className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
+                          detailsForm.disabilityOwned
+                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-semibold text-[#10212E] dark:text-white">
+                            Disability-owned
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.disabilityOwned}
+                            onChange={(e) => handleTogglePreference('disabilityOwned', e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                        </div>
+                        <div className="text-[11px] space-y-1">
+                          <div className="text-[#6B7A87]">Req: Disability preference evidence</div>
+                          {detailsForm.disabilityOwned ? (
+                            disabilityDoc ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Evidence uploaded</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Evidence missing</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Claim inactive</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* EDD Certified */}
+                      <div
+                        onClick={() => handleTogglePreference('eddCertified', !detailsForm.eddCertified)}
+                        className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
+                          detailsForm.eddCertified
+                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-semibold text-[#10212E] dark:text-white">
+                            EDD certified
+                          </span>
+                          <input
+                            type="checkbox"
+                            checked={detailsForm.eddCertified}
+                            onChange={(e) => handleTogglePreference('eddCertified', e.target.checked)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                          />
+                        </div>
+                        <div className="text-[11px] space-y-1">
+                          <div className="text-[#6B7A87]">Req: EDD certificate & evidence</div>
+                          {detailsForm.eddCertified ? (
+                            eddDoc ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Evidence uploaded</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Evidence missing</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">Claim inactive</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1569,7 +2003,7 @@ export const SupplierProfile: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setIsDirectorDrawerOpen(true)}
+                  onClick={handleOpenAddDirector}
                   className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                 >
                   <Plus className="w-4 h-4" />
@@ -1617,7 +2051,7 @@ export const SupplierProfile: React.FC = () => {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setIsDirectorDrawerOpen(true)}
+                    onClick={handleOpenAddDirector}
                     className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
                     <Plus className="w-4 h-4" />
@@ -1634,7 +2068,7 @@ export const SupplierProfile: React.FC = () => {
                         <th className="p-4 text-right">Ownership</th>
                         <th className="p-4">ID number</th>
                         <th className="p-4">Verification</th>
-                        <th className="p-4 text-right">Action</th>
+                        <th className="p-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
@@ -1653,8 +2087,16 @@ export const SupplierProfile: React.FC = () => {
 
                             <td className="p-4 text-[#43525F] dark:text-[#B2C3D2]">{dir.role}</td>
 
-                            <td className="p-4 font-semibold tabular-nums text-right text-[15px]">
-                              {dir.shareholdingPercentage}%
+                            <td className="p-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleEditDirector(dir)}
+                                className="group inline-flex items-center gap-1.5 font-semibold tabular-nums text-[15px] text-[#10212E] dark:text-white hover:text-[#1F5F99] dark:hover:text-[#38BDF8] cursor-pointer transition-colors"
+                                title="Click to edit director details or ownership %"
+                              >
+                                <span>{dir.shareholdingPercentage}%</span>
+                                <Edit2 className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#38BDF8] opacity-70 group-hover:opacity-100 transition-opacity" />
+                              </button>
                             </td>
 
                             <td className="p-4">
@@ -1699,14 +2141,25 @@ export const SupplierProfile: React.FC = () => {
                             </td>
 
                             <td className="p-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteDirector(dir.id)}
-                                className="text-[#C2412D] hover:opacity-75 p-1 rounded cursor-pointer"
-                                title="Remove director"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditDirector(dir)}
+                                  className="px-2.5 py-1 text-[13px] font-medium text-[#1F5F99] dark:text-[#38BDF8] bg-[#EAF2FA] dark:bg-[#1E364A] hover:bg-[#dbeafe] dark:hover:bg-[#254661] rounded-[4px] inline-flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Edit director details or ownership %"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDirector(dir.id)}
+                                  className="p-1.5 text-[#C2412D] hover:bg-[#FEF2F2] dark:hover:bg-[#3D1414] rounded-[4px] cursor-pointer transition-colors"
+                                  title="Remove director"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2040,23 +2493,413 @@ export const SupplierProfile: React.FC = () => {
 
           {/* ================= SECTION 5: Preference Status ================= */}
           {activeSection === 'preferences' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6 text-center">
-              <div className="max-w-md mx-auto space-y-4 py-4">
-                <div className="w-12 h-12 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-2 justify-center mx-auto">
-                  <Award className="w-6 h-6" />
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
+                        Statutory Preference Eligibility & Evidence
+                      </h2>
+                      <span className="text-[12px] px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
+                        Live BidReady360 Sync
+                      </span>
+                    </div>
+                    <p className="text-[14px] text-[#6B7A87] mt-1">
+                      Statutory preference eligibility margins are claimed below and directly substantiated through uploaded documentary evidence in your document vault. Toggling any preference here immediately updates your profile, activates the corresponding requirement, and synchronizes with the Documents page.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveNav('vault')}
+                    className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors shrink-0"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Open Documents Vault</span>
+                  </button>
                 </div>
-                <div className="space-y-2">
-                  <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
-                    Statutory preference status & claims
-                  </h2>
-                  <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-                    Preference claims, citizen equity, and statutory compliance documents are now unified under <strong>Documents and eligibility</strong>.
+
+                {/* Preference Summary Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                    <span className="text-[12px] text-[#6B7A87] font-medium block">Active Targeted Claims</span>
+                    <span className="text-[20px] font-bold text-[#10212E] dark:text-white block">
+                      {[detailsForm.youthOwned, detailsForm.womenOwned, detailsForm.disabilityOwned, detailsForm.eddCertified].filter(Boolean).length} of 4 claimed
+                    </span>
+                    <span className="text-[11px] text-[#43525F] dark:text-[#B2C3D2] block">
+                      Youth, Women, Disability, & EDD
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                    <span className="text-[12px] text-[#6B7A87] font-medium block">Citizen Equity Shareholding</span>
+                    <span className="text-[20px] font-bold text-[#1F5F99] dark:text-[#38BDF8] block">
+                      {detailsForm.citizenOwnedPercentage}%
+                    </span>
+                    <span className="text-[11px] text-[#43525F] dark:text-[#B2C3D2] block">
+                      {detailsForm.citizenOwnedPercentage === 100 ? '100% Citizen Contractor Preference' : 'Partial Citizen Preference'}
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                    <span className="text-[12px] text-[#6B7A87] font-medium block">Local Procurement District</span>
+                    <span className="text-[20px] font-bold text-[#10212E] dark:text-white block truncate">
+                      {detailsForm.district || detailsForm.city || 'Gaborone'}
+                    </span>
+                    <span className="text-[11px] text-[#43525F] dark:text-[#B2C3D2] block">
+                      Local Authority Preference Eligible
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 Interactive Statutory Preference Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Youth-owned */}
+                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                  detailsForm.youthOwned
+                    ? 'border-[#1F5F99] shadow-sm'
+                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                }`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
+                          Youth-Owned Business
+                        </h3>
+                        <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                          detailsForm.youthOwned
+                            ? 'bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#38BDF8]'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          {detailsForm.youthOwned ? 'Active Claim' : 'Inactive'}
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                        Statutory preference margin under the Citizen Economic Empowerment Policy for enterprises majority owned or managed by Botswana citizens under 35 years.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={detailsForm.youthOwned}
+                      onClick={() => handleTogglePreference('youthOwned', !detailsForm.youthOwned)}
+                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
+                        detailsForm.youthOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                          detailsForm.youthOwned ? 'translate-x-6' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Linked Requirement & Evidence */}
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="font-semibold text-[#10212E] dark:text-white">
+                        Linked Requirement in Documents:
+                      </span>
+                      {detailsForm.youthOwned ? (
+                        youthDoc ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Evidence uploaded</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>Evidence required</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">Requirement deactivated</span>
+                      )}
+                    </div>
+
+                    <p className="text-[12px] text-[#6B7A87]">
+                      {youthDoc
+                        ? `Document: ${youthDoc.title || youthDoc.fileName} (${youthDoc.status})`
+                        : 'Youth ownership preference evidence (National ID/Omang or youth shareholding declaration) is required in your Documents vault to substantiate this claim during procurement evaluation.'}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveNav('vault')}
+                      className="text-[12px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-medium inline-flex items-center gap-1 pt-1 cursor-pointer"
+                    >
+                      <span>{youthDoc ? 'View evidence in Documents' : 'Upload evidence in Documents'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Women-owned */}
+                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                  detailsForm.womenOwned
+                    ? 'border-[#1F5F99] shadow-sm'
+                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                }`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
+                          Women-Owned Business
+                        </h3>
+                        <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                          detailsForm.womenOwned
+                            ? 'bg-[#FCE7F3] text-[#BE185D] dark:bg-[#831843]/50 dark:text-[#F472B6]'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          {detailsForm.womenOwned ? 'Active Claim' : 'Inactive'}
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                        Empowerment preference margin under procurement regulations for companies majority owned, directed, or operated by female Botswana citizens.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={detailsForm.womenOwned}
+                      onClick={() => handleTogglePreference('womenOwned', !detailsForm.womenOwned)}
+                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
+                        detailsForm.womenOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                          detailsForm.womenOwned ? 'translate-x-6' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Linked Requirement & Evidence */}
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="font-semibold text-[#10212E] dark:text-white">
+                        Linked Requirement in Documents:
+                      </span>
+                      {detailsForm.womenOwned ? (
+                        womenDoc ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Evidence uploaded</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>Evidence required</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">Requirement deactivated</span>
+                      )}
+                    </div>
+
+                    <p className="text-[12px] text-[#6B7A87]">
+                      {womenDoc
+                        ? `Document: ${womenDoc.title || womenDoc.fileName} (${womenDoc.status})`
+                        : 'Women ownership preference evidence (CIPA register showing female shareholding or directors) is required in your Documents vault.'}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveNav('vault')}
+                      className="text-[12px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-medium inline-flex items-center gap-1 pt-1 cursor-pointer"
+                    >
+                      <span>{womenDoc ? 'View evidence in Documents' : 'Upload evidence in Documents'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Disability-owned */}
+                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                  detailsForm.disabilityOwned
+                    ? 'border-[#1F5F99] shadow-sm'
+                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                }`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
+                          Disability-Owned Business
+                        </h3>
+                        <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                          detailsForm.disabilityOwned
+                            ? 'bg-[#F3E8FF] text-[#7E22CE] dark:bg-[#581C87]/50 dark:text-[#C084FC]'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          {detailsForm.disabilityOwned ? 'Active Claim' : 'Inactive'}
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                        Empowerment preference margin under procurement frameworks for companies owned or operated by persons living with disabilities.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={detailsForm.disabilityOwned}
+                      onClick={() => handleTogglePreference('disabilityOwned', !detailsForm.disabilityOwned)}
+                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
+                        detailsForm.disabilityOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                          detailsForm.disabilityOwned ? 'translate-x-6' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Linked Requirement & Evidence */}
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="font-semibold text-[#10212E] dark:text-white">
+                        Linked Requirement in Documents:
+                      </span>
+                      {detailsForm.disabilityOwned ? (
+                        disabilityDoc ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Evidence uploaded</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>Evidence required</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">Requirement deactivated</span>
+                      )}
+                    </div>
+
+                    <p className="text-[12px] text-[#6B7A87]">
+                      {disabilityDoc
+                        ? `Document: ${disabilityDoc.title || disabilityDoc.fileName} (${disabilityDoc.status})`
+                        : 'Disability ownership preference evidence (medical certification or Ministry declaration) is required in your Documents vault.'}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveNav('vault')}
+                      className="text-[12px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-medium inline-flex items-center gap-1 pt-1 cursor-pointer"
+                    >
+                      <span>{disabilityDoc ? 'View evidence in Documents' : 'Upload evidence in Documents'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. EDD Certified */}
+                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                  detailsForm.eddCertified
+                    ? 'border-[#1F5F99] shadow-sm'
+                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                }`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
+                          Economic Diversification Drive (EDD)
+                        </h3>
+                        <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                          detailsForm.eddCertified
+                            ? 'bg-[#ECFDF5] text-[#2F8F5B] dark:bg-[#064E3B]/50 dark:text-[#34D399]'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          {detailsForm.eddCertified ? 'Active Claim' : 'Inactive'}
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                        Statutory price preference margins under the Presidential EDD directive for domestic manufacturers and certified local service providers.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={detailsForm.eddCertified}
+                      onClick={() => handleTogglePreference('eddCertified', !detailsForm.eddCertified)}
+                      className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
+                        detailsForm.eddCertified ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                          detailsForm.eddCertified ? 'translate-x-6' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Linked Requirement & Evidence */}
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="font-semibold text-[#10212E] dark:text-white">
+                        Linked Requirement in Documents:
+                      </span>
+                      {detailsForm.eddCertified ? (
+                        eddDoc ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Evidence uploaded</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span>Evidence required</span>
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-slate-400">Requirement deactivated</span>
+                      )}
+                    </div>
+
+                    <p className="text-[12px] text-[#6B7A87]">
+                      {eddDoc
+                        ? `Document: ${eddDoc.title || eddDoc.fileName} (${eddDoc.status})`
+                        : 'A valid Economic Diversification Drive (EDD) Certificate issued by the Ministry is required in your Documents vault.'}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveNav('vault')}
+                      className="text-[12px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-medium inline-flex items-center gap-1 pt-1 cursor-pointer"
+                    >
+                      <span>{eddDoc ? 'View certificate in Documents' : 'Upload certificate in Documents'}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* General Documents and Eligibility Link Card */}
+              <div className="bg-[#F7FAFD] dark:bg-[#182C3A]/50 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white">
+                    Need to upload or replace preference proof?
+                  </h4>
+                  <p className="text-[13px] text-[#6B7A87]">
+                    Manage mandatory statutory compliance, business eligibility declarations, and all preference margin evidence directly in the Documents vault.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActiveNav('vault')}
-                  className="px-5 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                 >
                   <FileText className="w-4 h-4" />
                   <span>Go to Documents and eligibility</span>
@@ -2179,15 +3022,20 @@ export const SupplierProfile: React.FC = () => {
             <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
               <div>
                 <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
-                  Add director or beneficial owner
+                  {editingDirector ? 'Edit director details or ownership %' : 'Add director or beneficial owner'}
                 </h3>
                 <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
-                  Record CIPA registered person and equity allocation.
+                  {editingDirector
+                    ? 'Update CIPA registered person details, statutory role, or equity allocation percentage.'
+                    : 'Record CIPA registered person and equity allocation.'}
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsDirectorDrawerOpen(false)}
+                onClick={() => {
+                  setIsDirectorDrawerOpen(false);
+                  setEditingDirector(null);
+                }}
                 className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -2322,7 +3170,10 @@ export const SupplierProfile: React.FC = () => {
               <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsDirectorDrawerOpen(false)}
+                  onClick={() => {
+                    setIsDirectorDrawerOpen(false);
+                    setEditingDirector(null);
+                  }}
                   className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
                 >
                   Cancel
@@ -2331,8 +3182,17 @@ export const SupplierProfile: React.FC = () => {
                   type="submit"
                   className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Add person</span>
+                  {editingDirector ? (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save changes</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Add person</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

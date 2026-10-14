@@ -674,6 +674,60 @@ export class SuppliersRepository {
     return res.rows[0];
   }
 
+  async updatePerson(
+    supplierId: string,
+    personId: string,
+    person: {
+      fullName?: string;
+      personRole?: string;
+      email?: string;
+      phone?: string;
+      ownershipPercent?: number;
+      nationality?: string;
+      isCitizen?: boolean;
+      identityType?: string;
+    }
+  ): Promise<SupplierPerson | null> {
+    const res = await query<SupplierPerson>(
+      `UPDATE supplier_people
+       SET full_name = COALESCE($3, full_name),
+           person_role = COALESCE($4, person_role),
+           email = COALESCE($5, email),
+           phone = COALESCE($6, phone),
+           ownership_percent = COALESCE($7, ownership_percent),
+           nationality = COALESCE($8, nationality),
+           is_citizen = COALESCE($9, is_citizen),
+           identity_type = COALESCE($10, identity_type),
+           updated_at = NOW()
+       WHERE id = $2 AND supplier_id = $1
+       RETURNING id, supplier_id AS "supplierId", full_name AS "fullName",
+                 person_role AS "personRole", ownership_percent AS "ownershipPercent",
+                 identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
+                 email, phone, kyc_status AS "kycStatus"`,
+      [
+        supplierId,
+        personId,
+        person.fullName ? person.fullName.trim() : null,
+        person.personRole || null,
+        person.email || null,
+        person.phone || null,
+        person.ownershipPercent !== undefined ? person.ownershipPercent : null,
+        person.nationality || null,
+        person.isCitizen !== undefined ? person.isCitizen : null,
+        person.identityType || null,
+      ]
+    );
+    return res.rows[0] || null;
+  }
+
+  async deletePerson(supplierId: string, personId: string): Promise<boolean> {
+    const res = await query(
+      `DELETE FROM supplier_people WHERE id = $1 AND supplier_id = $2`,
+      [personId, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
   async listProjects(supplierId: string): Promise<SupplierProject[]> {
     const res = await query<SupplierProject>(
       `SELECT id, supplier_id AS "supplierId", client_name AS "clientName",

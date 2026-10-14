@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
+import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
+import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
 import {
   FileText,
   Clock,
@@ -47,6 +49,19 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
     setSelectedCallId,
     setActiveNav,
   } = useApp();
+
+  const completeness = calculateSupplierCompleteness(supplier, documents);
+  if (completeness.score < 100) {
+    return (
+      <ApplicationsLockedPrompt
+        completeness={completeness}
+        onNavigateToProfile={() => setActiveNav('profile')}
+        onNavigateToVault={() => setActiveNav('vault')}
+        onNavigateToDashboard={() => setActiveNav('dashboard')}
+        intendedAction="applications"
+      />
+    );
+  }
 
   const [activeTab, setActiveTab] = useState<TabType>('SUBMITTED');
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);

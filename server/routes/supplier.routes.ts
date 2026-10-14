@@ -69,6 +69,31 @@ router.post('/people', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/supplier/people/:id
+router.put('/people/:id', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const person = await suppliersRepository.updatePerson(ctx.tenantId, req.params.id, req.body);
+    if (!person) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+    res.json(person);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/supplier/people/:id
+router.delete('/people/:id', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    await suppliersRepository.deletePerson(ctx.tenantId, req.params.id);
+    res.status(204).send();
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // GET /api/supplier/projects
 router.get('/projects', async (req: Request, res: Response) => {
   try {

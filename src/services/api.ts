@@ -241,6 +241,19 @@ export const supplierApi = {
     });
   },
 
+  async updatePerson(id: string, data: any) {
+    return apiRequest(`/api/supplier/people/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deletePerson(id: string) {
+    return apiRequest(`/api/supplier/people/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   async listProjects() {
     return apiRequest<any[]>('/api/supplier/projects');
   },

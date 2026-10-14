@@ -22,6 +22,7 @@ import {
   Sparkles,
   ShieldAlert,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
 
 interface SupplierDashboardProps {
@@ -547,6 +548,18 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 </div>
               </div>
             )}
+
+            {completeness.score < 100 && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-[8px] space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Applications & Sharing locked ({completeness.score}% complete)</span>
+                </div>
+                <p className="text-[12px] text-amber-700 dark:text-amber-300">
+                  Under BidReady360, 100% profile completeness is required before submitting bids, accessing applications, or sharing documents.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6">
@@ -555,7 +568,13 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               onClick={onNavigateToApplications}
               className="text-[15px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
-              <span>{applications.length === 0 ? 'Browse tender calls' : 'View applications'}</span>
+              <span>
+                {completeness.score < 100
+                  ? 'View missing requirements to unlock'
+                  : applications.length === 0
+                  ? 'Browse tender calls'
+                  : 'View applications'}
+              </span>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -605,6 +624,11 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <div className="flex items-center gap-3">
                   <Share2 className="w-4 h-4 text-[#1F5F99]" strokeWidth={1.5} />
                   <span>Manage sharing</span>
+                  {completeness.score < 100 && (
+                    <span className="p-0.5 rounded text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800" title="Sharing locked (100% completeness required)">
+                      <Lock className="w-3 h-3" />
+                    </span>
+                  )}
                 </div>
                 <ChevronRight className="w-4 h-4 text-[#6B7A87]" />
               </button>
@@ -702,48 +726,57 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               return (
                 <div
                   key={call.id}
-                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between"
+                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between hover:shadow-md hover:border-[#BDE0FE] dark:hover:border-[#2C4D63] transition-all group"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[13px] text-[#6B7A87] truncate">
+                      <span className="text-[12px] font-medium text-[#6B7A87] dark:text-[#94A3B8] truncate" title={call.organizationName}>
                         {call.organizationName}
                       </span>
-                      <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium shrink-0">
-                        {call.type === 'RFP' ? 'RFP' : 'EOI'}
+                      <span className="bg-[#EAF2FA] dark:bg-[#162C3E] text-[#1F5F99] dark:text-[#6FAEE0] text-[11px] px-2 py-0.5 rounded-[4px] font-semibold shrink-0">
+                        {call.type === 'RFP' ? 'RFP' : call.type || 'Tender'}
                       </span>
                     </div>
 
-                    <h3 className="font-semibold text-[16px] text-[#10212E] dark:text-white line-clamp-2 leading-snug">
+                    <h3 className="font-semibold text-[16px] text-[#10212E] dark:text-white line-clamp-2 leading-snug group-hover:text-[#1F5F99] dark:group-hover:text-[#6FAEE0] transition-colors">
                       {call.title}
                     </h3>
 
-                    <div className="space-y-1.5 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[14px]">
+                    {(call.callNumber || (call as any).referenceNo) && (
+                      <span className="text-[11px] font-mono text-[#6B7A87] dark:text-[#94A3B8] bg-[#F7FAFD] dark:bg-[#0D1A25] px-2 py-0.5 rounded inline-block border border-[#E2EDF8] dark:border-[#1A3042]">
+                        Ref: {call.callNumber || (call as any).referenceNo}
+                      </span>
+                    )}
+
+                    <div className="space-y-1.5 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[13px]">
                       <div className="flex items-center justify-between text-[#43525F] dark:text-[#B2C3D2]">
                         <span>Closing date:</span>
-                        <span className="tabular-nums font-medium text-[#10212E] dark:text-white">
+                        <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">
                           {call.closingDate}
                         </span>
                       </div>
 
                       <div className="flex items-center justify-between text-[#43525F] dark:text-[#B2C3D2]">
-                        <span>Budget:</span>
-                        <span className="tabular-nums font-medium text-[#10212E] dark:text-white">
+                        <span>Estimated budget:</span>
+                        <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">
                           {budgetLabel}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6">
+                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6 flex items-center justify-between">
                     <button
                       type="button"
                       onClick={() => handleApplyClick(call.id)}
-                      className="text-[15px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      className="text-[14px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0] hover:underline inline-flex items-center gap-1 cursor-pointer"
                     >
                       <span>View tender</span>
                       <ChevronRight className="w-4 h-4" />
                     </button>
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 rounded">
+                      Category match
+                    </span>
                   </div>
                 </div>
               );

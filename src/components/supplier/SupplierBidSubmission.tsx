@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Call, PriceLineItem, Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
+import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
+import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
 import {
   Lock,
   Clock,
@@ -49,6 +51,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   const {
     calls,
     supplier,
+    documents,
     submitApplication,
     applications,
     withdrawApplication,
@@ -62,6 +65,20 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     () => calls.find((c) => c.id === activeCallId) || calls.find((c) => c.type === 'RFP') || calls[0],
     [calls, activeCallId]
   );
+
+  const completeness = calculateSupplierCompleteness(supplier, documents);
+  if (completeness.score < 100) {
+    return (
+      <ApplicationsLockedPrompt
+        completeness={completeness}
+        onNavigateToProfile={() => setActiveNav('profile')}
+        onNavigateToVault={() => setActiveNav('vault')}
+        onNavigateToDashboard={onCancel}
+        intendedAction="bids"
+        callTitle={call?.title}
+      />
+    );
+  }
 
   // Check if call is closed
   const isCallClosed = useMemo(() => {

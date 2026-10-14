@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ConsentGrant } from '../../types';
 import { StatusChip } from '../common/StatusChip';
+import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
+import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
 import {
   Building2,
   CheckCircle2,
@@ -44,6 +46,19 @@ export const SupplierConsent: React.FC = () => {
     addAuditEvent,
     setActiveNav,
   } = useApp();
+
+  const completeness = calculateSupplierCompleteness(supplier, documents);
+  if (completeness.score < 100) {
+    return (
+      <ApplicationsLockedPrompt
+        completeness={completeness}
+        onNavigateToProfile={(sec) => setActiveNav('profile')}
+        onNavigateToVault={() => setActiveNav('vault')}
+        onNavigateToDashboard={() => setActiveNav('dashboard')}
+        intendedAction="sharing"
+      />
+    );
+  }
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 

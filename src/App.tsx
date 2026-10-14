@@ -23,6 +23,8 @@ import { SupplierConsent } from './components/supplier/SupplierConsent';
 import { SupplierApplicationStepper } from './components/supplier/SupplierApplicationStepper';
 import { SupplierApplicationsList } from './components/supplier/SupplierApplicationsList';
 import { SupplierBidSubmission } from './components/supplier/SupplierBidSubmission';
+import { ApplicationsLockedPrompt } from './components/supplier/ApplicationsLockedPrompt';
+import { calculateSupplierCompleteness } from './utils/supplierOnboarding';
 
 // Buyer Views
 import { BuyerLayout } from './components/buyer/BuyerLayout';
@@ -98,8 +100,16 @@ const MainContent: React.FC = () => {
     buyerOrgStatus,
     isAuthenticated,
     authLoading,
+    supplier,
+    documents,
   } = useApp();
   const [viewingCallId, setViewingCallId] = useState<string | null>(null);
+  const [profileInitialSection, setProfileInitialSection] = useState<
+    'details' | 'directors' | 'categories' | 'projects' | 'preferences' | 'team'
+  >('details');
+
+  const supplierCompleteness = calculateSupplierCompleteness(supplier, documents);
+  const isProfileComplete = supplierCompleteness.score >= 100;
 
   // ----------------------------------------------------
   // SESSION RESTORATION LOADING INDICATOR
@@ -236,13 +246,44 @@ const MainContent: React.FC = () => {
             />
           );
         case 'profile':
-          return <SupplierProfile />;
+          return <SupplierProfile initialSection={profileInitialSection} />;
         case 'vault':
           return <SupplierVault />;
         case 'sharing':
-        case 'consent':
+        case 'consent': {
+          if (!isProfileComplete) {
+            return (
+              <ApplicationsLockedPrompt
+                completeness={supplierCompleteness}
+                onNavigateToProfile={(sec) => {
+                  setProfileInitialSection(sec || 'details');
+                  setActiveNav('profile');
+                }}
+                onNavigateToVault={() => setActiveNav('vault')}
+                onNavigateToDashboard={() => setActiveNav('dashboard')}
+                intendedAction="sharing"
+              />
+            );
+          }
           return <SupplierConsent />;
-        case 'bids':
+        }
+        case 'bids': {
+          if (!isProfileComplete) {
+            const selectedCall = calls.find((c) => c.id === selectedCallId);
+            return (
+              <ApplicationsLockedPrompt
+                completeness={supplierCompleteness}
+                onNavigateToProfile={(sec) => {
+                  setProfileInitialSection(sec || 'details');
+                  setActiveNav('profile');
+                }}
+                onNavigateToVault={() => setActiveNav('vault')}
+                onNavigateToDashboard={() => setActiveNav('dashboard')}
+                intendedAction="bids"
+                callTitle={selectedCall?.title}
+              />
+            );
+          }
           return (
             <SupplierBidSubmission
               initialCallId={selectedCallId}
@@ -256,8 +297,24 @@ const MainContent: React.FC = () => {
               }}
             />
           );
+        }
         case 'apply': {
           const selectedCall = calls.find((c) => c.id === selectedCallId);
+          if (!isProfileComplete) {
+            return (
+              <ApplicationsLockedPrompt
+                completeness={supplierCompleteness}
+                onNavigateToProfile={(sec) => {
+                  setProfileInitialSection(sec || 'details');
+                  setActiveNav('profile');
+                }}
+                onNavigateToVault={() => setActiveNav('vault')}
+                onNavigateToDashboard={() => setActiveNav('dashboard')}
+                intendedAction="apply"
+                callTitle={selectedCall?.title}
+              />
+            );
+          }
           if (selectedCall?.type === 'RFP') {
             return (
               <SupplierBidSubmission
@@ -288,6 +345,20 @@ const MainContent: React.FC = () => {
           );
         }
         case 'my-applications':
+          if (!isProfileComplete) {
+            return (
+              <ApplicationsLockedPrompt
+                completeness={supplierCompleteness}
+                onNavigateToProfile={(sec) => {
+                  setProfileInitialSection(sec || 'details');
+                  setActiveNav('profile');
+                }}
+                onNavigateToVault={() => setActiveNav('vault')}
+                onNavigateToDashboard={() => setActiveNav('dashboard')}
+                intendedAction="applications"
+              />
+            );
+          }
           return (
             <SupplierApplicationsList
               onNewApplication={() => setActiveNav('opportunities')}

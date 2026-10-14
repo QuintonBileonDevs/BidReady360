@@ -13,8 +13,10 @@ import {
   UserPlus,
   LogIn,
   RotateCw,
+  Lock,
 } from 'lucide-react';
 import { NotificationDrawer } from './NotificationDrawer';
+import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
 
 export const Header: React.FC = () => {
   const {
@@ -23,6 +25,7 @@ export const Header: React.FC = () => {
     activeNav,
     setActiveNav,
     supplier,
+    documents,
     notifications,
     language,
     setLanguage,
@@ -31,6 +34,9 @@ export const Header: React.FC = () => {
     logout,
     resetDemoData,
   } = useApp();
+
+  const supplierCompleteness = calculateSupplierCompleteness(supplier, documents);
+  const isProfileComplete = supplierCompleteness.score >= 100;
 
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -141,17 +147,30 @@ export const Header: React.FC = () => {
             <nav className="hidden lg:flex items-center gap-6 h-full">
               {navItems.map((item) => {
                 const isActive = activeNav === item.id || (item.id === 'sharing' && activeNav === 'consent');
+                const isLocked = (item.id === 'my-applications' || item.id === 'sharing') && role === 'supplier' && !isProfileComplete;
                 return (
                   <button
                     key={item.id}
                     onClick={() => handleNavClick(item.id)}
-                    className={`h-full flex items-center px-1 text-[15px] font-medium transition-colors cursor-pointer border-b-2 -mb-[1px] ${
+                    className={`h-full flex items-center gap-1.5 px-1 text-[15px] font-medium transition-colors cursor-pointer border-b-2 -mb-[1px] ${
                       isActive
                         ? 'border-[#1F5F99] text-[#10212E] dark:text-white font-semibold'
                         : 'border-transparent text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E] dark:hover:text-white'
                     }`}
                   >
-                    {item.label}
+                    <span>{item.label}</span>
+                    {isLocked && (
+                      <span
+                        className="p-0.5 rounded text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800"
+                        title={
+                          item.id === 'sharing'
+                            ? `Document sharing locked (${supplierCompleteness.score}% completed)`
+                            : `Applications locked (${supplierCompleteness.score}% completed)`
+                        }
+                      >
+                        <Lock className="w-3 h-3" />
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -160,32 +179,13 @@ export const Header: React.FC = () => {
 
           {/* 3. Right: Language toggle, Notification Bell, User Menu */}
           <div className="flex items-center gap-4 shrink-0">
-            {/* Language Toggle: EN / TN */}
-            <div className="flex items-center gap-1 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-              <Globe className="w-3.5 h-3.5 text-[#1F5F99]" strokeWidth={1.5} />
-              <button
-                type="button"
-                onClick={() => setLanguage('en')}
-                className={`font-semibold cursor-pointer min-h-[44px] min-w-[28px] inline-flex items-center justify-center ${
-                  language === 'en'
-                    ? 'text-[#1F5F99] underline'
-                    : 'text-[#6B7A87] hover:text-[#10212E]'
-                }`}
-              >
-                EN
-              </button>
-              <span>/</span>
-              <button
-                type="button"
-                onClick={() => setLanguage('tn')}
-                className={`font-semibold cursor-pointer min-h-[44px] min-w-[28px] inline-flex items-center justify-center ${
-                  language === 'tn'
-                    ? 'text-[#1F5F99] underline'
-                    : 'text-[#6B7A87] hover:text-[#10212E]'
-                }`}
-              >
-                TN
-              </button>
+            {/* Language Indicator: Defaulted to EN */}
+            <div
+              className="flex items-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#B2C3D2] px-2 py-1 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]"
+              title="Language: English (EN)"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+              <span className="font-semibold text-[#10212E] dark:text-white">EN</span>
             </div>
 
             {/* Notification Bell */}
@@ -362,17 +362,23 @@ export const Header: React.FC = () => {
           <div className="lg:hidden bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] px-4 py-4 space-y-2">
             {navItems.map((item) => {
               const isActive = activeNav === item.id;
+              const isLocked = (item.id === 'my-applications' || item.id === 'sharing') && role === 'supplier' && !isProfileComplete;
               return (
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`w-full text-left px-3 py-2.5 rounded-[6px] text-[15px] font-medium transition-colors ${
+                  className={`w-full text-left px-3 py-2.5 rounded-[6px] text-[15px] font-medium transition-colors flex items-center justify-between ${
                     isActive
                       ? 'bg-[#EAF2FA] text-[#1F5F99] font-semibold'
                       : 'text-[#43525F] hover:bg-[#F7FAFD]'
                   }`}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {isLocked && (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Locked ({supplierCompleteness.score}%)
+                    </span>
+                  )}
                 </button>
               );
             })}
