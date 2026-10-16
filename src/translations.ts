@@ -1,4 +1,4 @@
-export type Language = 'en' | 'tn';
+export type Language = 'en';
 
 export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {
@@ -29,36 +29,6 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     expiring_soon: 'Expiring soon',
     pending: 'Pending',
     citizen_owned: 'Citizen-Owned',
-    bwp_currency: 'BWP',
-  },
-  tn: {
-    tagline: 'Setshwantsho se se feletseng sa theko le thekiso.',
-    public_view: 'Dipotso le Dithendara',
-    supplier_portal: 'Barekisi ba Dithoto (Suppliers)',
-    buyer_portal: 'Lefapha la Theko (Procurement)',
-    search_placeholder: 'Batla dithendara, dikhamphani le mekgatlho mo Botswana...',
-    days_left: 'malatsi a a setseng',
-    closes_in: 'E tswalwa mo go',
-    closing_soon: 'E a tswalwa kgantele',
-    apply_now: 'Ikwadise / Dira Kopo',
-    profile_completeness: 'Boitekanelo jwa Porofaele',
-    documents_vault: 'Polokelo ya Dikwalo (Vault)',
-    sharing_consent: 'Tumo le Tetla ya Tshedimosetso',
-    my_applications: 'Dikopo le Dithendara tsa Me',
-    form_builder: 'Moagi wa Diforomo',
-    create_call: 'Bopa Thendara e Ntsha',
-    review_queue: 'Mola wa Tshekatsheko',
-    supplier_directory: 'Lenaneo la Barekisi',
-    rfp_management: 'Tsamao ya Dithendara',
-    evaluation_matrix: 'Tekanyetso le Dintlha',
-    award_decision: 'Kabo ya Ditiro',
-    audit_trail: 'Tlhatlhobo ya Tsamaiso',
-    sealed_bid_notice: 'Thendara e e Kwalilweng — E Notletswe go Fitlha e Tswalwa',
-    verified: 'E netefaditswe',
-    expired: 'E feletswe ke nako',
-    expiring_soon: 'E tloga e fela',
-    pending: 'E emetse tshekatsheko',
-    citizen_owned: 'Khamphani ya Batswana',
     bwp_currency: 'BWP',
   },
 };

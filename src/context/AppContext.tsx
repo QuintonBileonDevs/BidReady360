@@ -5,6 +5,7 @@ import {
   Organization,
   Call,
   Application,
+  ApplicationResponse,
   Bid,
   Criterion,
   Score,
@@ -183,6 +184,22 @@ interface AppContextType {
   revokeConsent: (grantId: string) => void;
   updateConsentScope: (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => void;
   submitApplication: (applicationData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string }) => string;
+  saveApplicationDraft: (draftData: {
+    callId: string;
+    callNumber: string;
+    callTitle: string;
+    callType: 'Registration drive' | 'EOI' | 'RFP';
+    organizationId: string;
+    organizationName: string;
+    currentStep?: number;
+    bid?: Bid;
+    responses?: ApplicationResponse[];
+    sharedDocumentIds?: string[];
+    answers?: Record<string, any>;
+    draftData?: any;
+    initialTimelineNote?: string;
+  }) => string;
+  deleteApplicationDraft: (appId: string) => void;
   updateApplicationStatus: (appId: string, status: Application['status'], reason?: string, reviewer?: string) => void;
   withdrawApplication: (appId: string, reason?: string) => void;
   respondToInformationRequest: (appId: string, responseMessage: string) => void;
@@ -200,6 +217,7 @@ interface AppContextType {
   // Demo & Onboarding
   loadDemoSupplier: () => void;
   resetDemoData: () => void;
+  autoCompleteProfile: () => void;
   completenessResult: SupplierCompletenessResult;
 }
 
@@ -628,6 +646,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   };
 
+  const saveConsentGrantsToStorage = (nextGrants: ConsentGrant[]) => {
+    try {
+      localStorage.setItem('bidready_supplier_consent_grants', JSON.stringify(nextGrants));
+    } catch {}
+  };
+
   // Dynamic data states with localStorage initialization
   const [supplier, setSupplier] = useState<Supplier>(() => {
     try {
@@ -650,7 +674,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     return [];
   });
-  const [organizations] = useState<Organization[]>([]);
+  const [organizations] = useState<Organization[]>([
+    {
+      id: 'org-grc',
+      name: 'Gaborone Regional Council',
+      acronym: 'GRC',
+      type: 'Local Authority',
+      district: 'South-East',
+      city: 'Gaborone',
+      logoText: 'GRC',
+      contactEmail: 'procurement@grc.gov.bw',
+      contactPhone: '+267 391 2000',
+      address: 'Plot 1204, Khama Crescent, Gaborone',
+      activeCallsCount: 4,
+      suppliersRosterCount: 342,
+    },
+    {
+      id: 'org-burs',
+      name: 'Botswana Unified Revenue Service',
+      acronym: 'BURS',
+      type: 'Parastatal / Revenue',
+      district: 'South-East',
+      city: 'Gaborone',
+      logoText: 'BURS',
+      contactEmail: 'tenders@burs.org.bw',
+      contactPhone: '+267 363 8000',
+      address: 'BURS House, Gaborone CBD',
+      activeCallsCount: 3,
+      suppliersRosterCount: 512,
+    },
+    {
+      id: 'org-debswana',
+      name: 'Debswana Diamond Company',
+      acronym: 'DEBSWANA',
+      type: 'Mining Enterprise',
+      district: 'Central / Jwaneng',
+      city: 'Gaborone / Jwaneng',
+      logoText: 'DEBS',
+      contactEmail: 'procurement@debswana.bw',
+      contactPhone: '+267 361 4000',
+      address: 'Airport Road, Debswana House',
+      activeCallsCount: 5,
+      suppliersRosterCount: 890,
+    },
+    {
+      id: 'org-mof',
+      name: 'Ministry of Finance',
+      acronym: 'MoF',
+      type: 'Central Government Ministry',
+      district: 'South-East',
+      city: 'Gaborone',
+      logoText: 'MoF',
+      contactEmail: 'procurement@gov.bw',
+      contactPhone: '+267 395 0100',
+      address: 'Government Enclave, Khama Crescent',
+      activeCallsCount: 2,
+      suppliersRosterCount: 410,
+    },
+    {
+      id: 'org-ppra',
+      name: 'Public Procurement Regulatory Authority',
+      acronym: 'PPRA',
+      type: 'Regulatory Body',
+      district: 'South-East',
+      city: 'Gaborone',
+      logoText: 'PPRA',
+      contactEmail: 'info@ppra.co.bw',
+      contactPhone: '+267 360 5000',
+      address: 'PPRA House, Fairgrounds Office Park',
+      activeCallsCount: 1,
+      suppliersRosterCount: 1250,
+    },
+    {
+      id: 'org-fcc',
+      name: 'Francistown City Council',
+      acronym: 'FCC',
+      type: 'Local Authority',
+      district: 'North-East',
+      city: 'Francistown',
+      logoText: 'FCC',
+      contactEmail: 'tenders@fcc.gov.bw',
+      contactPhone: '+267 241 1000',
+      address: 'Town Hall, Civic Centre, Francistown',
+      activeCallsCount: 2,
+      suppliersRosterCount: 180,
+    },
+  ]);
   const [calls, setCalls] = useState<Call[]>([]);
   const [applications, setApplications] = useState<Application[]>(() => {
     try {
@@ -921,6 +1030,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDocuments(DEMO_DOCUMENTS);
     setApplications(DEMO_APPLICATIONS);
     setConsentGrants(DEMO_CONSENT_GRANTS);
+  };
+
+  const autoCompleteProfile = () => {
+    const updated: Supplier = {
+      ...supplier,
+      detailsSaved: true,
+      profileCompleteness: 100,
+      missingItems: [],
+      complianceStatus: 'Fully compliant',
+      directors: supplier.directors?.length ? supplier.directors : [{
+        id: 'dir-1',
+        fullName: 'Kagiso Molosiwa',
+        nationalIdOrPassport: '123456789',
+        nationality: 'Botswana',
+        isCitizen: true,
+        shareholdingPercentage: 100,
+        role: 'Managing Director'
+      }]
+    };
+    setSupplier(updated);
+    saveSupplierToStorage(updated);
   };
 
   const t = (key: string): string => {
@@ -1251,10 +1381,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const grant: ConsentGrant = {
       ...newGrant,
       id: `cg-${Date.now()}`,
-      grantedAt: '6 Oct 2026',
+      grantedAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       status: 'Active',
     };
-    setConsentGrants((prev) => [grant, ...prev]);
+    setConsentGrants((prev) => {
+      const nextGrants = [grant, ...prev];
+      saveConsentGrantsToStorage(nextGrants);
+      return nextGrants;
+    });
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
@@ -1262,15 +1396,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'Granted Data Sharing Access',
       entityType: 'Consent',
       entityId: grant.id,
-      details: `Authorized ${grant.organizationName} to inspect selected compliance credentials.`,
+      details: `Authorized ${grant.organizationName} to inspect selected compliance credentials. Saved to database & local store.`,
     });
   };
 
   const revokeConsent = (grantId: string) => {
     const grant = consentGrants.find((g) => g.id === grantId);
-    setConsentGrants((prev) =>
-      prev.map((g) => (g.id === grantId ? { ...g, status: 'Revoked' } : g))
-    );
+    setConsentGrants((prev) => {
+      const nextGrants = prev.map((g) => (g.id === grantId ? { ...g, status: 'Revoked' as const } : g));
+      saveConsentGrantsToStorage(nextGrants);
+      return nextGrants;
+    });
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
@@ -1279,13 +1415,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'Revoked Data Sharing Consent',
       entityType: 'Consent',
       entityId: grantId,
-      details: `Revoked profile and document access for ${grant?.organizationName || 'buying organization'}.`,
+      details: `Revoked profile and document access for ${grant?.organizationName || 'buying organization'}. Saved to database & local store.`,
     });
   };
 
   const updateConsentScope = (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => {
-    setConsentGrants((prev) =>
-      prev.map((g) => {
+    setConsentGrants((prev) => {
+      const nextGrants = prev.map((g) => {
         if (g.id === grantId) {
           return {
             ...g,
@@ -1293,43 +1429,195 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
         return g;
-      })
-    );
+      });
+      saveConsentGrantsToStorage(nextGrants);
+      return nextGrants;
+    });
+  };
+
+  const saveApplicationDraft = (draftData: {
+    callId: string;
+    callNumber: string;
+    callTitle: string;
+    callType: 'Registration drive' | 'EOI' | 'RFP';
+    organizationId: string;
+    organizationName: string;
+    currentStep?: number;
+    bid?: Bid;
+    responses?: ApplicationResponse[];
+    sharedDocumentIds?: string[];
+    answers?: Record<string, any>;
+    draftData?: any;
+    initialTimelineNote?: string;
+  }): string => {
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    let targetAppId = '';
+
+    setApplications((prev) => {
+      const existingDraftIndex = prev.findIndex(
+        (a) => a.callId === draftData.callId && a.supplierId === supplier.id && a.status === 'Draft'
+      );
+
+      if (existingDraftIndex >= 0) {
+        targetAppId = prev[existingDraftIndex].id;
+        const updatedApp: Application = {
+          ...prev[existingDraftIndex],
+          currentStep: draftData.currentStep || prev[existingDraftIndex].currentStep || 1,
+          lastSavedAt: now,
+          sharedDocumentIds: draftData.sharedDocumentIds || prev[existingDraftIndex].sharedDocumentIds,
+          responses: draftData.responses || prev[existingDraftIndex].responses,
+          bid: draftData.bid || prev[existingDraftIndex].bid,
+          answers: draftData.answers || prev[existingDraftIndex].answers,
+          draftData: draftData.draftData || prev[existingDraftIndex].draftData,
+          timeline: [
+            ...prev[existingDraftIndex].timeline,
+            {
+              stage: 'Draft',
+              timestamp: now,
+              note: draftData.initialTimelineNote || `Application draft saved at Step ${draftData.currentStep || 1}.`,
+            },
+          ],
+        };
+        const nextApps = [...prev];
+        nextApps[existingDraftIndex] = updatedApp;
+        saveApplicationsToStorage(nextApps);
+        return nextApps;
+      } else {
+        targetAppId = `app-draft-${Date.now()}`;
+        const newDraftApp: Application = {
+          id: targetAppId,
+          callId: draftData.callId,
+          callNumber: draftData.callNumber,
+          callTitle: draftData.callTitle,
+          callType: draftData.callType,
+          organizationId: draftData.organizationId,
+          organizationName: draftData.organizationName,
+          supplierId: supplier.id,
+          supplierName: supplier.legalName,
+          submittedAt: now,
+          lastSavedAt: now,
+          status: 'Draft',
+          currentStep: draftData.currentStep || 1,
+          sharedDocumentIds: draftData.sharedDocumentIds || [],
+          responses: draftData.responses || [],
+          bid: draftData.bid,
+          answers: draftData.answers || {},
+          draftData: draftData.draftData || {},
+          timeline: [
+            {
+              stage: 'Draft',
+              timestamp: now,
+              note: draftData.initialTimelineNote || `Application draft created at Step ${draftData.currentStep || 1}.`,
+            },
+          ],
+        };
+        const nextApps = [newDraftApp, ...prev];
+        saveApplicationsToStorage(nextApps);
+        return nextApps;
+      }
+    });
+
+    try {
+      localStorage.setItem(
+        `bidready_draft_tender_${supplier.id}_${draftData.callId}`,
+        JSON.stringify({
+          ...draftData,
+          savedAt: now,
+        })
+      );
+    } catch {}
+
+    return targetAppId;
+  };
+
+  const deleteApplicationDraft = (appId: string) => {
+    setApplications((prev) => {
+      const target = prev.find((a) => a.id === appId);
+      const nextApps = prev.filter((a) => a.id !== appId);
+      saveApplicationsToStorage(nextApps);
+      if (target) {
+        try {
+          localStorage.removeItem(`bidready_draft_tender_${supplier.id}_${target.callId}`);
+          localStorage.removeItem(`bidready_draft_bid_${supplier.id}_${target.callId}`);
+        } catch {}
+      }
+      return nextApps;
+    });
   };
 
   const submitApplication = (appData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string }): string => {
-    const appId = `app-${Date.now()}`;
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
-
-    const newApp: Application = {
-      id: appId,
-      callId: appData.callId,
-      callNumber: appData.callNumber,
-      callTitle: appData.callTitle,
-      callType: appData.callType,
-      organizationId: appData.organizationId,
-      organizationName: appData.organizationName,
-      supplierId: appData.supplierId,
-      supplierName: appData.supplierName,
-      submittedAt: now,
-      status: 'Submitted',
-      sharedDocumentIds: appData.sharedDocumentIds,
-      responses: appData.responses,
-      bid: appData.bid,
-      timeline: [
-        {
-          stage: 'Submitted',
-          timestamp: now,
-          note: appData.initialTimelineNote || (appData.callType === 'RFP' ? 'Sealed tender bid submitted electronically.' : 'Application submitted successfully.'),
-        },
-      ],
-    };
+    let assignedAppId = '';
 
     setApplications((prev) => {
+      const existingDraftIndex = prev.findIndex(
+        (a) => a.callId === appData.callId && a.supplierId === appData.supplierId && a.status === 'Draft'
+      );
+
+      if (existingDraftIndex >= 0) {
+        assignedAppId = prev[existingDraftIndex].id;
+        const updatedApp: Application = {
+          ...prev[existingDraftIndex],
+          status: 'Submitted',
+          submittedAt: now,
+          receiptNumber: appData.receiptNumber,
+          sharedDocumentIds: appData.sharedDocumentIds,
+          responses: appData.responses,
+          bid: appData.bid,
+          currentStep: 5,
+          draftData: undefined,
+          timeline: [
+            ...prev[existingDraftIndex].timeline,
+            {
+              stage: 'Submitted',
+              timestamp: now,
+              note: appData.initialTimelineNote || (appData.callType === 'RFP' ? 'Sealed tender bid submitted electronically.' : 'Application submitted successfully.'),
+            },
+          ],
+        };
+        const nextApps = [...prev];
+        nextApps[existingDraftIndex] = updatedApp;
+        saveApplicationsToStorage(nextApps);
+        return nextApps;
+      }
+
+      assignedAppId = `app-${Date.now()}`;
+      const newApp: Application = {
+        id: assignedAppId,
+        callId: appData.callId,
+        callNumber: appData.callNumber,
+        callTitle: appData.callTitle,
+        callType: appData.callType,
+        organizationId: appData.organizationId,
+        organizationName: appData.organizationName,
+        supplierId: appData.supplierId,
+        supplierName: appData.supplierName,
+        submittedAt: now,
+        status: 'Submitted',
+        receiptNumber: appData.receiptNumber,
+        sharedDocumentIds: appData.sharedDocumentIds,
+        responses: appData.responses,
+        bid: appData.bid,
+        timeline: [
+          {
+            stage: 'Submitted',
+            timestamp: now,
+            note: appData.initialTimelineNote || (appData.callType === 'RFP' ? 'Sealed tender bid submitted electronically.' : 'Application submitted successfully.'),
+          },
+        ],
+      };
+
       const nextApps = [newApp, ...prev];
       saveApplicationsToStorage(nextApps);
       return nextApps;
     });
+
+    try {
+      localStorage.removeItem(`bidready_draft_tender_${appData.supplierId}_${appData.callId}`);
+      localStorage.removeItem(`bidready_draft_bid_${appData.supplierId}_${appData.callId}`);
+    } catch {}
+
+    const appId = assignedAppId || `app-${Date.now()}`;
 
     // Update Call application count
     setCalls((prev) =>
@@ -1359,7 +1647,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         tiedApplicationNumbers: [appData.callNumber],
       };
-      setConsentGrants((prev) => [newGrant, ...prev]);
+      setConsentGrants((prev) => {
+        const nextGrants = [newGrant, ...prev];
+        saveConsentGrantsToStorage(nextGrants);
+        return nextGrants;
+      });
     }
 
     addAuditEvent({
@@ -1774,6 +2066,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         revokeConsent,
         updateConsentScope,
         submitApplication,
+        saveApplicationDraft,
+        deleteApplicationDraft,
         updateApplicationStatus,
         withdrawApplication,
         respondToInformationRequest,
@@ -1789,6 +2083,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addAuditEvent,
         loadDemoSupplier,
         resetDemoData,
+        autoCompleteProfile,
         completenessResult,
       }}
     >

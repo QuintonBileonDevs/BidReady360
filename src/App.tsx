@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
@@ -108,6 +108,13 @@ const MainContent: React.FC = () => {
     'details' | 'directors' | 'categories' | 'projects' | 'preferences' | 'team'
   >('details');
 
+  // Automatically dismiss call detail view when navigating to other sections
+  useEffect(() => {
+    if (activeNav !== 'opportunities' && viewingCallId) {
+      setViewingCallId(null);
+    }
+  }, [activeNav, viewingCallId]);
+
   const supplierCompleteness = calculateSupplierCompleteness(supplier, documents);
   const isProfileComplete = supplierCompleteness.score >= 100;
 
@@ -182,11 +189,17 @@ const MainContent: React.FC = () => {
   // Render based on current role, route guards, and active navigation
   const renderContent = () => {
     // 1. Viewing a specific public call detail
-    if (viewingCallId) {
+    if (viewingCallId && activeNav === 'opportunities') {
       return (
         <PublicCallDetail
           callId={viewingCallId}
           onBack={() => setViewingCallId(null)}
+          onApply={() => {
+            const targetCall = viewingCallId;
+            setViewingCallId(null);
+            setSelectedCallId(targetCall);
+            setActiveNav('apply');
+          }}
         />
       );
     }

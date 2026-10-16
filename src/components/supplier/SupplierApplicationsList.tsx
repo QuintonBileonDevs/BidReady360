@@ -27,6 +27,7 @@ import {
   Download,
   Info,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 
 interface SupplierApplicationsListProps {
@@ -46,6 +47,7 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
     supplier,
     respondToInformationRequest,
     withdrawApplication,
+    deleteApplicationDraft,
     setSelectedCallId,
     setActiveNav,
   } = useApp();
@@ -866,28 +868,68 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
 
                       {/* Status Chip */}
                       <td className="py-4 px-6">
-                        <StatusChip status={app.status} />
+                        <div className="space-y-1">
+                          <StatusChip status={app.status} />
+                          {app.status === 'Draft' && app.currentStep && (
+                            <span className="text-[12px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] block">
+                              Step {app.currentStep} of 5: {
+                                app.callType === 'RFP'
+                                  ? (app.currentStep === 1
+                                      ? 'Price schedule'
+                                      : app.currentStep === 2
+                                      ? 'Technical response'
+                                      : app.currentStep === 3
+                                      ? 'Supporting files'
+                                      : app.currentStep === 4
+                                      ? 'Review and seal'
+                                      : 'Submit & receipt')
+                                  : `Step ${app.currentStep}`
+                              }
+                            </span>
+                          )}
+                          {app.status === 'Draft' && app.bid?.totalAmountBWP ? (
+                            <span className="text-[12px] text-[#6B7A87] block tabular-nums">
+                              Draft offer: BWP {app.bid.totalAmountBWP.toLocaleString()}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
 
                       {/* Submitted Date */}
                       <td className="py-4 px-6 text-[#43525F] dark:text-[#B2C3D2] whitespace-nowrap tabular-nums">
-                        {app.submittedAt}
+                        {activeTab === 'DRAFTS' ? (app.lastSavedAt || app.submittedAt) : app.submittedAt}
                       </td>
 
                       {/* Next-step Action */}
                       <td className="py-4 px-6 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={nextAction.action}
-                          className={`px-3.5 py-1.5 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
-                            nextAction.primary
-                              ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white'
-                              : 'border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white hover:bg-[#F7FAFD]'
-                          }`}
-                        >
-                          <span>{nextAction.label}</span>
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {app.status === 'Draft' && (
+                            <button
+                              type="button"
+                              title="Discard draft"
+                              onClick={() => {
+                                if (window.confirm('Are you sure you want to delete this saved draft?')) {
+                                  deleteApplicationDraft(app.id);
+                                }
+                              }}
+                              className="p-1.5 text-[#6B7A87] hover:text-[#DC2626] hover:bg-[#FEE2E2]/50 dark:hover:bg-[#451A1A] rounded-[6px] transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={nextAction.action}
+                            className={`px-3.5 py-1.5 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                              nextAction.primary
+                                ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white'
+                                : 'border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white hover:bg-[#F7FAFD]'
+                            }`}
+                          >
+                            <span>{nextAction.label}</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -912,7 +954,14 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
                         {app.callTitle}
                       </h4>
                     </div>
-                    <StatusChip status={app.status} />
+                    <div className="text-right">
+                      <StatusChip status={app.status} />
+                      {app.status === 'Draft' && app.currentStep && (
+                        <span className="text-[11px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] block mt-1">
+                          Step {app.currentStep} of 5
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="text-[14px] text-[#6B7A87] space-y-1">
@@ -922,15 +971,34 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="w-4 h-4 shrink-0" />
-                      <span>{activeTab === 'DRAFTS' ? 'Saved' : 'Submitted'}: {app.submittedAt}</span>
+                      <span>{activeTab === 'DRAFTS' ? 'Saved' : 'Submitted'}: {app.lastSavedAt || app.submittedAt}</span>
                     </div>
+                    {app.status === 'Draft' && app.bid?.totalAmountBWP ? (
+                      <div className="text-[13px] text-[#10212E] dark:text-white font-medium">
+                        Draft offer: BWP {app.bid.totalAmountBWP.toLocaleString()}
+                      </div>
+                    ) : null}
                   </div>
 
-                  <div className="pt-2">
+                  <div className="pt-2 flex items-center gap-2">
+                    {app.status === 'Draft' && (
+                      <button
+                        type="button"
+                        title="Discard draft"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to delete this saved draft?')) {
+                            deleteApplicationDraft(app.id);
+                          }
+                        }}
+                        className="p-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87] hover:text-[#DC2626] rounded-[6px] transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={nextAction.action}
-                      className={`w-full py-2 px-3 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
+                      className={`flex-1 py-2 px-3 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                         nextAction.primary
                           ? 'bg-[#1F5F99] text-white'
                           : 'border border-[#D5E0EA] dark:border-[#1E364A] bg-white text-[#10212E]'

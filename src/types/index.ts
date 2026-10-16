@@ -82,6 +82,7 @@ export interface Supplier {
   missingItems: string[];
   complianceStatus: 'Fully compliant' | 'Action required' | 'Non-compliant';
   documents: SupplierDocument[];
+  logoUrl?: string;
   hasCipa?: boolean;
   hasBurs?: boolean;
   hasPpra?: boolean;
@@ -299,6 +300,22 @@ export interface Application {
   answers?: Record<string, any>;
   responses: ApplicationResponse[];
   bid?: Bid;
+  currentStep?: number;
+  lastSavedAt?: string;
+  draftData?: {
+    currentStep?: number;
+    lineItems?: PriceLineItem[];
+    technicalMethodology?: string;
+    deliveryLeadTimeDays?: number;
+    warrantyMonths?: number;
+    qualityAssurancePlan?: string;
+    supportingFiles?: any[];
+    declarationAgreed?: boolean;
+    nonCollusionAgreed?: boolean;
+    answers?: Record<string, any>;
+    selectedDocIds?: string[];
+    savedAt?: string;
+  };
   timeline: {
     id?: string;
     author?: string;

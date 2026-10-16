@@ -1,4 +1,5 @@
 import React from 'react';
+import { useApp } from '../../context/AppContext';
 import {
   Lock,
   AlertTriangle,
@@ -30,6 +31,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
   intendedAction = 'applications',
   callTitle,
 }) => {
+  const { autoCompleteProfile } = useApp();
   const missingItems: OnboardingChecklistItem[] = completeness.missingItems || [];
   const score = completeness.score || 0;
 
@@ -143,6 +145,14 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
 
         {/* Action Shortcuts */}
         <div className="flex flex-wrap gap-3 pt-2">
+          <button
+            type="button"
+            onClick={autoCompleteProfile}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[6px] text-sm font-medium inline-flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            <span>⚡ Auto-Complete Profile & Unlock Instantly</span>
+          </button>
           <button
             type="button"
             onClick={() => onNavigateToProfile('details')}

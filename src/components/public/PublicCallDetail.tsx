@@ -28,19 +28,22 @@ import {
 interface PublicCallDetailProps {
   callId: string;
   onBack: () => void;
+  onApply?: () => void;
 }
 
-export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBack }) => {
+export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBack, onApply }) => {
   const {
     calls,
     clarifications,
     submitClarificationQuestion,
     role,
     supplier,
+    documents,
     isAuthenticated,
     setIntendedRoute,
     setActiveNav,
     setSelectedCallId,
+    autoCompleteProfile,
   } = useApp();
 
   const [questionText, setQuestionText] = useState('');
@@ -80,15 +83,66 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     setSelectedCallId(call.id);
     if (!isAuthenticated || role !== 'supplier') {
       setIntendedRoute('apply');
+      if (onBack) onBack();
       setActiveNav('supplier-login');
       return;
     }
     if (!supplier.emailVerified) {
+      if (onBack) onBack();
       setActiveNav('supplier-verify-email');
       return;
     }
-    setActiveNav('apply');
+    if ((supplier.profileCompleteness || 0) < 100) {
+      autoCompleteProfile();
+    }
+    if (onApply) {
+      onApply();
+    } else {
+      if (onBack) onBack();
+      setActiveNav('apply');
+    }
   };
+
+  const hasCipa = (documents || []).some(
+    (d) =>
+      (d.documentType?.toLowerCase().includes('cipa') ||
+        d.title?.toLowerCase().includes('cipa') ||
+        d.documentType?.toLowerCase().includes('incorporation')) &&
+      d.status !== 'Expired' &&
+      d.status !== 'Rejected'
+  );
+
+  const hasTax = (documents || []).some(
+    (d) =>
+      (d.documentType?.toLowerCase().includes('tax') ||
+        d.title?.toLowerCase().includes('tax') ||
+        d.documentType?.toLowerCase().includes('burs')) &&
+      d.status !== 'Expired' &&
+      d.status !== 'Rejected'
+  );
+
+  const hasPpra =
+    Boolean(supplier?.ppraCode) ||
+    (documents || []).some(
+      (d) =>
+        (d.documentType?.toLowerCase().includes('ppra') ||
+          d.title?.toLowerCase().includes('ppra')) &&
+        d.status !== 'Expired' &&
+        d.status !== 'Rejected'
+    );
+
+  const hasSafety = (documents || []).some(
+    (d) =>
+      (d.documentType?.toLowerCase().includes('workers') ||
+        d.documentType?.toLowerCase().includes('safety') ||
+        d.documentType?.toLowerCase().includes('wca') ||
+        d.documentType?.toLowerCase().includes('compensation') ||
+        d.title?.toLowerCase().includes('workers') ||
+        d.title?.toLowerCase().includes('safety') ||
+        d.title?.toLowerCase().includes('compensation')) &&
+      d.status !== 'Expired' &&
+      d.status !== 'Rejected'
+  );
 
   const getDaysRemaining = (deadlineStr: string) => {
     const now = new Date('2026-10-05T00:00:00');
@@ -213,34 +267,50 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+                  <FileCheck2 className={`w-4 h-4 ${hasCipa ? 'text-[#2F8F5B]' : 'text-[#1F5F99] dark:text-[#6FAEE0]'}`} strokeWidth={1.5} />
                   <span className="font-medium text-[#10212E] dark:text-white">CIPA Certificate of Incorporation</span>
                 </div>
-                <Badge variant="verified" size="sm">Mandatory</Badge>
+                {hasCipa ? (
+                  <Badge variant="verified" size="sm">Verified in Vault</Badge>
+                ) : (
+                  <Badge variant="neutral" size="sm">Mandatory</Badge>
+                )}
               </div>
 
               <div className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+                  <FileCheck2 className={`w-4 h-4 ${hasTax ? 'text-[#2F8F5B]' : 'text-[#1F5F99] dark:text-[#6FAEE0]'}`} strokeWidth={1.5} />
                   <span className="font-medium text-[#10212E] dark:text-white">Valid BURS Tax Clearance PIN</span>
                 </div>
-                <Badge variant="verified" size="sm">Mandatory</Badge>
+                {hasTax ? (
+                  <Badge variant="verified" size="sm">Verified in Vault</Badge>
+                ) : (
+                  <Badge variant="neutral" size="sm">Mandatory</Badge>
+                )}
               </div>
 
               <div className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+                  <FileCheck2 className={`w-4 h-4 ${hasPpra ? 'text-[#2F8F5B]' : 'text-[#1F5F99] dark:text-[#6FAEE0]'}`} strokeWidth={1.5} />
                   <span className="font-medium text-[#10212E] dark:text-white">PPRA Registration Certificate</span>
                 </div>
-                <Badge variant="verified" size="sm">Active Code</Badge>
+                {hasPpra ? (
+                  <Badge variant="verified" size="sm">Active Code · Verified</Badge>
+                ) : (
+                  <Badge variant="neutral" size="sm">Active Code Required</Badge>
+                )}
               </div>
 
               <div className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+                  <FileCheck2 className={`w-4 h-4 ${hasSafety ? 'text-[#2F8F5B]' : 'text-[#1F5F99] dark:text-[#6FAEE0]'}`} strokeWidth={1.5} />
                   <span className="font-medium text-[#10212E] dark:text-white">Workers Compensation / Safety</span>
                 </div>
-                <Badge variant="neutral" size="sm">Required</Badge>
+                {hasSafety ? (
+                  <Badge variant="verified" size="sm">Verified in Vault</Badge>
+                ) : (
+                  <Badge variant="neutral" size="sm">Required</Badge>
+                )}
               </div>
             </div>
           </Card>

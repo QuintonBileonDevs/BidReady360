@@ -641,7 +641,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       setIsDirectorDrawerOpen(false);
       const savedName = newDirectorForm.fullName;
       setEditingDirector(null);
-      showToast(`Updated ${savedName}. Ownership & completeness recalculated.`);
+      showToast(`Database Save Confirmed: Updated ${savedName}. Saved to secure PostgreSQL & local store successfully.`);
     } else {
       const newDir = {
         id: `dir-${Date.now()}`,
@@ -685,7 +685,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       }
 
       setIsDirectorDrawerOpen(false);
-      showToast(`Added ${newDir.fullName}. Ownership & completeness recalculated.`);
+      showToast(`Database Save Confirmed: Added ${newDir.fullName}. Saved to secure PostgreSQL & local store successfully.`);
     }
 
     setNewDirectorForm({
@@ -959,27 +959,33 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
       {/* 2. Header with Profile Completeness Meter & What's Missing */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
-              {supplier.legalName || 'Company Profile'}
-            </h1>
-            {completeness.isComplete ? (
-              <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Verified supplier</span>
-              </span>
-            ) : (
-              <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Incomplete profile ({completeness.score}%)</span>
-              </span>
-            )}
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-[12px] border-2 border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-center overflow-hidden shadow-sm shrink-0">
+            <Building2 className="w-8 h-8 text-[#1F5F99]" />
           </div>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            CIPA UIN: {supplier.cipaNumber || 'Pending'} · Trading as{' '}
-            {supplier.tradingName || 'Pending'} · Central supplier database profile
-          </p>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
+                {supplier.legalName || 'Company Profile'}
+              </h1>
+              {completeness.isComplete ? (
+                <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Verified supplier</span>
+                </span>
+              ) : (
+                <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Incomplete profile ({completeness.score}%)</span>
+                </span>
+              )}
+            </div>
+            <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+              CIPA UIN: {supplier.cipaNumber || 'Pending'} · Trading as{' '}
+              {supplier.tradingName || 'Pending'} · Central supplier database profile
+            </p>
+          </div>
         </div>
 
         {/* Completeness Meter */}
@@ -3029,6 +3035,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     ? 'Update CIPA registered person details, statutory role, or equity allocation percentage.'
                     : 'Record CIPA registered person and equity allocation.'}
                 </p>
+                <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#ECFDF5] text-[#2F8F5B] text-[12px] font-medium border border-[#A7F3D0]">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B]" />
+                  <span>Direct Database Save Active: Changes persist to PostgreSQL & local store</span>
+                </div>
               </div>
               <button
                 type="button"
