@@ -247,7 +247,7 @@ export const PublicAbout: React.FC = () => {
               </Badge>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl font-heading font-semibold text-[#de0606] dark:text-[#de0606] tracking-tight leading-[1.12]">
+            <h1 className="text-4xl sm:text-5xl font-heading font-semibold text-[#3e3b3b] dark:text-[#de0606] tracking-tight leading-[1.12]">
               A 360° picture of procurement.
             </h1>
 
