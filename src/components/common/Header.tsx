@@ -180,25 +180,30 @@ export const Header: React.FC = () => {
           {/* 3. Right: Language toggle, Notification Bell, User Menu */}
           <div className="flex items-center gap-4 shrink-0">
             {/* Language Indicator: Defaulted to EN */}
-            <div
-              className="flex items-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#B2C3D2] px-2 py-1 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]"
+            <button
+              type="button"
+              aria-label="Select language"
+              aria-haspopup="menu"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#B2C3D2] px-2 py-1 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] cursor-pointer"
               title="Language: English (EN)"
             >
               <Globe className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
               <span className="font-semibold text-[#10212E] dark:text-white">EN</span>
-            </div>
-
-            {/* Notification Bell */}
-            <button
-              onClick={() => setIsNotifOpen(true)}
-              className="relative p-2 text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] rounded-[6px] hover:bg-[#F7FAFD] transition-colors cursor-pointer"
-              aria-label="Open notifications"
-            >
-              <Bell className="w-4 h-4" strokeWidth={1.5} />
-              {unreadNotifs > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-[#C2412D] rounded-full" />
-              )}
             </button>
+
+            {/* Notification Bell (Only when signed in) */}
+            {isAuthenticated && role !== 'public' && (
+              <button
+                onClick={() => setIsNotifOpen(true)}
+                className="relative min-w-[44px] min-h-[44px] flex items-center justify-center p-2 text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] rounded-[6px] hover:bg-[#F7FAFD] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                aria-label="Open notifications"
+              >
+                <Bell className="w-4 h-4" strokeWidth={1.5} />
+                {unreadNotifs > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#C2412D] rounded-full" />
+                )}
+              </button>
+            )}
 
             {/* Public Role Action Buttons */}
             {role === 'public' && (

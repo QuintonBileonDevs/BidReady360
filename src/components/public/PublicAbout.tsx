@@ -274,19 +274,35 @@ export const PublicAbout: React.FC = () => {
               </Button>
             </div>
 
+            {/* Buyer Path Link */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setHowItWorksTab('buyers');
+                  const el = document.getElementById('how-it-works-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  else setActiveNav('buyers');
+                }}
+                className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] font-medium hover:underline inline-flex items-center gap-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+              >
+                <span>Are you a buyer? See how it works for buyers →</span>
+              </button>
+            </div>
+
             {/* Micro Trust Proof */}
-            <div className="pt-4 flex flex-wrap items-center gap-4 text-xs text-[#6B7A87] border-t border-[#D5E0EA] dark:border-[#1E364A]">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B]" strokeWidth={1.5} />
-                <span>CIPA & BURS sync</span>
+            <div id="how-it-works-section" className="pt-4 flex flex-wrap items-center gap-4 sm:gap-6 text-[14px] text-[#334155] border-t border-[#D5E0EA] dark:border-[#1E364A]">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-[18px] h-[18px] text-[#2F8F5B]" strokeWidth={1.5} />
+                <span className="text-[14px] text-[#334155] font-medium">CIPA & BURS sync</span>
               </span>
-              <span className="flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
-                <span>Asymmetric sealed bids</span>
+              <span className="flex items-center gap-2">
+                <Lock className="w-[18px] h-[18px] text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+                <span className="text-[14px] text-[#334155] font-medium">Asymmetric sealed bids</span>
               </span>
-              <span className="flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-[#E8A33D]" strokeWidth={1.5} />
-                <span>PPRA compliant</span>
+              <span className="flex items-center gap-2">
+                <Shield className="w-[18px] h-[18px] text-[#B45309]" strokeWidth={1.5} />
+                <span className="text-[14px] text-[#334155] font-medium">PPRA compliant</span>
               </span>
             </div>
           </div>
@@ -295,394 +311,400 @@ export const PublicAbout: React.FC = () => {
           <div className="lg:col-span-6">
             <div className="relative group">
               {/* Animated Ambient Backlight Glow */}
-              <div className="absolute -inset-1.5 bg-gradient-to-r from-[#1F5F99]/25 via-[#2F8F5B]/20 to-[#6FAEE0]/25 rounded-[16px] blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-700 animate-pulse-slow -z-10 pointer-events-none" />
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-[#1F5F99]/25 via-[#2F8F5B]/20 to-[#6FAEE0]/25 rounded-[16px] blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-700 motion-reduce:animate-none -z-10 pointer-events-none" />
 
-              {/* Outer Frame with Smooth Hover Elevation */}
-              <Card
-                variant="default"
-                padding="none"
-                className="overflow-hidden shadow-elevated border-hairline transition-all duration-300 hover:shadow-2xl hover:border-[#1F5F99]/40 relative bg-white dark:bg-[#132635]"
+              {/* Outer Frame with Smooth Hover Elevation - treated as illustration illustration role="img" */}
+              <div
+                role="img"
+                aria-label="Illustration of a verified supplier passport showing prequalification documents (demo data)"
               >
-                {/* Active Laser Scanner Beam across the card during scan */}
-                {isScanning && (
-                  <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#2F8F5B] to-transparent shadow-[0_0_18px_#2F8F5B] z-30 pointer-events-none animate-scan-beam" />
-                )}
+                <Card
+                  variant="default"
+                  padding="none"
+                  className="overflow-hidden shadow-elevated border-hairline transition-all duration-300 hover:shadow-2xl hover:border-[#1F5F99]/40 relative bg-white dark:bg-[#132635]"
+                >
+                  <div aria-hidden="true">
+                    {/* Active Laser Scanner Beam across the card during scan */}
+                    {isScanning && (
+                      <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#2F8F5B] to-transparent shadow-[0_0_18px_#2F8F5B] z-30 pointer-events-none motion-reduce:animate-none animate-scan-beam" />
+                    )}
 
-                {/* Simulated UI Window Header */}
-                <div className="bg-[#F7FAFD] dark:bg-[#10212E] px-4 py-3 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#E5484D]/80 hover:scale-125 transition-transform cursor-pointer" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#E8A33D]/80 hover:scale-125 transition-transform cursor-pointer" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#2F8F5B]/80 hover:scale-125 transition-transform cursor-pointer" />
-                    <span className="ml-2 text-[11px] font-mono font-medium text-[#6B7A87] truncate hidden sm:inline">
-                      bidready360.co.bw / supplier-passport / BW00008492019
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Interactive Scan Trigger Button */}
-                    <button
-                      type="button"
-                      onClick={handleTriggerScan}
-                      disabled={isScanning}
-                      className="px-2 py-1 rounded-[6px] text-[11px] font-semibold bg-[#1F5F99]/10 hover:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] border border-[#1F5F99]/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                      title="Trigger real-time cryptographic vault verification"
-                    >
-                      <Scan className={`w-3.5 h-3.5 ${isScanning ? 'animate-radar-spin text-[#2F8F5B]' : ''}`} />
-                      <span>{isScanning ? 'Verifying...' : 'Scan Vault'}</span>
-                    </button>
-
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#ECFDF5] dark:bg-emerald-950/60 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                      </span>
-                      DEMO VERIFIED
-                    </span>
-                  </div>
-                </div>
-
-                {/* Scan Success Animated Alert */}
-                {scanSuccess && (
-                  <div className="bg-emerald-500 text-white px-4 py-2 text-xs font-medium flex items-center justify-between gap-2 animate-fade-in shadow-inner">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
-                      <span>All 5 SHA-256 cryptographic hashes verified untampered via live CIPA API!</span>
-                    </div>
-                    <span className="font-mono text-[10px] bg-emerald-600 px-1.5 py-0.5 rounded text-white">
-                      0.04s
-                    </span>
-                  </div>
-                )}
-
-                {/* Composed Passport Preview Content - Strictly Demo Data */}
-                <div className="p-5 sm:p-6 space-y-4 bg-white dark:bg-[#132635] relative">
-                  {/* Company Profile Header Row */}
-                  <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-[8px] bg-gradient-to-br from-[#1F5F99] via-[#164875] to-[#10212E] text-white flex items-center justify-center font-heading font-bold text-sm shrink-0 shadow-md relative overflow-hidden group/avatar">
-                        <span>MS</span>
-                        <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover/avatar:translate-x-full transition-transform duration-700" />
+                    {/* Simulated UI Window Header */}
+                    <div className="bg-[#F7FAFD] dark:bg-[#10212E] px-4 py-3 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#E5484D]/80 hover:scale-125 transition-transform cursor-pointer" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#E8A33D]/80 hover:scale-125 transition-transform cursor-pointer" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#2F8F5B]/80 hover:scale-125 transition-transform cursor-pointer" />
+                        <span className="ml-2 text-xs font-mono font-medium text-[#475569] truncate hidden sm:inline">
+                          bidready360.co.bw / supplier-passport / BW00008492019
+                        </span>
                       </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-[15px] font-heading font-semibold text-[#10212E] dark:text-white leading-tight">
-                            Morama Solutions (Pty) Ltd
-                          </h4>
-                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[#ECFDF5] dark:bg-emerald-950/40 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
-                            100% Citizen (EDD)
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Interactive Scan Trigger Button */}
+                        <button
+                          type="button"
+                          onClick={handleTriggerScan}
+                          disabled={isScanning}
+                          className="px-2 py-1 rounded-[6px] text-xs font-semibold bg-[#1F5F99]/10 hover:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] border border-[#1F5F99]/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                          title="Trigger real-time cryptographic vault verification"
+                        >
+                          <Scan className={`w-3.5 h-3.5 ${isScanning ? 'motion-reduce:animate-none animate-radar-spin text-[#2F8F5B]' : ''}`} />
+                          <span>{isScanning ? 'Verifying...' : 'Scan Vault'}</span>
+                        </button>
+
+                        <span className="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] flex items-center gap-1.5">
+                          <span className="relative flex h-2 w-2">
+                            <span className="motion-reduce:animate-none animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                          </span>
+                          DEMO VERIFIED
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Scan Success Animated Alert */}
+                    {scanSuccess && (
+                      <div className="bg-emerald-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-between gap-2 motion-reduce:transition-none shadow-inner">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
+                          <span>All 4 SHA-256 cryptographic hashes verified untampered via live CIPA API!</span>
+                        </div>
+                        <span className="font-mono text-xs bg-emerald-700 px-1.5 py-0.5 rounded text-white">
+                          0.04s
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Composed Passport Preview Content - Strictly Demo Data */}
+                    <div className="p-5 sm:p-6 space-y-4 bg-white dark:bg-[#132635] relative">
+                      {/* Company Profile Header Row */}
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-[8px] bg-gradient-to-br from-[#1F5F99] via-[#164875] to-[#10212E] text-white flex items-center justify-center font-heading font-bold text-sm shrink-0 shadow-md relative overflow-hidden group/avatar">
+                            <span>MS</span>
+                            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent group-hover/avatar:translate-x-full transition-transform duration-700 motion-reduce:transition-none" />
+                          </div>
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h2 className="text-sm sm:text-base font-heading font-semibold text-[#10212E] dark:text-white leading-tight">
+                                Morama Solutions (Pty) Ltd
+                              </h2>
+                              <span className="font-mono text-xs px-2 py-0.5 rounded-[4px] bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] font-semibold">
+                                Citizen-owned
+                              </span>
+                            </div>
+                            <p className="text-xs text-[#475569]">
+                              CIPA: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">BW00008492019</span> · BURS TIN: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">C9018472-01</span>
+                            </p>
+                            <p className="text-xs text-[#475569]">
+                              Gaborone West Industrial · Building Works, Civil Engineering & ICT Supplies
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0 pl-2">
+                          <span className="text-xs uppercase font-semibold tracking-wider text-[#475569] block">
+                            Passport Score
+                          </span>
+                          <div className="relative overflow-hidden inline-block px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 my-0.5">
+                            <span className="text-base sm:text-lg font-heading font-bold text-[#166534] dark:text-emerald-400 tabular-nums">
+                              100%
+                            </span>
+                            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent motion-reduce:animate-none animate-shimmer pointer-events-none" />
+                          </div>
+                          <span className="text-xs font-semibold text-[#166534] dark:text-emerald-400 block">
+                            Audit Cleared
                           </span>
                         </div>
-                        <p className="text-xs text-[#6B7A87]">
-                          CIPA: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">BW00008492019</span> · BURS TIN: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">C9018472-01</span>
-                        </p>
-                        <p className="text-[11px] text-[#6B7A87]">
-                          Gaborone West Industrial · Building Works, Civil Engineering & ICT Supplies
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0 pl-2">
-                      <span className="text-[10px] uppercase font-semibold tracking-wider text-[#6B7A87] block">
-                        Passport Score
-                      </span>
-                      <div className="relative overflow-hidden inline-block px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 my-0.5">
-                        <span className="text-lg font-heading font-bold text-[#2F8F5B] dark:text-emerald-400 tabular-nums">
-                          100%
-                        </span>
-                        <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer pointer-events-none" />
-                      </div>
-                      <span className="text-[10px] font-medium text-[#2F8F5B] dark:text-emerald-400 block">
-                        Audit Cleared
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Interactive Tab Navigation */}
-                  <div className="flex items-center gap-1 p-1 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewTab('documents')}
-                      className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        previewTab === 'documents'
-                          ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
-                          : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
-                      }`}
-                    >
-                      <FileCheck2 className="w-3.5 h-3.5" />
-                      <span>Uploaded Docs (5)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewTab('sharing')}
-                      className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        previewTab === 'sharing'
-                          ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
-                          : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
-                      }`}
-                    >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Buyer Sharing (3)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewTab('security')}
-                      className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        previewTab === 'security'
-                          ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
-                          : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
-                      }`}
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Vault Integrity</span>
-                    </button>
-                  </div>
-
-                  {/* TAB 1: UPLOADED DOCUMENTS LIST */}
-                  {previewTab === 'documents' && (
-                    <div className="space-y-2 animate-fade-in">
-                      <div className="flex items-center justify-between text-xs text-[#6B7A87] px-0.5">
-                        <span className="font-semibold uppercase tracking-wider text-[10px] flex items-center gap-1.5">
-                          <span>Statutory & Prequalification Vault</span>
-                          <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
-                            (Click doc to inspect cryptographic hash)
-                          </span>
-                        </span>
-                        <span className="text-[11px] text-[#2F8F5B] font-medium flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          5 verified files
-                        </span>
                       </div>
 
-                      <div className="space-y-1.5 max-h-[230px] overflow-y-auto pr-0.5">
-                        {DEMO_PASSPORT_DOCS.map((doc, idx) => (
-                          <div
-                            key={doc.id}
-                            onClick={() => setSelectedDemoDoc(doc)}
-                            className="p-2.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs hover:border-[#1F5F99] hover:bg-white dark:hover:bg-[#162C3E] hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 cursor-pointer group/row"
-                            title="Click to inspect cryptographic seal & OCR confidence"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-7 h-7 rounded-[6px] bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 flex items-center justify-center shrink-0 font-bold text-[10px] group-hover/row:scale-105 transition-transform">
-                                PDF
+                      {/* Interactive Tab Navigation with role="tablist" */}
+                      <div role="tablist" aria-label="Passport preview tabs" className="flex items-center gap-1 p-1 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] text-xs">
+                        <button
+                          role="tab"
+                          aria-selected={previewTab === 'documents'}
+                          tabIndex={previewTab === 'documents' ? 0 : -1}
+                          type="button"
+                          onClick={() => setPreviewTab('documents')}
+                          className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
+                            previewTab === 'documents'
+                              ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
+                              : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
+                          }`}
+                        >
+                          <FileCheck2 className="w-3.5 h-3.5" />
+                          <span>Uploaded Docs (4)</span>
+                        </button>
+                        <button
+                          role="tab"
+                          aria-selected={previewTab === 'sharing'}
+                          tabIndex={previewTab === 'sharing' ? 0 : -1}
+                          type="button"
+                          onClick={() => setPreviewTab('sharing')}
+                          className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
+                            previewTab === 'sharing'
+                              ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
+                              : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
+                          }`}
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                          <span>Buyer Sharing (3)</span>
+                        </button>
+                        <button
+                          role="tab"
+                          aria-selected={previewTab === 'security'}
+                          tabIndex={previewTab === 'security' ? 0 : -1}
+                          type="button"
+                          onClick={() => setPreviewTab('security')}
+                          className={`flex-1 py-1.5 px-2.5 rounded-[6px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
+                            previewTab === 'security'
+                              ? 'bg-white dark:bg-[#1F5F99] text-[#1F5F99] dark:text-white shadow-xs font-semibold scale-[1.01]'
+                              : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
+                          }`}
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Vault Integrity</span>
+                        </button>
+                      </div>
+
+                      {/* TAB 1: UPLOADED DOCUMENTS LIST (First 4 docs, no nested scrollbar) */}
+                      {previewTab === 'documents' && (
+                        <div className="space-y-2 motion-reduce:animate-none animate-fade-in">
+                          <div className="flex items-center justify-between text-xs text-[#475569] px-0.5">
+                            <span className="font-semibold uppercase tracking-wider text-xs">
+                              Statutory & Prequalification Vault
+                            </span>
+                            <span className="text-xs text-[#166534] font-semibold flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#166534]" />
+                              4 verified files
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {DEMO_PASSPORT_DOCS.slice(0, 4).map((doc) => (
+                              <div
+                                key={doc.id}
+                                onClick={() => setSelectedDemoDoc(doc)}
+                                className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs hover:border-[#1F5F99] hover:bg-white dark:hover:bg-[#162C3E] hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 cursor-pointer group/row focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                                title="Click to inspect cryptographic seal & OCR confidence"
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-8 h-8 rounded-[6px] bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 flex items-center justify-center shrink-0 font-bold text-xs group-hover/row:scale-105 transition-transform">
+                                    PDF
+                                  </div>
+                                  <div className="min-w-0 space-y-0.5">
+                                    <span className="font-semibold text-[#10212E] dark:text-white truncate block group-hover/row:text-[#1F5F99] dark:group-hover/row:text-[#38BDF8] transition-colors text-xs">
+                                      {doc.title}
+                                    </span>
+                                    <div className="text-xs text-[#475569] flex items-center gap-2 truncate">
+                                      <span>{doc.filename}</span>
+                                      <span>·</span>
+                                      <span>{doc.size}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className="px-2 py-0.5 rounded bg-[#DCFCE7] text-[#166534] text-xs font-semibold border border-[#86EFAC] flex items-center gap-1">
+                                    <Check className="w-3.5 h-3.5 text-[#166534]" />
+                                    {doc.status}
+                                  </span>
+                                  <ChevronRight className="w-4 h-4 text-[#475569] opacity-0 group-hover/row:opacity-100 group-hover/row:translate-x-0.5 transition-all" />
+                                </div>
                               </div>
-                              <div className="min-w-0 space-y-0.5">
-                                <span className="font-semibold text-[#10212E] dark:text-white truncate block group-hover/row:text-[#1F5F99] dark:group-hover/row:text-[#38BDF8] transition-colors">
-                                  {doc.title}
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 2: BUYER SHARING */}
+                      {previewTab === 'sharing' && (
+                        <div className="space-y-2 motion-reduce:animate-none animate-fade-in">
+                          <div className="flex items-center justify-between text-xs text-[#475569] px-0.5">
+                            <span className="font-semibold uppercase tracking-wider text-xs">
+                              Authorized Public & Private Buyers
+                            </span>
+                            <span className="text-xs text-[#1F5F99] dark:text-[#38BDF8] font-medium flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#1F5F99] dark:bg-[#38BDF8] animate-pulse motion-reduce:animate-none" />
+                              3 Active Consents
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-[#10212E] dark:text-white text-xs">
+                                  Gaborone Regional Council (GRC)
                                 </span>
-                                <div className="text-[11px] text-[#6B7A87] flex items-center gap-2 truncate">
-                                  <span>{doc.filename}</span>
-                                  <span>·</span>
-                                  <span>{doc.size}</span>
-                                  <span>·</span>
-                                  <span className="font-mono text-[10px] text-slate-500">
-                                    SHA-256:{doc.sha256.substring(0, 8)}...
+                                <span className="px-2 py-0.5 rounded bg-[#DCFCE7] text-[#166534] text-xs font-semibold border border-[#86EFAC] flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#166534]" />
+                                  Consent Active
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#475569]">
+                                Scope: Statutory documents & bank details · Valid until Sep 2027
+                              </p>
+                            </div>
+
+                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-[#10212E] dark:text-white text-xs">
+                                  Debswana Diamond Company
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-[#DCFCE7] text-[#166534] text-xs font-semibold border border-[#86EFAC] flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#166534]" />
+                                  Consent Active
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#475569]">
+                                Scope: Prequalification Vault & PPRA certificates · Valid until Mar 2027
+                              </p>
+                            </div>
+
+                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-semibold text-[#10212E] dark:text-white text-xs">
+                                  Water Utilities Corporation (WUC)
+                                </span>
+                                <span className="px-2 py-0.5 rounded bg-[#DCFCE7] text-[#166534] text-xs font-semibold border border-[#86EFAC] flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#166534]" />
+                                  Consent Active
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#475569]">
+                                Scope: Full compliance passport · Valid until Oct 2027
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 3: VAULT INTEGRITY */}
+                      {previewTab === 'security' && (
+                        <div className="space-y-3 motion-reduce:animate-none animate-fade-in">
+                          <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2 text-xs">
+                            <div className="flex items-center gap-2 text-[#10212E] dark:text-white font-semibold text-xs">
+                              <div className="p-1 rounded bg-[#1F5F99]/10 text-[#1F5F99] dark:text-[#38BDF8]">
+                                <Lock className="w-4 h-4 motion-reduce:animate-none animate-pulse" />
+                              </div>
+                              <span>Asymmetric Sealed Bidding</span>
+                            </div>
+                            <p className="text-[#475569] text-xs leading-relaxed">
+                              Tender bids and commercial envelopes remain client-side encrypted until the official tender closing date and dual-key opening ceremony.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                              <span className="text-xs text-[#475569] block">Ledger Integrity</span>
+                              <span className="font-mono text-xs font-semibold text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-[#166534]" />
+                                SHA-256 Hashed
+                              </span>
+                            </div>
+                            <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                              <span className="text-xs text-[#475569] block">Access Control</span>
+                              <span className="text-xs font-semibold text-[#166534] flex items-center gap-1">
+                                <ShieldCheck className="w-3.5 h-3.5 text-[#166534]" />
+                                Consent-Gated
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Confidential Data Protection Footer */}
+                      <div className="p-3 rounded-[6px] bg-[#F0F5FA] dark:bg-[#162C3E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-xs text-[#475569]">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0" strokeWidth={1.5} />
+                          <span className="text-xs">
+                            Demo data only. Live client data is never exposed.
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Interactive Document Inspection Modal (Opens on document click) */}
+                      {selectedDemoDoc && (
+                        <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 motion-reduce:animate-none animate-fade-in">
+                          <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] shadow-2xl max-w-sm w-full p-4 space-y-3 motion-reduce:animate-none animate-fade-in text-xs">
+                            <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                              <div className="space-y-0.5">
+                                <span className="font-heading font-semibold text-sm text-[#10212E] dark:text-white block">
+                                  {selectedDemoDoc.title}
+                                </span>
+                                <span className="text-xs text-[#475569] block">
+                                  {selectedDemoDoc.authority}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedDemoDoc(null)}
+                                className="p-1 rounded text-[#475569] hover:text-[#10212E] dark:hover:text-white cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-semibold text-[#475569]">
+                                    Cryptographic SHA-256 Hash
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(selectedDemoDoc.sha256);
+                                      setCopiedHash(true);
+                                      setTimeout(() => setCopiedHash(false), 2000);
+                                    }}
+                                    className="text-xs text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-semibold flex items-center gap-1 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>{copiedHash ? 'Copied!' : 'Copy'}</span>
+                                  </button>
+                                </div>
+                                <span className="font-mono text-xs text-slate-700 dark:text-slate-300 break-all block leading-tight">
+                                  {selectedDemoDoc.sha256}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+                                  <span className="text-xs text-[#475569] block">OCR Confidence</span>
+                                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
+                                    {selectedDemoDoc.ocrConfidence}
+                                  </span>
+                                </div>
+                                <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+                                  <span className="text-xs text-[#475569] block">File Size</span>
+                                  <span className="font-semibold text-[#10212E] dark:text-white text-xs">
+                                    {selectedDemoDoc.size}
                                   </span>
                                 </div>
                               </div>
+
+                              <div className="p-2.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>Digital Signature & Timestamp Validated</span>
+                              </div>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-[#2F8F5B] text-[11px] font-semibold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                                <Check className="w-3 h-3" />
-                                {doc.status}
-                              </span>
-                              <ChevronRight className="w-3.5 h-3.5 text-[#6B7A87] opacity-0 group-hover/row:opacity-100 group-hover/row:translate-x-0.5 transition-all" />
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDemoDoc(null)}
+                              className="w-full py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] font-semibold text-xs transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                            >
+                              Close Details
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-
-                  {/* TAB 2: BUYER SHARING */}
-                  {previewTab === 'sharing' && (
-                    <div className="space-y-2 animate-fade-in">
-                      <div className="flex items-center justify-between text-xs text-[#6B7A87] px-0.5">
-                        <span className="font-semibold uppercase tracking-wider text-[10px]">
-                          Authorized Public & Private Buyers
-                        </span>
-                        <span className="text-[11px] text-[#1F5F99] dark:text-[#38BDF8] font-medium flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#1F5F99] dark:bg-[#38BDF8] animate-pulse" />
-                          3 Active Consents
-                        </span>
-                      </div>
-
-                      <div className="space-y-2 max-h-[230px] overflow-y-auto">
-                        <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#10212E] dark:text-white">
-                              Gaborone Regional Council (GRC)
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2F8F5B] text-[10px] font-semibold flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#2F8F5B]" />
-                              Consent Active
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#6B7A87]">
-                            Scope: Statutory documents & bank details · Valid until Sep 2027
-                          </p>
-                        </div>
-
-                        <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#10212E] dark:text-white">
-                              Debswana Diamond Company
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2F8F5B] text-[10px] font-semibold flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#2F8F5B]" />
-                              Consent Active
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#6B7A87]">
-                            Scope: Prequalification Vault & PPRA certificates · Valid until Mar 2027
-                          </p>
-                        </div>
-
-                        <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-[#10212E] dark:text-white">
-                              Water Utilities Corporation (WUC)
-                            </span>
-                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-[#2F8F5B] text-[10px] font-semibold flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#2F8F5B]" />
-                              Consent Active
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#6B7A87]">
-                            Scope: Full compliance passport · Valid until Oct 2027
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: VAULT INTEGRITY */}
-                  {previewTab === 'security' && (
-                    <div className="space-y-3 animate-fade-in">
-                      <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2 text-xs">
-                        <div className="flex items-center gap-2 text-[#10212E] dark:text-white font-semibold">
-                          <div className="p-1 rounded bg-[#1F5F99]/10 text-[#1F5F99] dark:text-[#38BDF8]">
-                            <Lock className="w-3.5 h-3.5 animate-pulse" />
-                          </div>
-                          <span>Asymmetric Sealed Bidding</span>
-                        </div>
-                        <p className="text-[#6B7A87] text-[11px] leading-relaxed">
-                          Tender bids and commercial envelopes remain client-side encrypted until the official tender closing date and dual-key opening ceremony.
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="p-2.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
-                          <span className="text-[11px] text-[#6B7A87] block">Ledger Integrity</span>
-                          <span className="font-mono text-xs font-semibold text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B]" />
-                            SHA-256 Hashed
-                          </span>
-                        </div>
-                        <div className="p-2.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
-                          <span className="text-[11px] text-[#6B7A87] block">Access Control</span>
-                          <span className="text-xs font-semibold text-[#2F8F5B] flex items-center gap-1">
-                            <ShieldCheck className="w-3.5 h-3.5 text-[#2F8F5B]" />
-                            Consent-Gated
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Confidential Data Protection Footer */}
-                  <div className="p-2.5 rounded-[6px] bg-[#F0F5FA] dark:bg-[#162C3E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-xs text-[#6B7A87]">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0" strokeWidth={1.5} />
-                      <span className="text-[11px]">
-                        Demo mockup data · Live client data is strictly segregated and never exposed
-                      </span>
-                    </div>
-                    <span className="font-mono text-[10px] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold shrink-0">
-                      AES-256
-                    </span>
                   </div>
-
-                  {/* Interactive Document Inspection Modal (Opens on document click) */}
-                  {selectedDemoDoc && (
-                    <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-                      <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] shadow-2xl max-w-sm w-full p-4 space-y-3 animate-fade-in text-xs">
-                        <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                          <div className="space-y-0.5">
-                            <span className="font-heading font-semibold text-sm text-[#10212E] dark:text-white block">
-                              {selectedDemoDoc.title}
-                            </span>
-                            <span className="text-[11px] text-[#6B7A87] block">
-                              {selectedDemoDoc.authority}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDemoDoc(null)}
-                            className="p-1 rounded text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="p-2 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] uppercase font-semibold text-[#6B7A87]">
-                                Cryptographic SHA-256 Hash
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(selectedDemoDoc.sha256);
-                                  setCopiedHash(true);
-                                  setTimeout(() => setCopiedHash(false), 2000);
-                                }}
-                                className="text-[10px] text-[#1F5F99] dark:text-[#38BDF8] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                              >
-                                <Copy className="w-3 h-3" />
-                                <span>{copiedHash ? 'Copied!' : 'Copy'}</span>
-                              </button>
-                            </div>
-                            <span className="font-mono text-[10px] text-slate-700 dark:text-slate-300 break-all block leading-tight">
-                              {selectedDemoDoc.sha256}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="p-2 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
-                              <span className="text-[10px] text-[#6B7A87] block">OCR Confidence</span>
-                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
-                                {selectedDemoDoc.ocrConfidence}
-                              </span>
-                            </div>
-                            <div className="p-2 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
-                              <span className="text-[10px] text-[#6B7A87] block">File Size</span>
-                              <span className="font-semibold text-[#10212E] dark:text-white text-xs">
-                                {selectedDemoDoc.size}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Digital Signature & Timestamp Validated</span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDemoDoc(null)}
-                          className="w-full py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] font-semibold text-xs transition-colors cursor-pointer"
-                        >
-                          Close Details
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Card>
+                </Card>
+              </div>
             </div>
           </div>
         </div>
@@ -693,39 +715,55 @@ export const PublicAbout: React.FC = () => {
       {/* ======================================================== */}
       <section className="space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4">
-          <div className="space-y-1 max-w-xl">
-            <span className="text-xs font-semibold text-[#1F5F99] dark:text-[#6FAEE0] uppercase tracking-wider block">
+          <div className="space-y-2 max-w-xl">
+            <Badge variant="pula" size="md">
               Sequential Workflow
-            </span>
+            </Badge>
             <h2 className="text-2xl sm:text-3xl font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
               How BidReady360 works
             </h2>
-            <p className="text-sm text-[#6B7A87]">
+            <p className="text-sm text-[#475569]">
               A structured lifecycle designed for transparency and zero paperwork redundancy.
             </p>
           </div>
 
-          {/* Segmented Switcher */}
-          <div className="flex items-center p-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] shrink-0">
+          {/* Segmented Switcher with role="tablist" */}
+          <div role="tablist" aria-label="Workflow tabs" className="flex items-center p-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] shrink-0">
             <button
+              role="tab"
+              aria-selected={howItWorksTab === 'suppliers'}
+              tabIndex={howItWorksTab === 'suppliers' ? 0 : -1}
               type="button"
               onClick={() => setHowItWorksTab('suppliers')}
-              className={`px-4 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                  setHowItWorksTab(howItWorksTab === 'suppliers' ? 'buyers' : 'suppliers');
+                }
+              }}
+              className={`px-4 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
                 howItWorksTab === 'suppliers'
                   ? 'bg-white dark:bg-[#132635] text-[#10212E] dark:text-white shadow-subtle border border-[#D5E0EA] dark:border-[#1E364A]'
-                  : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
+                  : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
               }`}
             >
               <Building2 className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>For Suppliers</span>
             </button>
             <button
+              role="tab"
+              aria-selected={howItWorksTab === 'buyers'}
+              tabIndex={howItWorksTab === 'buyers' ? 0 : -1}
               type="button"
               onClick={() => setHowItWorksTab('buyers')}
-              className={`px-4 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                  setHowItWorksTab(howItWorksTab === 'suppliers' ? 'buyers' : 'suppliers');
+                }
+              }}
+              className={`px-4 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
                 howItWorksTab === 'buyers'
                   ? 'bg-white dark:bg-[#132635] text-[#10212E] dark:text-white shadow-subtle border border-[#D5E0EA] dark:border-[#1E364A]'
-                  : 'text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white'
+                  : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
               }`}
             >
               <Briefcase className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -745,14 +783,14 @@ export const PublicAbout: React.FC = () => {
                 <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white leading-snug">
                   {step.title}
                 </h3>
-                <p className="text-xs text-[#6B7A87] leading-relaxed">
+                <p className="text-xs text-[#475569] leading-relaxed">
                   {step.description}
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[11px] text-[#1F5F99] dark:text-[#6FAEE0] font-medium flex items-center gap-1">
+              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-xs text-[#1F5F99] dark:text-[#6FAEE0] font-medium flex items-center gap-1">
                 <span>{howItWorksTab === 'suppliers' ? 'Supplier Gateway' : 'Buyer Console'}</span>
-                <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
+                <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.5} />
               </div>
             </Card>
           ))}
@@ -763,14 +801,14 @@ export const PublicAbout: React.FC = () => {
       {/* 3. TRUST & SECURITY LAYER                                 */}
       {/* ======================================================== */}
       <section className="space-y-8">
-        <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4 space-y-1 max-w-2xl">
-          <span className="text-xs font-semibold text-[#1F5F99] dark:text-[#6FAEE0] uppercase tracking-wider block">
+        <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4 space-y-2 max-w-2xl">
+          <Badge variant="pula" size="md">
             The Trust Layer
-          </span>
+          </Badge>
           <h2 className="text-2xl sm:text-3xl font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Security, auditability, and data sovereignty
           </h2>
-          <p className="text-sm text-[#6B7A87]">
+          <p className="text-sm text-[#475569]">
             Trust in public and corporate procurement is built on immutable cryptography and transparent audit records.
           </p>
         </div>
@@ -784,7 +822,7 @@ export const PublicAbout: React.FC = () => {
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
               Cryptographic Sealed Bids
             </h3>
-            <p className="text-xs text-[#6B7A87] leading-relaxed">
+            <p className="text-xs text-[#475569] leading-relaxed">
               Price schedules are encrypted with public-key cryptography upon submission. Decryption is technically impossible before the official opening milestone.
             </p>
           </Card>
@@ -797,7 +835,7 @@ export const PublicAbout: React.FC = () => {
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
               Verified Documents
             </h3>
-            <p className="text-xs text-[#6B7A87] leading-relaxed">
+            <p className="text-xs text-[#475569] leading-relaxed">
               SHA-256 checksum stamping and expiration tracking ensure all certificates in the Document Vault are authentic, unexpired, and tamper-evident.
             </p>
           </Card>
@@ -810,7 +848,7 @@ export const PublicAbout: React.FC = () => {
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
               Consent-Based Sharing
             </h3>
-            <p className="text-xs text-[#6B7A87] leading-relaxed">
+            <p className="text-xs text-[#475569] leading-relaxed">
               Suppliers maintain full ownership of their data. Grant selective access to specific buying entities and revoke permissions at any time.
             </p>
           </Card>
@@ -823,7 +861,7 @@ export const PublicAbout: React.FC = () => {
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
               Immutable Audit Trail
             </h3>
-            <p className="text-xs text-[#6B7A87] leading-relaxed">
+            <p className="text-xs text-[#475569] leading-relaxed">
               Append-only event ledger records every document view, evaluator score submission, addendum bulletin, and formal award decision.
             </p>
           </Card>
@@ -835,10 +873,10 @@ export const PublicAbout: React.FC = () => {
       {/* ======================================================== */}
       <section className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold text-[#1F5F99] dark:text-[#6FAEE0] uppercase tracking-wider block">
+          <div className="space-y-2">
+            <Badge variant="pula" size="md">
               Active Procurement Calls
-            </span>
+            </Badge>
             <h2 className="text-2xl sm:text-3xl font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
               Latest opportunities
             </h2>
@@ -865,7 +903,7 @@ export const PublicAbout: React.FC = () => {
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-[11px] text-[#6B7A87]">
+                  <span className="font-mono text-xs text-[#475569]">
                     {call.callNumber}
                   </span>
                   <Badge variant={call.type === 'RFP' ? 'pula' : 'neutral'} size="sm">
@@ -877,7 +915,7 @@ export const PublicAbout: React.FC = () => {
                   {call.title}
                 </h3>
 
-                <p className="text-xs text-[#6B7A87]">
+                <p className="text-xs text-[#475569]">
                   {call.organizationName}
                 </p>
               </div>
@@ -901,10 +939,10 @@ export const PublicAbout: React.FC = () => {
       {/* ======================================================== */}
       <section className="space-y-6">
         <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4 flex items-center justify-between gap-4">
-          <div className="space-y-1">
-            <span className="text-xs font-semibold text-[#1F5F99] dark:text-[#6FAEE0] uppercase tracking-wider block">
+          <div className="space-y-2">
+            <Badge variant="pula" size="md">
               Clear Answers
-            </span>
+            </Badge>
             <h2 className="text-2xl sm:text-3xl font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
               Frequently asked questions
             </h2>
