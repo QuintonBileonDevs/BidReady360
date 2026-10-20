@@ -45,9 +45,7 @@ app.use('/audit', auditRouter);
 // Health check
 app.get(['/api/health', '/health'], (req, res) => {
   res.json({
-    status: 'ok',
-    database: 'PostgreSQL',
-    timestamp: new Date().toISOString(),
+    ok: true,
   });
 });
 
