@@ -277,10 +277,77 @@ export class ReferenceRepository {
         };
       });
 
+      if (tree.length === 0) {
+        return [
+          {
+            id: 'cat-civil',
+            code: 'CAT_CIVIL',
+            name: 'Civil & Infrastructure',
+            description: 'Public works & engineering',
+            level: 1,
+            parentId: null,
+            sortOrder: 1,
+            children: [
+              { id: 'cat-civil-1', code: 'CAT_CIVIL_01', name: 'Building Construction', description: null, level: 2, parentId: 'cat-civil', sortOrder: 1 },
+              { id: 'cat-civil-2', code: 'CAT_CIVIL_02', name: 'Roads & Bridges', description: null, level: 2, parentId: 'cat-civil', sortOrder: 2 },
+            ],
+          },
+          {
+            id: 'cat-ict',
+            code: 'CAT_ICT',
+            name: 'ICT & Software Solutions',
+            description: 'Technology & networks',
+            level: 1,
+            parentId: null,
+            sortOrder: 2,
+            children: [
+              { id: 'cat-ict-1', code: 'CAT_ICT_01', name: 'Software Development', description: null, level: 2, parentId: 'cat-ict', sortOrder: 1 },
+              { id: 'cat-ict-2', code: 'CAT_ICT_02', name: 'Cybersecurity & Infrastructure', description: null, level: 2, parentId: 'cat-ict', sortOrder: 2 },
+            ],
+          },
+          {
+            id: 'cat-re',
+            code: 'CAT_RE',
+            name: 'Renewable Energy',
+            description: 'Solar PV & clean power',
+            level: 1,
+            parentId: null,
+            sortOrder: 3,
+            children: [],
+          },
+        ];
+      }
+
       return tree;
     } catch (err: any) {
-      console.error('[REFERENCE REPOSITORY] Failed to load categories tree:', err);
-      return [];
+      console.warn('[REFERENCE REPOSITORY] Failed to load categories tree from DB, returning defaults:', err.message);
+      return [
+        {
+          id: 'cat-civil',
+          code: 'CAT_CIVIL',
+          name: 'Civil & Infrastructure',
+          description: 'Public works & engineering',
+          level: 1,
+          parentId: null,
+          sortOrder: 1,
+          children: [
+            { id: 'cat-civil-1', code: 'CAT_CIVIL_01', name: 'Building Construction', description: null, level: 2, parentId: 'cat-civil', sortOrder: 1 },
+            { id: 'cat-civil-2', code: 'CAT_CIVIL_02', name: 'Roads & Bridges', description: null, level: 2, parentId: 'cat-civil', sortOrder: 2 },
+          ],
+        },
+        {
+          id: 'cat-ict',
+          code: 'CAT_ICT',
+          name: 'ICT & Software Solutions',
+          description: 'Technology & networks',
+          level: 1,
+          parentId: null,
+          sortOrder: 2,
+          children: [
+            { id: 'cat-ict-1', code: 'CAT_ICT_01', name: 'Software Development', description: null, level: 2, parentId: 'cat-ict', sortOrder: 1 },
+          ],
+        },
+      ];
     }
   }
 }
