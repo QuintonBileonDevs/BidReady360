@@ -1,41 +1,9 @@
 import express from 'express';
-import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
-import { authenticate } from './server/middleware/auth.middleware';
-import { referenceRouter } from './server/routes/reference.routes';
-import { authRouter } from './server/routes/auth.routes';
-import { supplierRouter } from './server/routes/supplier.routes';
-import { callsRouter } from './server/routes/calls.routes';
-import { buyerRouter } from './server/routes/buyer.routes';
-import { auditRouter } from './server/routes/audit.routes';
+import { app } from './server/app';
 import { referenceDataLoader } from './server/services/reference.loader';
 
-dotenv.config();
-
-const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
-
-app.use(express.json({ limit: '10mb' }));
-app.use(cookieParser());
-app.use(authenticate);
-
-// Mount API routes
-app.use('/api/reference', referenceRouter);
-app.use('/api/auth', authRouter);
-app.use('/api/supplier', supplierRouter);
-app.use('/api/calls', callsRouter);
-app.use('/api/buyer', buyerRouter);
-app.use('/api/audit', auditRouter);
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    database: 'PostgreSQL on Aiven',
-    timestamp: new Date().toISOString(),
-  });
-});
 
 async function startServer() {
   // Pre-warm reference data cache on server boot
