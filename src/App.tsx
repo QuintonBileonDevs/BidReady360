@@ -4,6 +4,7 @@ import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { Logo } from './components/common/Logo';
 import { RouteGuard } from './components/auth/RouteGuard';
+import { PWAInstallPrompt } from './components/common/PWAInstallPrompt';
 
 // Public Views
 import { PublicAbout } from './components/public/PublicAbout';
@@ -441,6 +442,7 @@ const MainContent: React.FC = () => {
       </main>
 
       <Footer />
+      <PWAInstallPrompt />
     </div>
   );
 };
