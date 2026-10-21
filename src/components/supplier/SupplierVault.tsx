@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { referenceApi, apiRequest } from '../../services/api';
+import { referenceApi, apiRequest, supplierApi } from '../../services/api';
 import { SupplierDocument } from '../../types';
 import {
   FileText,
@@ -111,6 +111,7 @@ export const SupplierVault: React.FC = () => {
   const [drawerCertifiedCopy, setDrawerCertifiedCopy] = useState(false);
   const [drawerCertificationDate, setDrawerCertificationDate] = useState('2026-09-20');
   const [isFileUploaded, setIsFileUploaded] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -119,16 +120,21 @@ export const SupplierVault: React.FC = () => {
   const requiresExpiry = selectedDocTypeObj ? (selectedDocTypeObj.requiresExpiry ?? true) : true;
 
   const processSelectedFile = (file: File) => {
-    if (file.size > 10 * 1024 * 1024) {
-      showToast('File size exceeds 10 MB limit.');
+    if (file.size > 4 * 1024 * 1024) {
+      const msg = 'File size exceeds 4 MB limit.';
+      showToast(msg);
+      alert(msg);
       return;
     }
     const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
     if (!validTypes.includes(file.type)) {
-      showToast('Please upload a PDF, PNG, or JPG file.');
+      const msg = 'Unsupported file type. Please upload a PDF, PNG, or JPG file.';
+      showToast(msg);
+      alert(msg);
       return;
     }
 
+    setSelectedFile(file);
     setIsFileUploaded(true);
     setDrawerFileName(file.name);
     setDrawerFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
@@ -360,14 +366,21 @@ export const SupplierVault: React.FC = () => {
   const cipaExtractDoc = findDoc(['company extract', 'cipa extract']);
   const auditedFinancialsDoc = findDoc(['financial statements', 'audited']);
 
-  // Required Item Readiness evaluation
+  // Required Item Readiness evaluation: 4 core statutory documents required for everyone
   const mandatoryItems = [
     { name: 'CIPA certificate of incorporation', isReady: getDerivedStatus(cipaDoc).isReady },
     { name: 'BURS tax clearance certificate', isReady: getDerivedStatus(bursDoc).isReady },
     { name: "Directors' and shareholders' ID", isReady: isDirectorsReady },
-    { name: 'Trading licence', isReady: getDerivedStatus(tradingLicenceDoc).isReady },
     { name: 'Bank confirmation letter', isReady: getDerivedStatus(bankLetterDoc).isReady },
   ];
+
+  // Trading licence is conditional: counts only when the supplier chose "Yes, I'll upload it"
+  if (supplier.hasTradingLicence === true) {
+    mandatoryItems.push({
+      name: 'Trading licence',
+      isReady: getDerivedStatus(tradingLicenceDoc).isReady,
+    });
+  }
 
   // Conditional Active Items
   const conditionalItems: { name: string; isReady: boolean }[] = [];
@@ -467,58 +480,80 @@ export const SupplierVault: React.FC = () => {
     return 'Statutory Regulatory Authority';
   };
 
-  const handleSaveDrawerDocument = (e: React.FormEvent) => {
+  const getDocumentTypeCode = (typeName: string): string => {
+    const t = typeName.toLowerCase();
+    if (t.includes('cipa') || t.includes('incorporation') || t.includes('registration')) return 'COMPANY_REGISTRATION';
+    if (t.includes('tax') || t.includes('burs')) return 'TAX_CLEARANCE';
+    if (t.includes('ppra')) return 'PPRA_REGISTRATION';
+    if (t.includes('vat')) return 'VAT_REGISTRATION';
+    if (t.includes('trading') || t.includes('licence')) return 'BUSINESS_LICENCE';
+    if (t.includes('workers') || t.includes('safety')) return 'WORKERS_COMPENSATION';
+    if (t.includes('liability') || t.includes('insurance')) return 'PUBLIC_LIABILITY_INSURANCE';
+    if (t.includes('bank')) return 'BANK_CONFIRMATION';
+    if (t.includes('director') || t.includes('shareholder') || t.includes('id')) return 'DIRECTOR_ID';
+    return selectedDocTypeObj ? selectedDocTypeObj.code : 'COMPANY_REGISTRATION';
+  };
+
+  const handleSaveDrawerDocument = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!drawerIssueDate) {
       alert('Please fill out issue date.');
       return;
     }
-
-    const finalDocType = drawerDocType === 'Other (Custom)' ? (customDocType.trim() || 'Custom Document') : drawerDocType;
-    const finalFileName = drawerFileName || `${finalDocType.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-    const finalFileSize = drawerFileSize || '1.5 MB';
-
-    if (replacingDoc) {
-      replaceDocument(replacingDoc.id, {
-        documentType: finalDocType,
-        documentNumber: drawerDocNumber || undefined,
-        fileName: finalFileName,
-        fileSize: finalFileSize,
-        issueDate: drawerIssueDate,
-        expiryDate: requiresExpiry ? drawerExpiryDate : undefined,
-        status: 'Pending',
-        statusMessage: 'Pending verification by procurement registry officers.',
-        rejectionReason: undefined,
-        certifiedCopy: drawerCertifiedCopy,
-        certificationDate: drawerCertifiedCopy ? drawerCertificationDate : undefined,
-      });
-      showToast(`Replaced version for ${finalDocType}. Status set to Pending review.`);
-    } else {
-      uploadDocument({
-        supplierId: supplier.id,
-        documentType: finalDocType,
-        documentNumber: drawerDocNumber || undefined,
-        fileName: finalFileName,
-        fileSize: finalFileSize,
-        issueDate: drawerIssueDate,
-        expiryDate: requiresExpiry ? drawerExpiryDate : undefined,
-        status: 'Pending',
-        statusMessage: 'Pending verification by procurement registry officers.',
-        downloadUrl: '#',
-        certifiedCopy: drawerCertifiedCopy,
-        certificationDate: drawerCertifiedCopy ? drawerCertificationDate : undefined,
-        extractedFields: {
-          ...(drawerDocNumber ? { 'Document number': drawerDocNumber } : {}),
-          'Issue date': drawerIssueDate,
-          ...(requiresExpiry ? { 'Valid through': drawerExpiryDate } : { 'Validity': 'Does not expire (Perpetual)' }),
-        },
-      });
-      showToast(`Uploaded ${finalDocType} to vault. Status set to Pending review.`);
+    if (!selectedFile) {
+      alert('Please select a valid PDF, PNG, or JPG file to upload.');
+      return;
     }
 
-    setIsUploadDrawerOpen(false);
-    setReplacingDoc(null);
+    const finalDocType = drawerDocType === 'Other (Custom)' ? (customDocType.trim() || 'Custom Document') : drawerDocType;
+    const docTypeCode = getDocumentTypeCode(finalDocType);
+
+    try {
+      const res = await supplierApi.uploadDocument({
+        documentTypeCode: docTypeCode,
+        file: selectedFile,
+        documentNumber: drawerDocNumber || undefined,
+        issueDate: drawerIssueDate,
+        expiryDate: requiresExpiry ? drawerExpiryDate : undefined,
+        certifiedCopy: drawerCertifiedCopy,
+        title: finalDocType,
+      });
+
+      uploadDocument({
+        id: res.documentId || `doc-${Date.now()}`,
+        supplierId: supplier.id,
+        documentType: res.documentTypeName || finalDocType,
+        documentNumber: res.documentNumber || drawerDocNumber || undefined,
+        fileName: res.fileName || selectedFile.name,
+        fileSize: res.fileSizeBytes ? `${(Number(res.fileSizeBytes) / (1024 * 1024)).toFixed(1)} MB` : `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`,
+        issueDate: res.issueDate || drawerIssueDate,
+        expiryDate: res.expiryDate || (requiresExpiry ? drawerExpiryDate : undefined),
+        status: 'Pending',
+        statusMessage: 'Pending verification by procurement registry officers.',
+        downloadUrl: `/api/supplier/documents/${res.documentId}/file`,
+        certifiedCopy: drawerCertifiedCopy,
+        certificationDate: drawerCertifiedCopy ? drawerCertificationDate : undefined,
+        sha256: res.sha256,
+        extractedFields: {
+          ...(res.documentNumber ? { 'Document number': res.documentNumber } : {}),
+          'Issue date': res.issueDate || drawerIssueDate,
+          ...(res.sha256 ? { 'SHA-256 Fingerprint': res.sha256 } : {}),
+        },
+      });
+
+      showToast(`Uploaded ${finalDocType}. Status: Pending review. SHA-256 hash verified.`);
+      setIsUploadDrawerOpen(false);
+      setReplacingDoc(null);
+      setSelectedFile(null);
+      setIsFileUploaded(false);
+      setDrawerFileName('');
+      setDrawerFileSize('');
+    } catch (err: any) {
+      const errMsg = err.message || 'Upload failed due to network or server error.';
+      alert(errMsg);
+      showToast(errMsg);
+    }
   };
 
   return (
@@ -572,7 +607,7 @@ export const SupplierVault: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between text-[12px] text-[#6B7A87]">
-            <span>Based on statutory documents required for everyone (5 items)</span>
+            <span>Based on statutory documents required for everyone ({mandatoryItems.length} items)</span>
             <span>{isReadyToApply ? 'All mandatory statutory documents ready' : `${missingItemNames.length} missing`}</span>
           </div>
 
@@ -604,15 +639,15 @@ export const SupplierVault: React.FC = () => {
         </div>
       )}
 
-      {/* ================= SECTION 1: Required for everyone (5) ================= */}
+      {/* ================= SECTION 1: Required for everyone (4) ================= */}
       <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
         <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
           <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white flex items-center gap-2">
             <span>Required for everyone</span>
-            <span className="text-[12px] bg-[#1F5F99] text-white px-2 py-0.5 rounded-full font-medium">5 items</span>
+            <span className="text-[12px] bg-[#1F5F99] text-white px-2 py-0.5 rounded-full font-medium">4 items</span>
           </h2>
           <p className="text-[14px] text-[#6B7A87]">
-            Mandatory statutory compliance documents required for basic qualification across all public and corporate procurement calls.
+            Mandatory statutory compliance documents required for basic qualification across all public and corporate procurement calls (CIPA certificate, BURS tax clearance, directors' and shareholders' ID, bank confirmation letter).
           </p>
         </div>
 
@@ -727,18 +762,7 @@ export const SupplierVault: React.FC = () => {
             )}
           </div>
 
-          {/* Row 4: Trading Licence */}
-          <DocumentRow
-            title="Trading licence"
-            whyNeeded="Authorizes commercial business operations in local municipal jurisdiction."
-            doc={tradingLicenceDoc}
-            onUpload={() => handleOpenUploadDrawer('Trading Licence', tradingLicenceDoc)}
-            onReplace={() => handleOpenUploadDrawer('Trading Licence', tradingLicenceDoc)}
-            onView={() => setPreviewDoc(tradingLicenceDoc || null)}
-            onDelete={() => tradingLicenceDoc && deleteDocument(tradingLicenceDoc.id)}
-          />
-
-          {/* Row 5: Bank Confirmation Letter */}
+          {/* Row 4: Bank Confirmation Letter */}
           <DocumentRow
             title="Bank confirmation letter"
             whyNeeded="Verifies active commercial bank account details for electronic contract payments."
@@ -768,6 +792,71 @@ export const SupplierVault: React.FC = () => {
           <span>
             Located in <strong>{supplier.district || supplier.city || 'Gaborone District'}</strong> (automatically determined from your company profile).
           </span>
+        </div>
+
+        {/* Question: Does your business hold a trading licence? */}
+        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+          <div className="space-y-1">
+            <h3 className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white">
+              Does your business hold a trading licence?
+            </h3>
+            <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+              Trading licences are issued by municipal or district councils. If your trade is exempt under the Botswana Trade Act, select "Not required for my business". Unanswered blocks nothing.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-4 pt-1">
+            <label className="flex items-center gap-2.5 cursor-pointer text-[14px] text-[#10212E] dark:text-white font-medium p-2.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:border-[#1F5F99]">
+              <input
+                type="radio"
+                name="vaultTradingLicence"
+                checked={supplier.hasTradingLicence === true}
+                onChange={() => updateSupplierProfile({ hasTradingLicence: true })}
+                className="text-[#1F5F99] focus:ring-[#1F5F99]"
+              />
+              <span>Yes, I'll upload it</span>
+            </label>
+
+            <label className="flex items-center gap-2.5 cursor-pointer text-[14px] text-[#10212E] dark:text-white font-medium p-2.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:border-[#1F5F99]">
+              <input
+                type="radio"
+                name="vaultTradingLicence"
+                checked={supplier.hasTradingLicence === false}
+                onChange={() => updateSupplierProfile({ hasTradingLicence: false })}
+                className="text-[#1F5F99] focus:ring-[#1F5F99]"
+              />
+              <span>Not required for my business</span>
+            </label>
+          </div>
+
+          {supplier.hasTradingLicence === false && (
+            <div className="pt-2">
+              <label className="text-[12px] font-medium text-[#43525F] dark:text-[#B2C3D2] block mb-1">
+                Reason trading licence is not required (optional):
+              </label>
+              <input
+                type="text"
+                value={supplier.tradingLicenceReason || ''}
+                onChange={(e) => updateSupplierProfile({ tradingLicenceReason: e.target.value })}
+                placeholder="e.g. Professional consultancy exempt under Trade Act 2019"
+                className="w-full sm:max-w-md px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white"
+              />
+            </div>
+          )}
+
+          {supplier.hasTradingLicence === true && (
+            <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+              <DocumentRow
+                title="Trading licence"
+                whyNeeded="Authorizes commercial business operations in your local municipal jurisdiction."
+                doc={tradingLicenceDoc}
+                onUpload={() => handleOpenUploadDrawer('Trading Licence', tradingLicenceDoc)}
+                onReplace={() => handleOpenUploadDrawer('Trading Licence', tradingLicenceDoc)}
+                onView={() => setPreviewDoc(tradingLicenceDoc || null)}
+                onDelete={() => tradingLicenceDoc && deleteDocument(tradingLicenceDoc.id)}
+              />
+            </div>
+          )}
         </div>
 
         {/* Declarations & Switches Grid */}

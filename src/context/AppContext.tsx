@@ -177,7 +177,7 @@ interface AppContextType {
 
   // Mutators
   updateSupplierProfile: (updates: Partial<Supplier>) => Promise<any> | void;
-  uploadDocument: (doc: Omit<SupplierDocument, 'id'>) => void;
+  uploadDocument: (doc: any) => void;
   replaceDocument: (docId: string, updates: Partial<SupplierDocument>) => void;
   deleteDocument: (docId: string) => void;
   grantConsent: (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => void;
@@ -1242,10 +1242,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const uploadDocument = (docData: Omit<SupplierDocument, 'id'>) => {
+  const uploadDocument = (docData: any) => {
     const newDoc: SupplierDocument = {
       ...docData,
-      id: `doc-${Date.now()}`,
+      id: docData.id || `doc-${Date.now()}`,
     };
     const nextDocs = [newDoc, ...documents];
     setDocuments(nextDocs);
@@ -1285,21 +1285,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       entityId: newDoc.id,
       details: `Uploaded ${newDoc.documentType} (Exp: ${newDoc.expiryDate}).`,
     });
-
-    if (token) {
-      supplierApi.uploadDocument({
-        documentTypeCode: docData.documentType,
-        fileName: docData.fileName,
-        mimeType: 'application/pdf',
-        fileBase64: 'SGVsbG8gV29ybGQ=',
-        documentNumber: docData.documentNumber,
-        issueDate: docData.issueDate,
-        expiryDate: docData.expiryDate,
-        title: docData.title || docData.documentType,
-      }).catch((err) => {
-        console.warn('[APP CONTEXT] Server document upload sync notice:', err);
-      });
-    }
   };
 
   const replaceDocument = (docId: string, updates: Partial<SupplierDocument>) => {

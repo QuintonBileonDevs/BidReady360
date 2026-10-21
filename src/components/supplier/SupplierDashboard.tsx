@@ -302,7 +302,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
                 <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#1E364A] text-[13px] font-semibold text-[#10212E] dark:text-white">
                   <ShieldCheck className="w-4 h-4 text-[#1F5F99]" />
-                  <span>Statutory Documents (4)</span>
+                  <span>
+                    Statutory Documents ({completeness.items.filter((item) => item.category === 'Documents').length})
+                  </span>
                 </div>
                 <div className="space-y-1.5 text-[13px]">
                   {completeness.items

@@ -86,6 +86,29 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   // Stepper state: 1: Check eligibility, 2: Choose what to share, 3: Answer questions, 4: Review, 5: Submit
   const [currentStep, setCurrentStep] = useState<number>(1);
 
+  // Check if buyer specifically requires a trading licence for this call
+  const callRequiresTradingLicence = useMemo(() => {
+    if (!selectedCall?.requiredDocumentTypes) return false;
+    return selectedCall.requiredDocumentTypes.some(
+      (dt: string) =>
+        dt.toLowerCase().includes('trading') ||
+        dt.toLowerCase().includes('trade licence') ||
+        dt.toLowerCase().includes('business licence')
+    );
+  }, [selectedCall]);
+
+  const verifiedTradingLicenceDoc = useMemo(() => {
+    return documents.find(
+      (d) =>
+        (d.documentType?.toLowerCase().includes('trading') ||
+          d.documentType?.toLowerCase().includes('licence') ||
+          d.title?.toLowerCase().includes('trading')) &&
+        (d.status === 'Verified' || (d.status as any) === 'active')
+    );
+  }, [documents]);
+
+  const isCallTradingLicenceBlocked = callRequiresTradingLicence && !verifiedTradingLicenceDoc;
+
   // Requirements drawer
   const [isRequirementsDrawerOpen, setIsRequirementsDrawerOpen] = useState<boolean>(false);
 
@@ -398,6 +421,10 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   // Submit Application Handler
   const handleFinalSubmit = () => {
     if (!selectedCall) return;
+    if (isCallTradingLicenceBlocked) {
+      alert('This buyer requires a trading licence. Please upload and verify your trading licence before submitting.');
+      return;
+    }
     if (!supplier.emailVerified) {
       alert('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
       return;
@@ -570,6 +597,35 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors"
             >
               Verify email now
+            </button>
+          </div>
+        )}
+
+        {/* Buyer-Mandated Trading Licence Requirement Banner */}
+        {isCallTradingLicenceBlocked && (
+          <div className="p-4 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold text-amber-900 dark:text-amber-200 block">
+                  This buyer requires a trading licence
+                </span>
+                <p className="text-amber-800 dark:text-amber-300 text-[13px]">
+                  Even if marked not required in your general profile, this procuring entity mandates an active, verified trading licence. Submission is blocked until it is verified.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setQuickUploadDocType('Trading Licence' as any);
+                setQuickUploadFileName('');
+                setQuickUploadDocNumber('');
+              }}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors inline-flex items-center gap-1.5"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Upload trading licence</span>
             </button>
           </div>
         )}
@@ -1260,6 +1316,26 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </div>
           </div>
 
+          {isCallTradingLicenceBlocked && (
+            <div className="p-4 rounded-[8px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-[13px] text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3">
+              <span className="font-medium">
+                Submission blocked: This buyer mandates a verified trading licence for this call.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickUploadDocType('Trading Licence' as any);
+                  setQuickUploadFileName('');
+                  setQuickUploadDocNumber('');
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[12px] inline-flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload</span>
+              </button>
+            </div>
+          )}
+
           {/* Footer Navigation */}
           <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
             <button
@@ -1273,11 +1349,17 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
             <button
               type="button"
-              disabled={!declarationAgreed || !supplier.emailVerified}
+              disabled={!declarationAgreed || !supplier.emailVerified || isCallTradingLicenceBlocked}
               onClick={handleFinalSubmit}
-              title={!supplier.emailVerified ? 'Email verification is mandatory before submitting' : undefined}
+              title={
+                !supplier.emailVerified
+                  ? 'Email verification is mandatory before submitting'
+                  : isCallTradingLicenceBlocked
+                  ? 'This buyer requires a verified trading licence before submitting'
+                  : undefined
+              }
               className={`px-6 py-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 transition-colors ${
-                declarationAgreed && supplier.emailVerified
+                declarationAgreed && supplier.emailVerified && !isCallTradingLicenceBlocked
                   ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white cursor-pointer shadow-sm'
                   : 'bg-[#D5E0EA] dark:bg-[#1E364A] text-[#6B7A87] cursor-not-allowed'
               }`}

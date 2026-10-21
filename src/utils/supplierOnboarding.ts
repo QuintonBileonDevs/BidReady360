@@ -151,6 +151,34 @@ export function calculateSupplierCompleteness(
   // 15. Public Liability Insurance (uploaded, not expired, not rejected)
   const hasInsuranceDoc = isDocumentValid(docs, ['public liability', 'liability insurance', 'public_liability', 'indemnity insurance']);
 
+  // 16. Directors' and Shareholders' ID (uploaded, not expired, not rejected)
+  const hasDirectorsIdDoc = isDocumentValid(docs, [
+    'directors and shareholders id',
+    'director id',
+    'director_id',
+    'shareholder id',
+    'directors id',
+    'director identity',
+    'director',
+    'shareholder',
+    'omang',
+    'passport',
+  ]);
+
+  // 17. Bank Confirmation Letter (uploaded, not expired, not rejected)
+  const hasBankConfirmationDoc = isDocumentValid(docs, [
+    'bank confirmation',
+    'bank_letter',
+    'bank rating',
+    'bank confirmation letter',
+    'bank letter',
+    'bank statement',
+  ]);
+
+  // 18. Trading Licence (conditional - only required if supplier explicitly selected "Yes, I'll upload it")
+  const hasTradingLicenceDoc = isDocumentValid(docs, ['trading licence', 'trading_licence', 'business licence', 'licence']);
+  const isTradingLicenceRequired = supplier.hasTradingLicence === true;
+
   const baseItems: OnboardingChecklistItem[] = [
     {
       id: 'legalName',
@@ -293,7 +321,42 @@ export function calculateSupplierCompleteness(
       fieldId: 'field-doc-tax',
       description: 'Current Botswana Unified Revenue Service tax clearance certificate.',
     },
+    {
+      id: 'docDirectorsId',
+      label: "Directors' and shareholders' ID",
+      shortLabel: "Directors' ID",
+      category: 'Documents',
+      isComplete: hasDirectorsIdDoc || (Boolean(supplier.isDemoAccount) && hasDirectors100Percent),
+      targetSection: 'vault',
+      fieldId: 'field-doc-directors-id',
+      description: 'Certified national identity documents or passports for registered directors and shareholders.',
+    },
+    {
+      id: 'docBankLetter',
+      label: 'Bank confirmation letter',
+      shortLabel: 'Bank letter',
+      category: 'Documents',
+      isComplete: hasBankConfirmationDoc || (Boolean(supplier.isDemoAccount) && hasBankDetails),
+      targetSection: 'vault',
+      fieldId: 'field-doc-bank-letter',
+      description: 'Active commercial bank account confirmation letter issued within past 3 months.',
+    },
   ];
+
+  // Trading licence is strictly conditional: it is only added to the required checklist
+  // if the supplier explicitly answered "Yes, I'll upload it". Unanswered or "Not required" blocks nothing.
+  if (isTradingLicenceRequired) {
+    baseItems.push({
+      id: 'docTradingLicence',
+      label: 'Trading Licence',
+      shortLabel: 'Trading licence',
+      category: 'Documents',
+      isComplete: hasTradingLicenceDoc,
+      targetSection: 'vault',
+      fieldId: 'field-doc-trading-licence',
+      description: 'Active municipal or local authority trading licence.',
+    });
+  }
 
   const optionalDocumentItems: OnboardingChecklistItem[] = [];
   if (hasSafetyDoc) {

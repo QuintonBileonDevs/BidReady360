@@ -463,6 +463,19 @@ CREATE TABLE IF NOT EXISTS supplier_document_versions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sdv_version ON supplier_document_versions (document_id, version_no);
 
+CREATE TABLE IF NOT EXISTS document_files (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+  document_version_id   UUID UNIQUE NOT NULL REFERENCES supplier_document_versions(id) ON DELETE CASCADE,
+  content               BYTEA NOT NULL,
+  mime_type             VARCHAR(100) NOT NULL,
+  file_name             VARCHAR(255) NOT NULL,
+  size_bytes            BIGINT NOT NULL,
+  sha256                CHAR(64) NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_files_version_id ON document_files (document_version_id);
+
 -- Attach foreign keys for supplier_documents current_version
 DO $$
 BEGIN
@@ -1638,7 +1651,7 @@ INSERT INTO document_types (
 (NULL, 'COMPANY_REGISTRATION', 'CIPA Certificate of Incorporation', 'Proof the company is legally registered', 'Companies and Intellectual Property Authority (CIPA)', FALSE, TRUE, NULL, 'registry_api', TRUE),
 (NULL, 'TAX_CLEARANCE', 'BURS Tax Clearance Certificate', 'Proof of tax compliance', 'Botswana Unified Revenue Service (BURS)', TRUE, TRUE, 365, 'registry_api', TRUE),
 (NULL, 'VAT_REGISTRATION', 'VAT Registration Certificate', 'Proof of VAT registration', 'Botswana Unified Revenue Service (BURS)', FALSE, TRUE, NULL, 'manual', FALSE),
-(NULL, 'BUSINESS_LICENCE', 'Trading Licence', 'Licence to operate in the sector or locality', 'Licensing authority', TRUE, TRUE, 365, 'manual', FALSE),
+(NULL, 'TRADING_LICENCE', 'Trading Licence', 'Licence to operate in the sector or locality', 'Licensing authority', TRUE, TRUE, 365, 'manual', FALSE),
 (NULL, 'PPRA_REGISTRATION', 'PPRA Registration Certificate', 'Public procurement registration', 'Public Procurement Regulatory Authority (PPRA)', TRUE, TRUE, 730, 'registry_api', TRUE),
 (NULL, 'PROOF_OF_ADDRESS', 'Proof of Address', 'Evidence of business premises', NULL, FALSE, FALSE, NULL, 'manual', FALSE),
 (NULL, 'BANK_CONFIRMATION', 'Bank Confirmation Letter', 'Letter confirming the company bank account', 'Bank', FALSE, FALSE, NULL, 'manual', FALSE),

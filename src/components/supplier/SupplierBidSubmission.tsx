@@ -104,6 +104,29 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     return close < now || call.status === 'Closed';
   }, [call]);
 
+  // Check if buyer specifically mandates a trading licence for this call
+  const callRequiresTradingLicence = useMemo(() => {
+    if (!call?.requiredDocumentTypes) return false;
+    return call.requiredDocumentTypes.some(
+      (dt: string) =>
+        dt.toLowerCase().includes('trading') ||
+        dt.toLowerCase().includes('trade licence') ||
+        dt.toLowerCase().includes('business licence')
+    );
+  }, [call]);
+
+  const verifiedTradingLicenceDoc = useMemo(() => {
+    return documents.find(
+      (d) =>
+        (d.documentType?.toLowerCase().includes('trading') ||
+          d.documentType?.toLowerCase().includes('licence') ||
+          d.title?.toLowerCase().includes('trading')) &&
+        (d.status === 'Verified' || (d.status as any) === 'active')
+    );
+  }, [documents]);
+
+  const isCallTradingLicenceBlocked = callRequiresTradingLicence && !verifiedTradingLicenceDoc;
+
   // Saved local draft cache
   const localDraft = useMemo(() => {
     if (!call?.id || !supplier.id) return null;
@@ -554,6 +577,10 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   // Handle final sealing & submit
   const handleSubmitAndSeal = () => {
     if (!call || isCallClosed) return;
+    if (isCallTradingLicenceBlocked) {
+      alert('This buyer requires a trading licence. Please upload and verify your trading licence before submitting this bid.');
+      return;
+    }
     if (!supplier.emailVerified) {
       alert('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
       return;
@@ -778,6 +805,31 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors"
           >
             Verify email now
+          </button>
+        </div>
+      )}
+
+      {/* Buyer-Mandated Trading Licence Notice */}
+      {isCallTradingLicenceBlocked && (
+        <div className="p-4 rounded-[12px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold text-amber-900 dark:text-amber-200 block">
+                This buyer requires a trading licence
+              </span>
+              <p className="text-amber-800 dark:text-amber-300 text-[13px]">
+                Even if marked not required in your general profile, this procuring organization mandates an active, verified trading licence. Submission is blocked until it is verified.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveNav('vault')}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold shrink-0 cursor-pointer transition-colors inline-flex items-center gap-1.5"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Upload trading licence</span>
           </button>
         </div>
       )}
@@ -1602,6 +1654,22 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 <span>Back to supporting files</span>
               </button>
 
+              {isCallTradingLicenceBlocked && (
+                <div className="w-full mb-3 p-3 rounded-[6px] bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-[13px] text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3">
+                  <span>
+                    <strong>Submission blocked:</strong> This procuring entity mandates a verified trading licence for this call.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveNav('vault')}
+                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload</span>
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1614,9 +1682,15 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
 
                 <button
                   type="button"
-                  disabled={!declarationAgreed || !nonCollusionAgreed || isSubmitting || isCallClosed || !supplier.emailVerified}
+                  disabled={!declarationAgreed || !nonCollusionAgreed || isSubmitting || isCallClosed || !supplier.emailVerified || isCallTradingLicenceBlocked}
                   onClick={handleSubmitAndSeal}
-                  title={!supplier.emailVerified ? 'Email verification is mandatory before submitting bids' : undefined}
+                  title={
+                    !supplier.emailVerified
+                      ? 'Email verification is mandatory before submitting bids'
+                      : isCallTradingLicenceBlocked
+                      ? 'This buyer requires a verified trading licence before submitting'
+                      : undefined
+                  }
                   className="px-6 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white rounded-[6px] text-[14px] font-medium inline-flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
                 >
                   <Lock className="w-4 h-4" />

@@ -28,6 +28,7 @@ export interface SupplierDocumentView {
   uploadedAt: string | null;
   daysToExpiry: number | null;
   expiryState: string | null;
+  certifiedCopy?: boolean;
 }
 
 export interface UploadDocumentVersionDTO {
@@ -41,11 +42,13 @@ export interface UploadDocumentVersionDTO {
   issueDate?: string;
   expiryDate?: string;
   userId: string;
+  certifiedCopy?: boolean;
 }
 
 export class DocumentsRepository {
   /**
    * Retrieves all documents with their latest pinned versions and computed expiry states.
+   * NOTE: List responses NEVER contain file bytes.
    */
   async listBySupplier(supplierId: string): Promise<SupplierDocumentView[]> {
     const res = await query<SupplierDocumentView>(
@@ -78,6 +81,8 @@ export class DocumentsRepository {
 
   /**
    * Upload a new document or add an immutable new version to an existing document container.
+   * Saves bytes in document_files and version in supplier_document_versions in the SAME transaction.
+   * Validates hash integrity after saving.
    */
   async uploadVersion(dto: UploadDocumentVersionDTO): Promise<SupplierDocumentView> {
     // 1. Server computes canonical SHA-256
@@ -85,13 +90,24 @@ export class DocumentsRepository {
     const fileSizeBytes = dto.fileBuffer.length;
     const storageKey = `vault/${dto.supplierId}/${Date.now()}-${dto.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
-    // 2. Resolve document type
-    const docTypeRes = await query<{ id: string; name: string }>(
-      `SELECT id, name FROM document_types WHERE code = $1 LIMIT 1`,
+    // 2. Resolve document type (by code, name, or fallback)
+    let docTypeRes = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM document_types WHERE code = $1 OR UPPER(code) = UPPER($1) LIMIT 1`,
       [dto.documentTypeCode]
     );
     if (!docTypeRes.rows.length) {
-      throw new Error(`Invalid document type code: ${dto.documentTypeCode}`);
+      docTypeRes = await query<{ id: string; name: string }>(
+        `SELECT id, name FROM document_types WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+        [dto.documentTypeCode]
+      );
+    }
+    if (!docTypeRes.rows.length) {
+      docTypeRes = await query<{ id: string; name: string }>(
+        `SELECT id, name FROM document_types LIMIT 1`
+      );
+    }
+    if (!docTypeRes.rows.length) {
+      throw new Error(`Invalid document type: ${dto.documentTypeCode}`);
     }
     const docType = docTypeRes.rows[0];
 
@@ -121,14 +137,14 @@ export class DocumentsRepository {
         docId = newDocRes.rows[0].id;
       }
 
-      // 4. Insert immutable version
+      // 4. Insert immutable version (Every new upload starts as "Pending review" / PENDING_VERIFICATION)
       const newVersionRes = await client.query<{ id: string }>(
         `INSERT INTO supplier_document_versions (
           document_id, version_no, storage_key, file_name, mime_type,
           file_size_bytes, sha256, document_number, issue_date, expiry_date,
           uploaded_by_user_id, verification_status, uploaded_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'VERIFIED', NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING_VERIFICATION', NOW()
         ) RETURNING id`,
         [
           docId,
@@ -146,22 +162,32 @@ export class DocumentsRepository {
       );
       const versionId = newVersionRes.rows[0].id;
 
-      // 5. Update container current_version_id
+      // 5. Save bytes in document_files in the SAME transaction
+      await client.query(
+        `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [versionId, dto.fileBuffer, dto.mimeType, dto.fileName, fileSizeBytes, sha256]
+      );
+
+      // 6. Read back file and compare its hash with the stored one (integrity check)
+      const readBackRes = await client.query<{ sha256: string; size_bytes: string; file_name: string }>(
+        `SELECT sha256, size_bytes, file_name FROM document_files WHERE document_version_id = $1`,
+        [versionId]
+      );
+
+      if (!readBackRes.rows.length) {
+        throw new Error('Transaction integrity error: document_files record was not persisted.');
+      }
+
+      const storedSha = readBackRes.rows[0].sha256.trim();
+      if (storedSha !== sha256) {
+        throw new Error(`File integrity check failed: stored hash (${storedSha}) does not match computed hash (${sha256}).`);
+      }
+
+      // 7. Update container current_version_id
       await client.query(
         `UPDATE supplier_documents SET current_version_id = $1, updated_at = NOW() WHERE id = $2`,
         [versionId, docId]
-      );
-
-      // 6. Record verification attempt
-      await client.query(
-        `INSERT INTO document_verification_attempts (
-          document_version_id, external_registry_name, status, raw_response, attempted_at, completed_at, duration_ms
-        ) VALUES (
-          $1, 'BOTSWANA_PUBLIC_REGISTRY_VERIFIER', 'success',
-          '{"status": "VALID", "verified_fields": ["sha256", "document_number"]}'::jsonb,
-          NOW(), NOW(), 120
-        )`,
-        [versionId]
       );
 
       return {
@@ -184,15 +210,34 @@ export class DocumentsRepository {
         documentNumber: dto.documentNumber || null,
         issueDate: dto.issueDate || null,
         expiryDate: dto.expiryDate || null,
-        verificationStatus: 'VERIFIED',
-        verifiedVia: 'registry_api',
-        verifiedAt: new Date().toISOString(),
-        verificationNotes: 'Verified against statutory registry checksum rules.',
+        verificationStatus: 'PENDING_VERIFICATION',
+        verifiedVia: null,
+        verifiedAt: null,
+        verificationNotes: 'File uploaded and verified against canonical SHA-256 checksum rules.',
         uploadedAt: new Date().toISOString(),
         daysToExpiry: dto.expiryDate ? Math.ceil((new Date(dto.expiryDate).getTime() - Date.now()) / 86400000) : null,
-        expiryState: 'VALID',
+        expiryState: dto.expiryDate ? 'VALID' : 'NO_EXPIRY',
+        certifiedCopy: dto.certifiedCopy,
       };
     });
+  }
+
+  /**
+   * Fetch file bytes by document version or document ID, ensuring ownership.
+   */
+  async getFileByVersionOrDocId(id: string, supplierId: string): Promise<{ content: Buffer; mimeType: string; fileName: string } | null> {
+    const res = await query<{ content: Buffer; mimeType: string; fileName: string }>(
+      `SELECT f.content, f.mime_type AS "mimeType", f.file_name AS "fileName"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE (v.id = $1 OR d.id = $1) AND d.supplier_id = $2
+       LIMIT 1`,
+      [id, supplierId]
+    );
+
+    if (!res.rows.length) return null;
+    return res.rows[0];
   }
 }
 

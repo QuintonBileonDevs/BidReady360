@@ -216,18 +216,43 @@ export const supplierApi = {
 
   async uploadDocument(payload: {
     documentTypeCode: string;
-    fileName: string;
-    mimeType: string;
-    fileBase64: string;
+    file: File;
     documentNumber?: string;
     issueDate?: string;
     expiryDate?: string;
+    certifiedCopy?: boolean;
     title?: string;
   }) {
-    return apiRequest('/api/supplier/documents/upload', {
+    const token = localStorage.getItem('bidready_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const formData = new FormData();
+    formData.append('file', payload.file);
+    formData.append('documentTypeCode', payload.documentTypeCode);
+    if (payload.documentNumber) formData.append('documentNumber', payload.documentNumber);
+    if (payload.issueDate) formData.append('issueDate', payload.issueDate);
+    if (payload.expiryDate) formData.append('expiryDate', payload.expiryDate);
+    if (payload.certifiedCopy !== undefined) formData.append('certifiedCopy', String(payload.certifiedCopy));
+    if (payload.title) formData.append('title', payload.title);
+
+    const res = await fetch('/api/supplier/documents/upload', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      headers,
+      body: formData,
     });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const errorMsg = data.message || data.error || `Upload failed with status ${res.status}`;
+      const err = new Error(errorMsg) as any;
+      err.status = res.status;
+      err.code = data.code || 'API_ERROR';
+      throw err;
+    }
+    return data;
   },
 
   async listPeople() {

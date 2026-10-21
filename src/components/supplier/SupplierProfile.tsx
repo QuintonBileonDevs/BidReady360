@@ -153,6 +153,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     womenOwned: supplier.womenOwned ?? false,
     disabilityOwned: supplier.disabilityOwned ?? false,
     eddCertified: supplier.eddCertified ?? false,
+    hasTradingLicence: supplier.hasTradingLicence ?? null,
+    tradingLicenceReason: supplier.tradingLicenceReason || '',
     description: supplier.description || '',
   });
 
@@ -546,6 +548,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         disabilityOwned: detailsForm.disabilityOwned,
         eddCertified: detailsForm.eddCertified,
         description: detailsForm.description.trim(),
+        hasTradingLicence: typeof detailsForm.hasTradingLicence === 'boolean' ? detailsForm.hasTradingLicence : (supplier.hasTradingLicence ?? undefined),
+        tradingLicenceReason: detailsForm.tradingLicenceReason?.trim() || '',
         detailsSaved: true,
       });
       setDetailsLastUpdated('Just now');
@@ -1289,6 +1293,47 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         }
                         className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                        Does your business hold a trading licence?
+                      </label>
+                      <div className="flex flex-wrap gap-4 p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px]">
+                        <label className="flex items-center gap-2 cursor-pointer text-[14px] text-[#10212E] dark:text-white">
+                          <input
+                            type="radio"
+                            name="tradingLicence"
+                            checked={detailsForm.hasTradingLicence === true}
+                            onChange={() => setDetailsForm({ ...detailsForm, hasTradingLicence: true })}
+                            className="text-[#1F5F99]"
+                          />
+                          Yes, I'll upload it
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-[14px] text-[#10212E] dark:text-white">
+                          <input
+                            type="radio"
+                            name="tradingLicence"
+                            checked={detailsForm.hasTradingLicence === false}
+                            onChange={() => setDetailsForm({ ...detailsForm, hasTradingLicence: false })}
+                            className="text-[#1F5F99]"
+                          />
+                          Not required for my business
+                        </label>
+                      </div>
+                      {detailsForm.hasTradingLicence === false && (
+                        <div className="pt-1.5">
+                          <label className="text-[12px] font-medium text-[#6B7A87] block mb-1">
+                            Reason trading licence is not required (optional):
+                          </label>
+                          <input
+                            type="text"
+                            value={detailsForm.tradingLicenceReason || ''}
+                            onChange={(e) => setDetailsForm({ ...detailsForm, tradingLicenceReason: e.target.value })}
+                            placeholder="e.g. Professional consultancy exempt under Trade Act"
+                            className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 

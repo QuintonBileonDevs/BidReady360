@@ -86,6 +86,8 @@ export interface Supplier {
   hasCipa?: boolean;
   hasBurs?: boolean;
   hasPpra?: boolean;
+  hasTradingLicence?: boolean;
+  tradingLicenceReason?: string;
   isDemoAccount?: boolean;
   citizenOwnershipSet?: boolean;
   categories?: string[];

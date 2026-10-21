@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { GoogleGenAI, Type } from '@google/genai';
 import { requireAuth, requireTenantType } from '../middleware/auth.middleware';
 import { getSupplierContext } from '../middleware/tenant.helper';
@@ -9,6 +10,36 @@ import { applicationsRepository } from '../repositories/applications.repository'
 import { bidsRepository } from '../repositories/bids.repository';
 import { translateDbError } from '../db/errors';
 import { extractClientIp } from '../utils/ip';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 }, // 4 MB limit (Vercel request limit)
+});
+
+function validateFileBuffer(buffer: Buffer): { isValid: boolean; mimeType: string; error?: string } {
+  if (!buffer || buffer.length === 0) {
+    return { isValid: false, mimeType: '', error: 'Uploaded file is empty or corrupt.' };
+  }
+  if (buffer.length > 4 * 1024 * 1024) {
+    return { isValid: false, mimeType: '', error: 'File size exceeds 4 MB limit.' };
+  }
+
+  // Check magic bytes from first bytes
+  // PDF: %PDF (25 50 44 46)
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return { isValid: true, mimeType: 'application/pdf' };
+  }
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return { isValid: true, mimeType: 'image/png' };
+  }
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return { isValid: true, mimeType: 'image/jpeg' };
+  }
+
+  return { isValid: false, mimeType: '', error: 'Unsupported or corrupt file type. Only PDF, PNG, and JPG files are accepted.' };
+}
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -138,32 +169,61 @@ router.get('/documents', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/supplier/documents/upload
-router.post('/documents/upload', async (req: Request, res: Response) => {
+// POST /api/supplier/documents/upload (multipart/form-data with 4MB limit and magic byte checks)
+router.post('/documents/upload', upload.single('file'), async (req: Request, res: Response) => {
   try {
     const ctx = getSupplierContext(req);
-    const { documentTypeCode, fileName, mimeType, fileBase64, documentNumber, issueDate, expiryDate, title } = req.body;
+    const file = req.file;
+    const { documentTypeCode, documentNumber, issueDate, expiryDate, title, certifiedCopy } = req.body;
 
-    if (!documentTypeCode || !fileName || !fileBase64) {
-      res.status(400).json({ error: 'MISSING_FILE', message: 'Document type, file name, and file content are required.' });
+    if (!file) {
+      res.status(400).json({ error: 'MISSING_FILE', message: 'No file uploaded or file missing.' });
+      return;
+    }
+    if (!documentTypeCode) {
+      res.status(400).json({ error: 'MISSING_TYPE', message: 'Document type code is required.' });
       return;
     }
 
-    const fileBuffer = Buffer.from(fileBase64, 'base64');
+    const validation = validateFileBuffer(file.buffer);
+    if (!validation.isValid) {
+      res.status(400).json({ error: 'INVALID_FILE', message: validation.error || 'Invalid file format.' });
+      return;
+    }
+
     const doc = await documentsRepository.uploadVersion({
       supplierId: ctx.tenantId,
       documentTypeCode,
-      fileName,
-      mimeType: mimeType || 'application/pdf',
-      fileBuffer,
+      fileName: file.originalname || 'document.pdf',
+      mimeType: validation.mimeType,
+      fileBuffer: file.buffer,
       documentNumber,
       issueDate,
       expiryDate,
+      certifiedCopy: certifiedCopy === 'true' || certifiedCopy === true,
       title,
       userId: ctx.userId,
     });
 
     res.status(201).json(doc);
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// GET /api/supplier/documents/:id/file - Fetch file bytes by ID with ownership check
+router.get('/documents/:id/file', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const fileRecord = await documentsRepository.getFileByVersionOrDocId(req.params.id, ctx.tenantId);
+    if (!fileRecord) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Document file not found or unauthorized.' });
+      return;
+    }
+    res.setHeader('Content-Type', fileRecord.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${fileRecord.fileName}"`);
+    res.send(fileRecord.content);
   } catch (err: any) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
