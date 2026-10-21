@@ -62,6 +62,45 @@ export async function apiRequest<T = any>(endpoint: string, options: RequestInit
 // Auth API
 // ---------------------------------------------------------------------
 export const authApi = {
+  async saveSupplierStep(payload: {
+    step: 1 | 2 | 3;
+    email: string;
+    fullName?: string;
+    phone?: string;
+    password?: string;
+    legalName?: string;
+    cipaUin?: string;
+    companyType?: string;
+    city?: string;
+    agreedToTerms?: boolean;
+    agreedToPrivacy?: boolean;
+  }) {
+    const res = await apiRequest<{ token?: string; user?: any; supplier?: any; nextStep?: number }>(
+      '/api/auth/register-supplier-step',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+    if (res.token) localStorage.setItem('bidready_token', res.token);
+    return res;
+  },
+
+  async getSupplierProgress(email: string) {
+    return apiRequest<{
+      found: boolean;
+      email?: string;
+      fullName?: string;
+      phone?: string;
+      legalName?: string;
+      tradingName?: string;
+      cipaNumber?: string;
+      companyType?: string;
+      city?: string;
+      currentStep?: number;
+    }>(`/api/auth/supplier-progress?email=${encodeURIComponent(email)}`);
+  },
+
   async registerSupplier(payload: {
     legalName: string;
     cipaUin: string;

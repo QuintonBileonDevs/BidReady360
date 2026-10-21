@@ -88,14 +88,6 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
       }
 
       const supplierMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'supplier');
-      if (supplierMembership) {
-        updateSupplierProfile({
-          id: supplierMembership.tenantId,
-          legalName: supplierMembership.tenantName,
-          tradingName: supplierMembership.tenantName,
-          email: res.user.email,
-        });
-      }
 
       loginSuccess(
         {

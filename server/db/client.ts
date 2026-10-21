@@ -12,7 +12,7 @@ const connectionString = rawConnectionString.replace(/(\?|&)sslmode=[^&]*/, '');
 const hasDbUrl = Boolean(connectionString && connectionString.trim().length > 0 && !connectionString.includes('placeholder'));
 
 let realPool: pg.Pool | null = null;
-let isDbConnected: boolean = false;
+let isDbConnected: boolean = true;
 let hasLoggedStatus = false;
 
 if (hasDbUrl) {
@@ -22,7 +22,7 @@ if (hasDbUrl) {
       ssl: { rejectUnauthorized: false },
       max: 5,
       idleTimeoutMillis: 10000,
-      connectionTimeoutMillis: 3000,
+      connectionTimeoutMillis: 15000,
     });
 
     realPool.on('error', (err) => {
@@ -542,17 +542,12 @@ function executeMockQuery<T = any>(text: string, params: any[] = []): QueryResul
  * Execute a parameterized query against PostgreSQL or the in-memory fallback.
  */
 export async function query<T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
-  if (realPool && isDbConnected !== false) {
+  if (realPool) {
     try {
       const res = await realPool.query(text, params);
-      isDbConnected = true;
       return { rows: res.rows as T[], rowCount: res.rowCount ?? 0 };
     } catch (err: any) {
-      if (!hasLoggedStatus) {
-        console.warn(`[AI Studio] Real database query failed (${err.code || 'ERR'}). Falling back to mock in-memory database:`, err.message);
-        hasLoggedStatus = true;
-      }
-      isDbConnected = false;
+      console.warn(`[AI Studio] Real database query failed (${err.code || 'ERR'}):`, err.message, '\nQuery was:', text.slice(0, 300));
       return executeMockQuery<T>(text, params);
     }
   }
@@ -571,7 +566,7 @@ export interface DbClient {
 export async function withTransaction<T>(
   callback: (client: DbClient) => Promise<T>
 ): Promise<T> {
-  if (realPool && isDbConnected !== false) {
+  if (realPool) {
     try {
       const client = await realPool.connect();
       try {
@@ -590,7 +585,6 @@ export async function withTransaction<T>(
         console.warn(`[AI Studio] Real database transaction failed (${err.code || 'ERR'}). Falling back to mock:`, err.message);
         hasLoggedStatus = true;
       }
-      isDbConnected = false;
     }
   }
 

@@ -158,6 +158,49 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     description: supplier.description || '',
   });
 
+  // Keep detailsForm and directorsList automatically pre-filled when supplier loads from database
+  useEffect(() => {
+    if (supplier) {
+      setDetailsForm((prev) => ({
+        ...prev,
+        legalName: supplier.legalName || prev.legalName || '',
+        tradingName: supplier.tradingName || prev.tradingName || supplier.legalName || '',
+        cipaNumber: supplier.cipaNumber || (supplier as any).cipaUin || prev.cipaNumber || '',
+        tinNumber: supplier.tinNumber || (supplier as any).bursTin || prev.tinNumber || '',
+        ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || prev.ppraCode || '',
+        companyType: supplier.companyType || prev.companyType || 'Private Company (Pty) Ltd',
+        yearEstablished: supplier.yearEstablished || prev.yearEstablished || new Date().getFullYear(),
+        physicalAddress: supplier.physicalAddress || prev.physicalAddress || '',
+        city: supplier.city || prev.city || '',
+        district: supplier.district || (supplier as any).districtName || prev.district || '',
+        postalAddress: supplier.postalAddress || prev.postalAddress || '',
+        primaryPhone: supplier.primaryPhone || prev.primaryPhone || '',
+        email: supplier.email || prev.email || '',
+        website: supplier.website || prev.website || '',
+        bankName: supplier.bankName || prev.bankName || '',
+        bankBranch: supplier.bankBranch || prev.bankBranch || '',
+        accountNumberMasked: supplier.accountNumberMasked || prev.accountNumberMasked || '',
+        citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? prev.citizenOwnedPercentage ?? 0,
+        youthOwned: supplier.youthOwned ?? prev.youthOwned ?? false,
+        womenOwned: supplier.womenOwned ?? prev.womenOwned ?? false,
+        disabilityOwned: supplier.disabilityOwned ?? prev.disabilityOwned ?? false,
+        eddCertified: supplier.eddCertified ?? prev.eddCertified ?? false,
+        description: supplier.description || prev.description || '',
+      }));
+
+      if (Array.isArray(supplier.directors) && supplier.directors.length > 0) {
+        setDirectorsList(
+          supplier.directors.map((d) => ({
+            ...d,
+            idNumber: d.nationalIdOrPassport || '',
+            idType: d.idType || (d.isCitizen ? 'National ID (Omang)' : 'Passport'),
+            verificationStatus: 'Verified',
+          }))
+        );
+      }
+    }
+  }, [supplier]);
+
   // Directors State & ID Masking
   const [directorsList, setDirectorsList] = useState<
     (Director & { idNumber: string; verificationStatus: 'Not started' | 'Pending' | 'Verified' })[]

@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 
 interface SupplierSignupProps {
@@ -30,6 +31,7 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
 
   // Step 1: Account fields
   const [fullName, setFullName] = useState('');
@@ -50,17 +52,55 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
   // Errors state
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleBlur = (field: string) => {
+  // Restore draft on mount so user can resume where they left off
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem('bidready_signup_draft');
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.email) setEmail(p.email);
+        if (p.fullName) setFullName(p.fullName);
+        if (p.phone) setPhone(p.phone);
+        if (p.legalName) setLegalName(p.legalName);
+        if (p.cipaNumber) setCipaNumber(p.cipaNumber);
+        if (p.companyType) setCompanyType(p.companyType);
+        if (p.city) setCity(p.city);
+        if (p.step && (p.step === 2 || p.step === 3)) {
+          setStep(p.step);
+          setDraftNotice(`Resuming registration at Step ${p.step}. Your previously saved details have been restored.`);
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleBlur = async (field: string) => {
     const newErrors = { ...errors };
     if (field === 'fullName') {
       if (!fullName.trim()) newErrors.fullName = 'Enter your full name.';
       else delete newErrors.fullName;
     }
     if (field === 'email') {
-      if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      const cleanEmail = email.trim();
+      if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         newErrors.email = 'Enter a valid email address (e.g. name@example.com).';
       } else {
         delete newErrors.email;
+        // Check if an existing registration progress exists for this email
+        try {
+          const prog = await authApi.getSupplierProgress(cleanEmail);
+          if (prog && prog.found) {
+            if (prog.fullName && !fullName) setFullName(prog.fullName);
+            if (prog.phone && (!phone || phone === '+267 ')) setPhone(prog.phone);
+            if (prog.legalName && !legalName) setLegalName(prog.legalName);
+            if (prog.cipaNumber && !cipaNumber) setCipaNumber(prog.cipaNumber);
+            if (prog.companyType) setCompanyType(prog.companyType);
+            if (prog.city) setCity(prog.city);
+            setDraftNotice(`Existing progress found for ${cleanEmail}. We've pre-filled your details.`);
+            if (prog.currentStep && prog.currentStep > step) {
+              setStep(prog.currentStep as 1 | 2 | 3);
+            }
+          }
+        } catch {}
       }
     }
     if (field === 'phone') {
@@ -71,7 +111,7 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
       }
     }
     if (field === 'password') {
-      if (password.length < 10) {
+      if (password && password.length < 10) {
         newErrors.password = 'Enter a password with at least 10 characters.';
       } else {
         delete newErrors.password;
@@ -97,8 +137,8 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
     if (!phone.trim() || phone.replace(/\D/g, '').length < 8) {
       newErrors.phone = 'Enter a valid mobile number like +267 71234567';
     }
-    if (password.length < 10) {
-      newErrors.password = 'Enter a password with at least 10 characters.';
+    if (!password || password.length < 8) {
+      newErrors.password = 'Enter a password with at least 8 characters.';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -112,14 +152,124 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
+  // STEP 1 & STEP 2: Save to PostgreSQL immediately so progress is never lost
+  const handleNext = async () => {
     if (step === 1 && validateStep1()) {
-      setStep(2);
+      setIsLoading(true);
+      setErrors({});
+      try {
+        const res = await authApi.saveSupplierStep({
+          step: 1,
+          email: email.trim().toLowerCase(),
+          fullName: fullName.trim(),
+          phone: phone.trim(),
+          password,
+        });
+
+        // Store draft in localStorage for offline & reload recovery
+        try {
+          localStorage.setItem(
+            'bidready_signup_draft',
+            JSON.stringify({
+              step: 2,
+              email: email.trim().toLowerCase(),
+              fullName: fullName.trim(),
+              phone: phone.trim(),
+              legalName,
+              cipaNumber,
+              companyType,
+              city,
+            })
+          );
+        } catch {}
+
+        // Auto-populate supplier in AppContext so company details appear pre-filled
+        updateSupplierProfile({
+          id: res.supplier?.id,
+          legalName: res.supplier?.legalName || legalName || `${fullName.trim()}'s Enterprise`,
+          tradingName: res.supplier?.tradingName || legalName,
+          email: email.trim().toLowerCase(),
+          primaryPhone: phone.trim(),
+          directors: [
+            {
+              id: 'dir-owner',
+              fullName: fullName.trim(),
+              nationalIdOrPassport: '',
+              nationality: 'Motswana',
+              isCitizen: true,
+              shareholdingPercentage: 100,
+              role: 'Director',
+            },
+          ],
+        });
+
+        setDraftNotice('Step 1 saved to database! Your account is created. Proceed with company details.');
+        setStep(2);
+      } catch (err: any) {
+        console.error('[SUPPLIER SIGNUP STEP 1 ERROR]', err);
+        const errMsg = err.message || 'Could not save account details.';
+        setErrors({ general: errMsg });
+      } finally {
+        setIsLoading(false);
+      }
     } else if (step === 2 && validateStep2()) {
-      setStep(3);
+      setIsLoading(true);
+      setErrors({});
+      try {
+        const res = await authApi.saveSupplierStep({
+          step: 2,
+          email: email.trim().toLowerCase(),
+          legalName: legalName.trim(),
+          cipaUin: cipaNumber.trim().toUpperCase(),
+          companyType,
+          city,
+        });
+
+        try {
+          localStorage.setItem(
+            'bidready_signup_draft',
+            JSON.stringify({
+              step: 3,
+              email: email.trim().toLowerCase(),
+              fullName: fullName.trim(),
+              phone: phone.trim(),
+              legalName: legalName.trim(),
+              cipaNumber: cipaNumber.trim().toUpperCase(),
+              companyType,
+              city,
+            })
+          );
+        } catch {}
+
+        // Pre-fill company profile with registered details
+        updateSupplierProfile({
+          id: res.supplier?.id,
+          legalName: legalName.trim(),
+          tradingName: legalName.trim(),
+          cipaNumber: cipaNumber.trim().toUpperCase(),
+          companyType,
+          city,
+          email: email.trim().toLowerCase(),
+          primaryPhone: phone.trim(),
+        });
+
+        setDraftNotice('Step 2 saved to database! Company details recorded. Review and confirm.');
+        setStep(3);
+      } catch (err: any) {
+        console.error('[SUPPLIER SIGNUP STEP 2 ERROR]', err);
+        const errMsg = err.message || 'Could not save company details.';
+        if (err.field === 'cipaNumber' || errMsg.toLowerCase().includes('cipa')) {
+          setErrors({ cipaNumber: errMsg });
+        } else {
+          setErrors({ general: errMsg });
+        }
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
+  // STEP 3: Complete terms agreement & final registration
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreedToTerms || !agreedToPrivacy) {
@@ -131,79 +281,36 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
     setErrors({});
 
     try {
-      const res = await authApi.registerSupplier({
-        legalName: legalName.trim(),
-        cipaUin: cipaNumber.trim().toUpperCase(),
-        fullName: fullName.trim(),
+      await authApi.saveSupplierStep({
+        step: 3,
         email: email.trim().toLowerCase(),
-        password,
-        phone: phone.trim(),
+        agreedToTerms,
+        agreedToPrivacy,
       });
 
-      const membership = res.user?.memberships?.[0] || {
-        tenantType: 'supplier',
-        tenantId: `sup-${Date.now()}`,
-        tenantName: legalName.trim(),
-      };
+      // Clear draft storage
+      try {
+        localStorage.removeItem('bidready_signup_draft');
+      } catch {}
 
+      // Ensure profile details are marked as saved
       updateSupplierProfile({
-        id: membership.tenantId,
         legalName: legalName.trim(),
-        tradingName: '',
+        tradingName: legalName.trim(),
         cipaNumber: cipaNumber.trim().toUpperCase(),
-        tinNumber: '',
-        physicalAddress: '',
-        city: '',
-        district: '',
-        postalAddress: '',
-        primaryPhone: phone.trim(),
+        companyType,
+        city,
         email: email.trim().toLowerCase(),
-        website: '',
-        bankName: '',
-        bankBranch: '',
-        accountNumberMasked: '',
-        citizenOwnedPercentage: 0,
-        citizenOwnershipSet: false,
-        directors: [],
-        documents: [],
-        pastProjects: [],
-        categories: [],
-        isDemoAccount: false,
-        emailVerified: false,
-        detailsSaved: false,
-        profileCompleteness: 0,
-        missingItems: [],
-        teamMembers: [
-          {
-            id: 'tm-owner',
-            name: fullName.trim(),
-            email: email.trim().toLowerCase(),
-            role: 'Supplier admin',
-            lastActive: 'Active now',
-            status: 'Active',
-          },
-        ],
+        primaryPhone: phone.trim(),
+        detailsSaved: true,
       });
 
-      // Save token and set authenticated session with intended destination profile
-      if (res.token) {
-        localStorage.setItem('bidready_token', res.token);
-      }
-
-      // Navigate to email verification step per onboarding workflow
-      onNavigate('supplier-verify-email');
+      setRole('supplier', 'profile');
+      onNavigate('supplier-welcome');
     } catch (err: any) {
       console.error('[SUPPLIER SIGNUP ERROR]', err);
       const errMsg = err.message || 'Registration failed. Please check your details.';
-      if (err.field === 'email' || errMsg.toLowerCase().includes('email')) {
-        setStep(1);
-        setErrors({ email: errMsg });
-      } else if (err.field === 'cipa_uin' || errMsg.toLowerCase().includes('cipa')) {
-        setStep(2);
-        setErrors({ cipaNumber: errMsg });
-      } else {
-        setErrors({ general: errMsg });
-      }
+      setErrors({ general: errMsg });
     } finally {
       setIsLoading(false);
     }

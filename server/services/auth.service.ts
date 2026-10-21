@@ -13,6 +13,24 @@ import {
   SessionPayload,
 } from '../utils/crypto';
 
+import { normalizeCompanyType } from '../repositories/suppliers.repository';
+
+export interface SupplierStepDTO {
+  step: 1 | 2 | 3;
+  email: string;
+  fullName?: string;
+  phone?: string;
+  password?: string;
+  legalName?: string;
+  cipaUin?: string;
+  companyType?: string;
+  city?: string;
+  agreedToTerms?: boolean;
+  agreedToPrivacy?: boolean;
+  ip?: string;
+  userAgent?: string;
+}
+
 export interface SupplierSignupDTO {
   legalName: string;
   cipaUin: string;
@@ -50,97 +68,345 @@ export interface AuthResponse {
 
 export class AuthService {
   /**
-   * Register a new Supplier account and link the primary user as owner.
+   * Save incremental supplier registration progress (Step 1, Step 2, or Step 3).
+   * Email is the unique identifier for each supplier.
    */
-  async registerSupplier(dto: SupplierSignupDTO): Promise<AuthResponse> {
+  async saveSupplierRegistrationStep(dto: SupplierStepDTO): Promise<{
+    step: number;
+    token?: string;
+    user?: any;
+    supplier?: any;
+    nextStep: number;
+    completed?: boolean;
+  }> {
     const cleanEmail = dto.email.trim().toLowerCase();
-    const cleanCipa = dto.cipaUin.trim().toUpperCase();
-
-    const existingUser = await usersRepository.findByEmail(cleanEmail);
-    if (existingUser) {
-      const err: any = new Error('An account with this email address already exists.');
-      err.code = '23505';
-      err.detail = 'Key (email)=(' + cleanEmail + ')';
-      throw err;
+    if (!cleanEmail) {
+      throw new Error('Email address is required as the unique supplier identifier.');
     }
 
-    const passwordHash = await hashPassword(dto.password);
+    // =========================================================================
+    // STEP 1: Account credentials & initial supplier provision
+    // =========================================================================
+    if (dto.step === 1) {
+      if (!dto.fullName?.trim()) {
+        throw new Error('Full name is required for Step 1.');
+      }
 
-    const { newUser, newSupplier } = await withTransaction(async (client) => {
-      // 0. Verify CIPA UIN uniqueness before proceeding
-      const existingCipa = await client.query('SELECT id FROM suppliers WHERE cipa_uin = $1 LIMIT 1', [cleanCipa]);
-      if (existingCipa.rows.length > 0) {
+      let user = await usersRepository.findByEmail(cleanEmail);
+      let userId: string;
+
+      if (!user) {
+        if (!dto.password || dto.password.length < 8) {
+          throw new Error('Password must be at least 8 characters long.');
+        }
+        const passwordHash = await hashPassword(dto.password);
+        const userRes = await query(
+          `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
+           VALUES ($1, $2, $3, $4, 'active', NULL)
+           RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
+          [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
+        );
+        user = userRes.rows[0];
+        userId = user!.id;
+      } else {
+        userId = user!.id;
+        const updateParams: any[] = [dto.fullName.trim(), dto.phone || null, userId];
+        let passwordUpdateClause = '';
+        if (dto.password && dto.password.length >= 8) {
+          const newHash = await hashPassword(dto.password);
+          updateParams.push(newHash);
+          passwordUpdateClause = `, password_hash = $${updateParams.length}`;
+        }
+        await query(
+          `UPDATE users SET full_name = $1, phone = $2, updated_at = NOW() ${passwordUpdateClause} WHERE id = $3`,
+          updateParams
+        );
+      }
+
+      // Find or create supplier record (email is the unique identifier)
+      let supplierId: string;
+      let supplierData: any;
+      const supRes = await query(
+        `SELECT id, legal_name, trading_name, cipa_uin, company_type, city, email, primary_phone, profile_completeness
+         FROM suppliers
+         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
+         LIMIT 1`,
+        [cleanEmail]
+      );
+
+      if (supRes.rows.length > 0) {
+        supplierId = supRes.rows[0].id;
+        supplierData = supRes.rows[0];
+        await query(
+          `UPDATE suppliers SET primary_phone = COALESCE($1, primary_phone), updated_at = NOW() WHERE id = $2`,
+          [dto.phone || null, supplierId]
+        );
+      } else {
+        const defaultLegalName = dto.legalName?.trim() || `${dto.fullName.trim()}'s Enterprise`;
+        const tempCipa = dto.cipaUin?.trim().toUpperCase() || 'BW-TEMP-' + Math.floor(10000000 + Math.random() * 90000000);
+        const insertSup = await query(
+          `INSERT INTO suppliers (
+             legal_name, trading_name, cipa_uin, email, primary_phone, city, country_code,
+             status, verification_status, compliance_status, profile_completeness
+           ) VALUES (
+             $1, $1, $2, $3, $4, 'Gaborone', 'BW',
+             'active', 'unverified', 'Action required', 25
+           ) RETURNING id, legal_name, trading_name, cipa_uin, company_type, city, email, primary_phone, profile_completeness`,
+          [defaultLegalName, tempCipa, cleanEmail, dto.phone || null]
+        );
+        supplierId = insertSup.rows[0].id;
+        supplierData = insertSup.rows[0];
+      }
+
+      // Link User in supplier_members as Owner / Supplier Admin
+      const roleRes = await query(
+        `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
+      );
+      const roleId = roleRes.rows[0]?.id;
+      if (roleId && supplierId && userId) {
+        await query(
+          `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
+           VALUES ($1, $2, $3, TRUE, 'active', NOW())
+           ON CONFLICT (supplier_id, user_id) DO UPDATE SET status = 'active'`,
+          [supplierId, userId, roleId]
+        );
+      }
+
+      // Add/Update director in supplier_people
+      const personCheck = await query(
+        `SELECT id FROM supplier_people WHERE supplier_id = $1 AND LOWER(email::text) = LOWER($2) LIMIT 1`,
+        [supplierId, cleanEmail]
+      );
+      if (personCheck.rows.length === 0) {
+        await query(
+          `INSERT INTO supplier_people (
+             supplier_id, full_name, person_role, nationality, is_citizen, email, phone, kyc_status, is_active
+           ) VALUES (
+             $1, $2, 'director', 'Motswana', TRUE, $3, $4, 'verified', TRUE
+           )`,
+          [supplierId, dto.fullName.trim(), cleanEmail, dto.phone || null]
+        );
+      } else {
+        await query(
+          `UPDATE supplier_people SET full_name = $1, phone = $2, updated_at = NOW() WHERE id = $3`,
+          [dto.fullName.trim(), dto.phone || null, personCheck.rows[0].id]
+        );
+      }
+
+      const memberships = await usersRepository.getUserMemberships(userId);
+      const token = signSessionToken({
+        userId,
+        email: cleanEmail,
+        isPlatformAdmin: false,
+        activeTenantType: 'supplier',
+        activeTenantId: supplierId,
+        role: 'Supplier Admin',
+      });
+
+      return {
+        step: 1,
+        nextStep: 2,
+        token,
+        user: { id: userId, email: cleanEmail, fullName: dto.fullName.trim(), memberships },
+        supplier: {
+          id: supplierId,
+          legalName: supplierData.legal_name,
+          tradingName: supplierData.trading_name,
+          cipaNumber: supplierData.cipa_uin.startsWith('BW-TEMP-') ? '' : supplierData.cipa_uin,
+          companyType: supplierData.company_type,
+          city: supplierData.city,
+          email: cleanEmail,
+          primaryPhone: dto.phone || '',
+        },
+      };
+    }
+
+    // =========================================================================
+    // STEP 2: Company Details (Legal name, CIPA number, Company type, City)
+    // =========================================================================
+    if (dto.step === 2) {
+      if (!dto.legalName?.trim()) {
+        throw new Error('Registered company name is required for Step 2.');
+      }
+      if (!dto.cipaUin?.trim()) {
+        throw new Error('CIPA registration number is required for Step 2.');
+      }
+
+      const cleanCipa = dto.cipaUin.trim().toUpperCase();
+      const cleanLegalName = dto.legalName.trim();
+      const normCompanyType = normalizeCompanyType(dto.companyType || 'private_company');
+      const cleanCity = dto.city?.trim() || 'Gaborone';
+
+      // Find supplier by email
+      const supRes = await query(
+        `SELECT id, cipa_uin FROM suppliers WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+        [cleanEmail]
+      );
+
+      if (supRes.rows.length === 0) {
+        throw new Error('Supplier account not found for this email. Please complete Step 1 first.');
+      }
+
+      const supplierId = supRes.rows[0].id;
+
+      // Verify CIPA uniqueness across other suppliers
+      const cipaCheck = await query(
+        `SELECT id FROM suppliers WHERE cipa_uin = $1 AND id != $2 AND deleted_at IS NULL LIMIT 1`,
+        [cleanCipa, supplierId]
+      );
+      if (cipaCheck.rows.length > 0) {
         const err: any = new Error('A company with this CIPA registration number is already registered.');
-        err.code = '23505';
-        err.detail = 'Key (cipa_uin)=(' + cleanCipa + ')';
-        err.field = 'cipa_uin';
+        err.field = 'cipaNumber';
         throw err;
       }
 
-      // 1. Create User (stays unverified until email confirmation link is clicked)
-      const userRes = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
-         VALUES ($1, $2, $3, $4, 'active', NULL)
-         RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
-        [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
-      );
-      const user = userRes.rows[0];
-
-      // 2. Create Supplier
-      const supplierRes = await client.query(
-        `INSERT INTO suppliers (legal_name, cipa_uin, email, primary_phone, status, verification_status, compliance_status)
-         VALUES ($1, $2, $3, $4, 'active', 'unverified', 'Action required')
-         RETURNING id, legal_name AS "legalName"`,
-        [dto.legalName.trim(), cleanCipa, cleanEmail, dto.phone || null]
-      );
-      const supplier = supplierRes.rows[0];
-
-      // 3. Get Supplier Admin System Role
-      const roleRes = await client.query(
-        `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' AND is_system = TRUE LIMIT 1`
-      );
-      const roleId = roleRes.rows[0]?.id;
-
-      // 4. Link User to Supplier
-      await client.query(
-        `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
-         VALUES ($1, $2, $3, TRUE, 'active', NOW())`,
-        [supplier.id, user.id, roleId]
+      const updateRes = await query(
+        `UPDATE suppliers
+         SET legal_name = $1,
+             trading_name = $1,
+             cipa_uin = $2,
+             company_type = $3,
+             city = $4,
+             profile_completeness = GREATEST(profile_completeness, 50),
+             updated_at = NOW()
+         WHERE id = $5
+         RETURNING id, legal_name AS "legalName", trading_name AS "tradingName",
+                   cipa_uin AS "cipaNumber", company_type AS "companyType", city, email, primary_phone AS "primaryPhone"`,
+        [cleanLegalName, cleanCipa, normCompanyType, cleanCity, supplierId]
       );
 
-      // 5. Add primary Director
-      await client.query(
-        `INSERT INTO supplier_people (supplier_id, full_name, person_role, email, is_active)
-         VALUES ($1, $2, 'director', $3, TRUE)`,
-        [supplier.id, dto.fullName.trim(), cleanEmail]
+      return {
+        step: 2,
+        nextStep: 3,
+        supplier: updateRes.rows[0],
+      };
+    }
+
+    // =========================================================================
+    // STEP 3: Review and Agree (Terms & Privacy confirmation)
+    // =========================================================================
+    if (dto.step === 3) {
+      const user = await usersRepository.findByEmail(cleanEmail);
+      if (user) {
+        await query(
+          `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
+           VALUES ($1, 'supplier_terms', '1.0', $2, $3)`,
+          [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
+        );
+      }
+
+      await query(
+        `UPDATE suppliers
+         SET profile_completeness = GREATEST(profile_completeness, 60),
+             updated_at = NOW()
+         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL`,
+        [cleanEmail]
       );
 
-      // 6. Record Legal Acceptance (sanitizing client IP for PostgreSQL inet data type)
-      await client.query(
-        `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
-         VALUES ($1, 'supplier_terms', '1.0', $2, $3)`,
-        [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
-      );
+      return {
+        step: 3,
+        nextStep: 3,
+        completed: true,
+      };
+    }
 
-      return { newUser: user, newSupplier: supplier };
-    });
+    throw new Error('Invalid registration step.');
+  }
 
-    const memberships = await usersRepository.getUserMemberships(newUser.id);
-    const token = signSessionToken({
-      userId: newUser.id,
-      email: newUser.email,
-      isPlatformAdmin: false,
-      activeTenantType: 'supplier',
-      activeTenantId: newSupplier.id,
-      role: 'Supplier Admin',
-    });
+  /**
+   * Fetch current registration progress by email so user can resume where they left off.
+   */
+  async getSupplierRegistrationProgress(email: string): Promise<any> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return { found: false };
+
+    const userRes = await query(
+      `SELECT id, email, full_name AS "fullName", phone FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+      [cleanEmail]
+    );
+
+    const supRes = await query(
+      `SELECT id, legal_name AS "legalName", trading_name AS "tradingName", cipa_uin AS "cipaNumber",
+              company_type AS "companyType", city, email, primary_phone AS "primaryPhone", profile_completeness AS "profileCompleteness"
+       FROM suppliers
+       WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
+       LIMIT 1`,
+      [cleanEmail]
+    );
+
+    if (userRes.rows.length === 0 && supRes.rows.length === 0) {
+      return { found: false };
+    }
+
+    const user = userRes.rows[0] || {};
+    const sup = supRes.rows[0] || {};
+    const hasValidCipa = sup.cipaNumber && !sup.cipaNumber.startsWith('BW-TEMP-');
+    const hasCustomLegalName = sup.legalName && !sup.legalName.includes("'s Enterprise");
+
+    let currentStep = 1;
+    if (user.id) {
+      currentStep = (hasValidCipa && hasCustomLegalName) ? 3 : 2;
+    }
 
     return {
-      token,
+      found: true,
+      currentStep,
+      email: cleanEmail,
+      fullName: user.fullName || '',
+      phone: user.phone || sup.primaryPhone || '+267 ',
+      legalName: hasCustomLegalName ? sup.legalName : '',
+      tradingName: sup.tradingName || (hasCustomLegalName ? sup.legalName : ''),
+      cipaNumber: hasValidCipa ? sup.cipaNumber : '',
+      companyType: sup.companyType || 'Private Limited Company ((Pty) Ltd)',
+      city: sup.city || 'Gaborone',
+      profileCompleteness: sup.profileCompleteness || 0,
+    };
+  }
+
+  /**
+   * Register a new Supplier account (all-in-one backwards compatible wrapper).
+   */
+  async registerSupplier(dto: SupplierSignupDTO): Promise<AuthResponse> {
+    const cleanEmail = dto.email.trim().toLowerCase();
+
+    // Execute Step 1
+    const s1 = await this.saveSupplierRegistrationStep({
+      step: 1,
+      email: cleanEmail,
+      fullName: dto.fullName,
+      phone: dto.phone,
+      password: dto.password,
+      legalName: dto.legalName,
+      cipaUin: dto.cipaUin,
+      ip: dto.ip,
+      userAgent: dto.userAgent,
+    });
+
+    // Execute Step 2
+    const s2 = await this.saveSupplierRegistrationStep({
+      step: 2,
+      email: cleanEmail,
+      legalName: dto.legalName,
+      cipaUin: dto.cipaUin,
+    });
+
+    // Execute Step 3
+    await this.saveSupplierRegistrationStep({
+      step: 3,
+      email: cleanEmail,
+      agreedToTerms: true,
+      agreedToPrivacy: true,
+      ip: dto.ip,
+      userAgent: dto.userAgent,
+    });
+
+    const memberships = await usersRepository.getUserMemberships(s1.user.id);
+    return {
+      token: s1.token,
       user: {
-        id: newUser.id,
-        email: newUser.email,
-        fullName: newUser.fullName,
+        id: s1.user.id,
+        email: cleanEmail,
+        fullName: s1.user.fullName,
         isPlatformAdmin: false,
         memberships,
       },
@@ -282,7 +548,73 @@ export class AuthService {
     }
 
     await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
-    const memberships = await usersRepository.getUserMemberships(user.id);
+    let memberships = await usersRepository.getUserMemberships(user.id);
+
+    // Auto-provision supplier entity in PostgreSQL if missing so profile changes save directly to database
+    if (memberships.length === 0 && !user.isPlatformAdmin) {
+      try {
+        let supplierId: string | null = null;
+        let supplierName: string = '';
+
+        const existingSup = await query(
+          `SELECT id, legal_name FROM suppliers WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+          [user.email]
+        );
+
+        if (existingSup.rows.length > 0) {
+          supplierId = existingSup.rows[0].id;
+          supplierName = existingSup.rows[0].legal_name;
+        } else {
+          const domain = user.email.includes('@') ? user.email.split('@')[1] : '';
+          const domainName = domain ? domain.split('.')[0] : '';
+          supplierName = domainName
+            ? domainName.charAt(0).toUpperCase() + domainName.slice(1) + ' (Pty) Ltd'
+            : `${user.fullName || 'Supplier'} (Pty) Ltd`;
+
+          const cipaUin = 'BW' + Math.floor(10000000 + Math.random() * 90000000);
+
+          const newSupRes = await query(
+            `INSERT INTO suppliers (
+               legal_name, trading_name, cipa_uin, email, primary_phone, status, verification_status, compliance_status, profile_completeness
+             ) VALUES (
+               $1, $1, $2, $3, $4, 'active', 'unverified', 'Action required', 30
+             ) RETURNING id, legal_name`,
+            [supplierName, cipaUin, user.email, user.phone]
+          );
+          supplierId = newSupRes.rows[0]?.id;
+          supplierName = newSupRes.rows[0]?.legal_name;
+        }
+
+        if (supplierId) {
+          const roleRes = await query(
+            `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
+          );
+          const roleId = roleRes.rows[0]?.id;
+
+          if (roleId) {
+            await query(
+              `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
+               VALUES ($1, $2, $3, TRUE, 'active', NOW())
+               ON CONFLICT DO NOTHING`,
+              [supplierId, user.id, roleId]
+            );
+          }
+
+          await query(
+            `INSERT INTO supplier_people (
+               supplier_id, full_name, person_role, nationality, is_citizen, email, phone, kyc_status, is_active
+             ) VALUES (
+               $1, $2, 'director', 'Motswana', TRUE, $3, $4, 'verified', TRUE
+             ) ON CONFLICT DO NOTHING`,
+            [supplierId, user.fullName || 'Director', user.email, user.phone]
+          );
+
+          memberships = await usersRepository.getUserMemberships(user.id);
+        }
+      } catch (provErr) {
+        console.warn('[AUTO-PROVISION SUPPLIER WORKSPACE ERROR]', provErr);
+      }
+    }
 
     const primaryMembership = memberships[0] || {
       tenantType: 'supplier',

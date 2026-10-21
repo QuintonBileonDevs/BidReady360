@@ -6,6 +6,70 @@ import { extractClientIp } from '../utils/ip';
 
 const router = Router();
 
+// POST /api/auth/register-supplier-step (Multi-step saving: saves each step immediately)
+router.post('/register-supplier-step', async (req: Request, res: Response) => {
+  try {
+    const { step, email, fullName, phone, password, legalName, cipaUin, companyType, city, agreedToTerms, agreedToPrivacy } = req.body;
+
+    if (!email || !step) {
+      res.status(400).json({
+        error: 'VALIDATION_ERROR',
+        message: 'Step and Email address are required.',
+      });
+      return;
+    }
+
+    const ip = extractClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Web Client';
+
+    const result = await authService.saveSupplierRegistrationStep({
+      step: Number(step) as 1 | 2 | 3,
+      email,
+      fullName,
+      phone,
+      password,
+      legalName,
+      cipaUin,
+      companyType,
+      city,
+      agreedToTerms,
+      agreedToPrivacy,
+      ip,
+      userAgent,
+    });
+
+    if (result.token) {
+      res.cookie('session_token', result.token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 8 * 60 * 60 * 1000,
+        secure: process.env.NODE_ENV === 'production',
+      });
+    }
+
+    res.status(200).json(result);
+  } catch (err: any) {
+    console.error('[AUTH REGISTER SUPPLIER STEP ERROR]', err);
+    const safeError = translateDbError(err);
+    res.status(safeError.status).json(safeError);
+  }
+});
+
+// GET /api/auth/supplier-progress (Checks if user has partial registration to pick up where they left off)
+router.get('/supplier-progress', async (req: Request, res: Response) => {
+  try {
+    const email = String(req.query.email || '').trim();
+    if (!email) {
+      res.json({ found: false });
+      return;
+    }
+    const progress = await authService.getSupplierRegistrationProgress(email);
+    res.json(progress);
+  } catch (err: any) {
+    res.status(500).json({ found: false, error: err.message });
+  }
+});
+
 // POST /api/auth/register-supplier
 router.post('/register-supplier', async (req: Request, res: Response) => {
   try {
