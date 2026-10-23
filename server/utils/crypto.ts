@@ -116,6 +116,7 @@ export function verifySessionToken(token: string): SessionPayload | null {
         email: 'kagiso@phiricontracting.co.bw',
         isPlatformAdmin: false,
         activeTenantType: 'supplier',
+        activeTenantId: '5b430e10-ad8c-4c33-b843-e772569114d7',
         role: 'Supplier Admin',
       };
     }

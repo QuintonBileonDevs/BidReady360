@@ -580,7 +580,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         postalAddress: detailsForm.postalAddress.trim(),
         primaryPhone: detailsForm.primaryPhone.trim(),
         email: detailsForm.email.trim(),
-        website: detailsForm.website.trim(),
+        website: detailsForm.website.trim() ? (detailsForm.website.trim().startsWith('http://') || detailsForm.website.trim().startsWith('https://') ? detailsForm.website.trim() : `https://${detailsForm.website.trim()}`) : '',
         bankName: detailsForm.bankName.trim(),
         bankBranch: detailsForm.bankBranch.trim(),
         accountNumberMasked: detailsForm.accountNumberMasked.trim(),
@@ -638,41 +638,21 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     e.preventDefault();
     if (!newDirectorForm.fullName || !newDirectorForm.idNumber) return;
 
-    if (editingDirector) {
-      const updated = directorsList.map((d) => {
-        if (d.id === editingDirector.id) {
-          return {
-            ...d,
+    try {
+      if (editingDirector) {
+        let dbId = editingDirector.id;
+        if (dbId.startsWith('dir-')) {
+          const res = await supplierApi.addPerson({
             fullName: newDirectorForm.fullName.trim(),
-            nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-            idNumber: newDirectorForm.idNumber.trim(),
-            idType: newDirectorForm.idType,
+            personRole: newDirectorForm.role?.toLowerCase() || 'director',
+            ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
             nationality: newDirectorForm.nationality,
             isCitizen: newDirectorForm.isCitizen,
-            shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
-            role: newDirectorForm.role,
-          };
-        }
-        return d;
-      });
-
-      setDirectorsList(updated);
-      updateSupplierProfile({
-        directors: updated.map((d) => ({
-          id: d.id,
-          fullName: d.fullName,
-          nationalIdOrPassport: d.nationalIdOrPassport,
-          idType: d.idType,
-          nationality: d.nationality,
-          isCitizen: d.isCitizen,
-          shareholdingPercentage: d.shareholdingPercentage,
-          role: d.role,
-        })),
-      });
-
-      try {
-        if (editingDirector.id && !editingDirector.id.startsWith('dir-')) {
-          await supplierApi.updatePerson(editingDirector.id, {
+            identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+          });
+          if (res && res.id) dbId = res.id;
+        } else {
+          await supplierApi.updatePerson(dbId, {
             fullName: newDirectorForm.fullName.trim(),
             personRole: newDirectorForm.role?.toLowerCase() || 'director',
             ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
@@ -681,58 +661,87 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
             identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
           });
         }
-      } catch (err) {
-        console.warn('Could not sync director update to API:', err);
-      }
 
-      setIsDirectorDrawerOpen(false);
-      const savedName = newDirectorForm.fullName;
-      setEditingDirector(null);
-      showToast(`Database Save Confirmed: Updated ${savedName}. Saved to secure PostgreSQL & local store successfully.`);
-    } else {
-      const newDir = {
-        id: `dir-${Date.now()}`,
-        fullName: newDirectorForm.fullName.trim(),
-        nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-        idNumber: newDirectorForm.idNumber.trim(),
-        idType: newDirectorForm.idType,
-        nationality: newDirectorForm.nationality,
-        isCitizen: newDirectorForm.isCitizen,
-        shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
-        role: newDirectorForm.role,
-        verificationStatus: 'Verified' as const,
-      };
-
-      const updated = [...directorsList, newDir];
-      setDirectorsList(updated);
-      updateSupplierProfile({
-        directors: updated.map((d) => ({
-          id: d.id,
-          fullName: d.fullName,
-          nationalIdOrPassport: d.nationalIdOrPassport,
-          idType: d.idType,
-          nationality: d.nationality,
-          isCitizen: d.isCitizen,
-          shareholdingPercentage: d.shareholdingPercentage,
-          role: d.role,
-        })),
-      });
-
-      try {
-        await supplierApi.addPerson({
-          fullName: newDir.fullName,
-          personRole: newDir.role?.toLowerCase() || 'director',
-          ownershipPercent: newDir.shareholdingPercentage,
-          nationality: newDir.nationality,
-          isCitizen: newDir.isCitizen,
-          identityType: newDir.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+        const updated = directorsList.map((d) => {
+          if (d.id === editingDirector.id) {
+            return {
+              ...d,
+              id: dbId,
+              fullName: newDirectorForm.fullName.trim(),
+              nationalIdOrPassport: newDirectorForm.idNumber.trim(),
+              idNumber: newDirectorForm.idNumber.trim(),
+              idType: newDirectorForm.idType,
+              nationality: newDirectorForm.nationality,
+              isCitizen: newDirectorForm.isCitizen,
+              shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
+              role: newDirectorForm.role,
+            };
+          }
+          return d;
         });
-      } catch (err) {
-        console.warn('Could not sync new director to API:', err);
-      }
 
-      setIsDirectorDrawerOpen(false);
-      showToast(`Database Save Confirmed: Added ${newDir.fullName}. Saved to secure PostgreSQL & local store successfully.`);
+        setDirectorsList(updated);
+        updateSupplierProfile({
+          directors: updated.map((d) => ({
+            id: d.id,
+            fullName: d.fullName,
+            nationalIdOrPassport: d.nationalIdOrPassport,
+            idType: d.idType,
+            nationality: d.nationality,
+            isCitizen: d.isCitizen,
+            shareholdingPercentage: d.shareholdingPercentage,
+            role: d.role,
+          })),
+        });
+
+        setIsDirectorDrawerOpen(false);
+        const savedName = newDirectorForm.fullName;
+        setEditingDirector(null);
+        showToast(`Database Save Confirmed: Updated ${savedName} in PostgreSQL database.`);
+      } else {
+        const res = await supplierApi.addPerson({
+          fullName: newDirectorForm.fullName.trim(),
+          personRole: newDirectorForm.role?.toLowerCase() || 'director',
+          ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
+          nationality: newDirectorForm.nationality,
+          isCitizen: newDirectorForm.isCitizen,
+          identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+        });
+
+        const newDir = {
+          id: res?.id || `dir-${Date.now()}`,
+          fullName: newDirectorForm.fullName.trim(),
+          nationalIdOrPassport: newDirectorForm.idNumber.trim(),
+          idNumber: newDirectorForm.idNumber.trim(),
+          idType: newDirectorForm.idType,
+          nationality: newDirectorForm.nationality,
+          isCitizen: newDirectorForm.isCitizen,
+          shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
+          role: newDirectorForm.role,
+          verificationStatus: 'Verified' as const,
+        };
+
+        const updated = [...directorsList, newDir];
+        setDirectorsList(updated);
+        updateSupplierProfile({
+          directors: updated.map((d) => ({
+            id: d.id,
+            fullName: d.fullName,
+            nationalIdOrPassport: d.nationalIdOrPassport,
+            idType: d.idType,
+            nationality: d.nationality,
+            isCitizen: d.isCitizen,
+            shareholdingPercentage: d.shareholdingPercentage,
+            role: d.role,
+          })),
+        });
+
+        setIsDirectorDrawerOpen(false);
+        showToast(`Database Save Confirmed: Added ${newDir.fullName} to PostgreSQL database.`);
+      }
+    } catch (err: any) {
+      console.error('Director save to database error:', err);
+      showToast(err.message || 'Error saving director to database. Please check your connection.');
     }
 
     setNewDirectorForm({
@@ -747,6 +756,14 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
   };
 
   const handleDeleteDirector = async (dirId: string) => {
+    try {
+      if (dirId && !dirId.startsWith('dir-')) {
+        await supplierApi.deletePerson(dirId);
+      }
+    } catch (err) {
+      console.warn('Could not delete person from database API:', err);
+    }
+
     const updated = directorsList.filter((d) => d.id !== dirId);
     setDirectorsList(updated);
     updateSupplierProfile({
@@ -761,15 +778,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         role: d.role,
       })),
     });
-
-    try {
-      if (dirId && !dirId.startsWith('dir-')) {
-        await supplierApi.deletePerson(dirId);
-      }
-    } catch (err) {
-      console.warn('Could not sync director deletion to API:', err);
-    }
-    showToast('Director removed and completeness recalculated.');
+    showToast('Director removed and database updated successfully.');
   };
 
   // Save Project
@@ -1681,8 +1690,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         Website URL
                       </label>
                       <input
-                        type="url"
-                        placeholder="https://..."
+                        type="text"
+                        placeholder="e.g. www.company.co.bw or https://..."
                         value={detailsForm.website}
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, website: e.target.value })

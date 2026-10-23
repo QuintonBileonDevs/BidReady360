@@ -301,7 +301,7 @@ export class SuppliersRepository {
     try {
       const sRes = await query(
         `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
-                s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked AS bank_account_number,
+                s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked,
                 s.citizen_owned_percentage
          FROM suppliers s WHERE s.id = $1`,
         [supplierId]
@@ -309,22 +309,31 @@ export class SuppliersRepository {
       if (sRes.rows.length === 0) return 0;
       const s = sRes.rows[0];
 
-      let totalCount = 13;
+      let totalCount = 15;
       let completedCount = 0;
 
-      // 10 Company items
-      if (s.legal_name && s.legal_name.trim()) completedCount++;
-      if (s.trading_name && s.trading_name.trim()) completedCount++;
-      if (s.burs_tin && s.burs_tin.trim()) completedCount++;
-      if (s.physical_address && s.physical_address.trim()) completedCount++;
-      if (s.city && s.city.trim()) completedCount++;
+      // 1. Legal Name
+      if (s.legal_name && String(s.legal_name).trim().length > 0) completedCount++;
+      // 2. Trading Name
+      if (s.trading_name && String(s.trading_name).trim().length > 0) completedCount++;
+      // 3. Tax Number
+      if (s.burs_tin && String(s.burs_tin).trim().length > 0) completedCount++;
+      // 4. Physical Address
+      if (s.physical_address && String(s.physical_address).trim().length > 0) completedCount++;
+      // 5. City
+      if (s.city && String(s.city).trim().length > 0) completedCount++;
+      // 6. District
       if (s.district_id) completedCount++;
-      if (s.primary_phone && s.primary_phone.trim()) completedCount++;
-      if (s.email && s.email.trim()) completedCount++;
-      if (s.bank_name && (s.bank_branch || s.bank_account_number)) completedCount++;
-      if (s.citizen_owned_percentage !== null && Number(s.citizen_owned_percentage) > 0) completedCount++;
+      // 7. Phone
+      if (s.primary_phone && String(s.primary_phone).trim().length >= 7) completedCount++;
+      // 8. Email
+      if (s.email && String(s.email).includes('@')) completedCount++;
+      // 9. Bank Details
+      if (s.bank_name && String(s.bank_name).trim().length > 0 && (s.bank_branch || s.account_number_masked)) completedCount++;
+      // 10. Citizen Ownership %
+      if (s.citizen_owned_percentage !== null && Number(s.citizen_owned_percentage) > 0 && Number(s.citizen_owned_percentage) <= 100) completedCount++;
 
-      // 1 People item: at least 1 director with sum ownership = 100%
+      // 11. Directors (100% total ownership)
       const pRes = await query(
         `SELECT ownership_percent FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
         [supplierId]
@@ -336,7 +345,7 @@ export class SuppliersRepository {
         }
       }
 
-      // Document items: CIPA, Tax Clearance (mandatory), Workers Comp, Public Liability (optional if uploaded)
+      // Documents (CIPA, Tax, Directors ID, Bank Letter)
       const dRes = await query(
         `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until
          FROM supplier_documents sd
@@ -357,17 +366,14 @@ export class SuppliersRepository {
         });
       };
 
-      if (isValid(['cipa', 'incorporation', 'company_reg'])) completedCount++;
-      if (isValid(['tax', 'burs'])) completedCount++;
-
-      if (isValid(['safety', 'compensation', 'wca'])) {
-        totalCount++;
-        completedCount++;
-      }
-      if (isValid(['insurance', 'liability'])) {
-        totalCount++;
-        completedCount++;
-      }
+      // 12. CIPA Certificate
+      if (isValid(['cipa', 'incorporation', 'company registration'])) completedCount++;
+      // 13. Tax Clearance
+      if (isValid(['tax clearance', 'burs', 'tax certificate'])) completedCount++;
+      // 14. Directors ID
+      if (isValid(['director', 'shareholder', 'omang', 'passport'])) completedCount++;
+      // 15. Bank Letter
+      if (isValid(['bank confirmation', 'bank letter', 'bank statement'])) completedCount++;
 
       return Math.round((completedCount / Math.max(1, totalCount)) * 100);
     } catch (err) {

@@ -13,7 +13,6 @@ import {
   ArrowRight,
   AlertCircle,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 
 interface SupplierLoginProps {
@@ -295,7 +294,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
           </form>
         )}
 
-        {/* Bottom Switcher Link & Sample Demo Account */}
+        {/* Bottom Switcher Link */}
         <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
           <div className="text-center text-[14px] text-[#6B7A87]">
             Don't have an account?{' '}

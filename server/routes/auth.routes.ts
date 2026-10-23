@@ -70,7 +70,7 @@ router.get('/supplier-progress', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/register-supplier
+// POST /api/auth/register-supplier (full single payload)
 router.post('/register-supplier', async (req: Request, res: Response) => {
   try {
     const { legalName, cipaUin, fullName, email, password, phone } = req.body;

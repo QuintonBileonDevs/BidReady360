@@ -239,15 +239,13 @@ export const Header: React.FC = () => {
                       {supplier.legalName || 'Supplier Account'}
                     </span>
                     <span className="text-[13px] text-[#6B7A87] block">
-                      {supplier.directors && supplier.directors.length > 0
+                      {supplier.directors && supplier.directors.length > 0 && supplier.directors.some(d => d.role && d.role.trim().length > 0)
                         ? Array.from(new Set(supplier.directors.map(d => d.role))).filter(Boolean).join(', ')
                         : supplier.isDemoAccount
                         ? 'Demo account'
                         : !supplier.emailVerified
                         ? 'Unverified account'
-                        : supplier.profileCompleteness === 100
-                        ? 'Director'
-                        : `Incomplete (${supplier.profileCompleteness}%)`}
+                        : 'Incomplete Profile'}
                     </span>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-[#6B7A87]" strokeWidth={1.5} />

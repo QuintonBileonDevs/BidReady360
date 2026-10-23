@@ -502,6 +502,16 @@ export class AuthService {
    */
   async login(email: string, passwordPlain: string, ip?: string): Promise<AuthResponse> {
     const cleanEmail = email.trim().toLowerCase();
+
+    // Check if user was previously deleted
+    const deletedCheck = await query(
+      `SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND (deleted_at IS NOT NULL OR status = 'deleted') LIMIT 1`,
+      [cleanEmail]
+    );
+    if (deletedCheck.rows.length > 0) {
+      throw new Error('This account has been deleted. Please register a new account.');
+    }
+
     let user = await usersRepository.findByEmail(cleanEmail);
 
     if (!user) {
