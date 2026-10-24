@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthLayout } from './AuthLayout';
+import { authApi } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Mail, CheckCircle2, ArrowRight, ArrowLeft } from 'lucide-react';
@@ -14,7 +15,7 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onNavigate }) =>
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
       setError('Enter a valid email address.');
@@ -24,10 +25,14 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onNavigate }) =>
     setIsLoading(true);
     setError(null);
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.forgotPassword(email.trim().toLowerCase());
       setIsSubmitted(true);
-    }, 600);
+    } catch (err: any) {
+      setError(err.message || 'Unable to process password reset. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

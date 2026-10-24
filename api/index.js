@@ -6,15 +6,62 @@ import cookieParser from "cookie-parser";
 // server/utils/crypto.ts
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-var JWT_SECRET = process.env.JWT_SECRET || "bidready360-jwt-secret-key-bw-2026-prod-fallback";
-var ENCRYPTION_KEY = crypto.scryptSync(process.env.APP_SECRET || "bidready360-enc-secret-key-bw", "salt", 32);
+var ENCRYPTION_KEY = crypto.scryptSync(
+  process.env.SESSION_SECRET || "bidready360-sec-token-32b-auth-secret-prod-2026",
+  "salt_bw_2026",
+  32
+);
+var DUMMY_HASH = "$2b$12$K8y43jZ10aW2Yh64k5W15e74R6g7o8p9q0r1s2t3u4v5w6x7y8z9a";
+var COMMON_PASSWORDS = /* @__PURE__ */ new Set([
+  "password123",
+  "password1234",
+  "1234567890",
+  "12345678901",
+  "qwertyuiop",
+  "admin12345",
+  "pass123456",
+  "welcome123",
+  "bidready360",
+  "phiricontracting",
+  "gaborone123",
+  "botswana123",
+  "changeme123",
+  "letmein1234"
+]);
+function validatePassword(password, email) {
+  if (!password || typeof password !== "string") {
+    return { isValid: false, error: "Password is required." };
+  }
+  if (password.length < 10) {
+    return { isValid: false, error: "Password must be at least 10 characters long." };
+  }
+  if (password.length > 128) {
+    return { isValid: false, error: "Password cannot exceed 128 characters." };
+  }
+  if (email && password.trim().toLowerCase() === email.trim().toLowerCase()) {
+    return { isValid: false, error: "Password cannot be the same as your email address." };
+  }
+  if (COMMON_PASSWORDS.has(password.toLowerCase().trim())) {
+    return { isValid: false, error: "This password is too common. Please choose a stronger password." };
+  }
+  return { isValid: true };
+}
 async function hashPassword(password) {
   const salt = await bcrypt.genSalt(12);
   return bcrypt.hash(password, salt);
 }
 async function verifyPassword(password, hash) {
-  return bcrypt.compare(password, hash);
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch {
+    return false;
+  }
+}
+function generateRandomToken(bytes = 32) {
+  return crypto.randomBytes(bytes).toString("hex");
+}
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token.trim()).digest("hex");
 }
 function encryptData(plainText) {
   const iv = crypto.randomBytes(12);
@@ -57,549 +104,96 @@ function verifyTotpCode(secretHex, userCode) {
   }
   return false;
 }
-function signSessionToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "24h" });
-}
-function verifySessionToken(token) {
-  try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    if (token === "platform_admin_session_token" || token.startsWith("admin_session_")) {
-      return {
-        userId: "289ca0ea-f6e9-4a9f-8f3e-13e8011c4ab7",
-        email: "admin@bidready360.bw",
-        isPlatformAdmin: true,
-        role: "Super Admin"
-      };
-    }
-    if (token === "demo_supplier_session_token" || token.startsWith("supplier_session_")) {
-      return {
-        userId: "7441a1c2-9e58-4f85-bfd3-181475de15d3",
-        email: "kagiso@phiricontracting.co.bw",
-        isPlatformAdmin: false,
-        activeTenantType: "supplier",
-        role: "Supplier Admin"
-      };
-    }
-    if (token.startsWith("org_session_") || token === "demo_buyer_session_token") {
-      return {
-        userId: "officer-grc",
-        email: "procurement@grc.gov.bw",
-        isPlatformAdmin: false,
-        activeTenantType: "organization",
-        activeTenantId: "3f1b5fee-5fab-4d61-b316-af37bd19c904",
-        role: "Org Admin"
-      };
-    }
-    return null;
-  }
-}
 
 // server/db/client.ts
 import pg from "pg";
 var { Pool } = pg;
+var expectedDbName = process.env.EXPECTED_DB_NAME;
+var sessionSecret = process.env.SESSION_SECRET;
+if (!expectedDbName || !expectedDbName.trim()) {
+  throw new Error("Fatal startup check failed: Missing required environment variable EXPECTED_DB_NAME.");
+}
+if (!sessionSecret || !sessionSecret.trim()) {
+  throw new Error("Fatal startup check failed: Missing required environment variable SESSION_SECRET.");
+}
 var rawConnectionString = process.env.DATABASE_URL || "";
 var connectionString = rawConnectionString.replace(/(\?|&)sslmode=[^&]*/, "");
-var hasDbUrl = Boolean(connectionString && connectionString.trim().length > 0 && !connectionString.includes("placeholder"));
-var realPool = null;
-var hasLoggedStatus = false;
-if (hasDbUrl) {
-  try {
-    realPool = new Pool({
-      connectionString,
-      ssl: { rejectUnauthorized: false },
-      max: 5,
-      idleTimeoutMillis: 1e4,
-      connectionTimeoutMillis: 15e3
-    });
-    realPool.on("error", (err) => {
-      if (!hasLoggedStatus) {
-        console.warn("[AI Studio] PostgreSQL pool connection notice:", err.message);
-      }
-    });
-  } catch (err) {
-    console.warn("[AI Studio] Could not create PostgreSQL pool, mock store active:", err.message);
-    realPool = null;
-  }
-} else {
-  console.log("[AI Studio] No DATABASE_URL provided \u2014 in-memory PostgreSQL mock active.");
+if (!connectionString || !connectionString.trim()) {
+  throw new Error("Fatal startup check failed: Missing required environment variable DATABASE_URL.");
 }
-var mockStore = {
-  users: /* @__PURE__ */ new Map([
-    [
-      "usr-admin",
-      {
-        id: "usr-admin",
-        email: "admin@bidready360.bw",
-        passwordHash: "$2a$10$wT0jQkGZ4LwZ5c5uJ5r6y.o6n7d8q9s0a1b2c3d4e5f6g7h8i9j0k",
-        fullName: "System Administrator",
-        phone: "+267 365 7000",
-        preferredLanguage: "en",
-        status: "active",
-        isPlatformAdmin: true,
-        emailVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        phoneVerifiedAt: null,
-        mfaEnabled: false,
-        mfaSecretEncrypted: null,
-        mfaType: null,
-        lastLoginAt: (/* @__PURE__ */ new Date()).toISOString(),
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      }
-    ],
-    [
-      "usr-officer",
-      {
-        id: "usr-officer",
-        email: "procurement@grc.gov.bw",
-        passwordHash: null,
-        fullName: "Procurement Officer",
-        phone: "+267 365 7400",
-        preferredLanguage: "en",
-        status: "active",
-        isPlatformAdmin: false,
-        emailVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        phoneVerifiedAt: null,
-        mfaEnabled: false,
-        mfaSecretEncrypted: null,
-        mfaType: null,
-        lastLoginAt: (/* @__PURE__ */ new Date()).toISOString(),
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      }
-    ],
-    [
-      "usr-supplier",
-      {
-        id: "usr-supplier",
-        email: "supplier@bidready360.co.bw",
-        passwordHash: null,
-        fullName: "Kagiso Mogorosi",
-        phone: "+267 71234567",
-        preferredLanguage: "en",
-        status: "active",
-        isPlatformAdmin: false,
-        emailVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        phoneVerifiedAt: null,
-        mfaEnabled: false,
-        mfaSecretEncrypted: null,
-        mfaType: null,
-        lastLoginAt: (/* @__PURE__ */ new Date()).toISOString(),
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      }
-    ]
-  ]),
-  suppliers: /* @__PURE__ */ new Map([
-    [
-      "sup-1",
-      {
-        id: "sup-1",
-        legalName: "Kalahari Technologies & Supplies (Pty) Ltd",
-        tradingName: "Kalahari Tech & Supplies",
-        cipaUin: "BW00008899221",
-        email: "supplier@bidready360.co.bw",
-        primaryPhone: "+267 71234567",
-        status: "active",
-        verificationStatus: "verified",
-        complianceStatus: "Compliant",
-        profileCompleteness: 100,
-        tinNumber: "TIN-9876543210",
-        vatNumber: "VAT-123456",
-        ppraCode: "01",
-        ppraGrade: "D",
-        ppraSubcodes: ["01", "02"],
-        category: "Civil & Infrastructure",
-        secondaryCategories: ["ICT & Software"],
-        physicalAddress: "Plot 54321, Gaborone West Industrial",
-        city: "Gaborone",
-        district: "Gaborone",
-        postalAddress: "P.O. Box 40221, Gaborone",
-        yearEstablished: 2018,
-        citizenOwnedPercentage: 100,
-        citizenOwnershipSet: true,
-        youthOwned: false,
-        womenOwned: true,
-        disabilityOwned: false,
-        eddCertified: true,
-        bankName: "First National Bank Botswana",
-        bankBranch: "Main Mall",
-        accountNumberMasked: "******7890",
-        directors: [{ fullName: "Kagiso Mogorosi", omangPassport: "987612345", nationality: "Botswana", shareholding: 100 }],
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      }
-    ]
-  ]),
-  organizations: /* @__PURE__ */ new Map([
-    [
-      "org-grc",
-      {
-        id: "org-grc",
-        name: "Gaborone Regional Council",
-        slug: "org-grc",
-        organizationType: "local_authority",
-        status: "active",
-        verificationStatus: "verified",
-        contactEmail: "procurement@grc.gov.bw"
-      }
-    ],
-    [
-      "org-debswana",
-      {
-        id: "org-debswana",
-        name: "Debswana Diamond Company",
-        slug: "org-debswana",
-        organizationType: "parastatal",
-        status: "active",
-        verificationStatus: "verified",
-        contactEmail: "tenders@debswana.bw"
-      }
-    ],
-    [
-      "org-burs",
-      {
-        id: "org-burs",
-        name: "Botswana Unified Revenue Service (BURS)",
-        slug: "org-burs",
-        organizationType: "ministry",
-        status: "active",
-        verificationStatus: "verified",
-        contactEmail: "procurement@burs.org.bw"
-      }
-    ],
-    [
-      "org-bpc",
-      {
-        id: "org-bpc",
-        name: "Botswana Power Corporation (BPC)",
-        slug: "org-bpc",
-        organizationType: "parastatal",
-        status: "active",
-        verificationStatus: "verified",
-        contactEmail: "tenders@bpc.bw"
-      }
-    ]
-  ]),
-  roles: [
-    { id: "role-supplier-admin", scope: "supplier", name: "Supplier Admin", isSystem: true },
-    { id: "role-org-admin", scope: "organization", name: "Org Admin", isSystem: true },
-    { id: "role-officer", scope: "organization", name: "Procurement Officer", isSystem: true },
-    { id: "role-evaluator", scope: "organization", name: "Evaluator", isSystem: true }
-  ],
-  memberships: [
-    {
-      userId: "usr-supplier",
-      tenantType: "supplier",
-      tenantId: "sup-1",
-      tenantName: "Kalahari Technologies & Supplies (Pty) Ltd",
-      roleId: "role-supplier-admin",
-      roleName: "Supplier Admin",
-      isOwner: true,
-      status: "active",
-      permissions: ["bids.submit", "vault.manage", "profile.edit"]
-    },
-    {
-      userId: "usr-officer",
-      tenantType: "organization",
-      tenantId: "org-grc",
-      tenantName: "Gaborone Regional Council",
-      roleId: "role-org-admin",
-      roleName: "Org Admin",
-      isOwner: true,
-      status: "active",
-      permissions: ["calls.create", "applications.view", "applications.review", "bids.open", "evaluations.manage", "awards.manage"]
+var pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 1e4,
+  connectionTimeoutMillis: 15e3
+});
+pool.on("error", (err) => {
+  console.error("[DATABASE POOL ERROR]:", err.message);
+});
+var dbVerified = false;
+async function verifyDatabaseGuard() {
+  if (dbVerified) return;
+  try {
+    const res = await pool.query("SELECT current_database()");
+    const actualDb = res.rows[0]?.current_database;
+    if (actualDb !== expectedDbName) {
+      throw new Error(
+        `Database mismatch guard failed: Connected database "${actualDb}" does not match EXPECTED_DB_NAME "${expectedDbName}".`
+      );
     }
-  ],
-  districts: [
-    { id: "d-1", name: "Gaborone", administrativeRegion: "South-East", countryCode: "BW", sortOrder: 1 },
-    { id: "d-2", name: "Francistown", administrativeRegion: "North-East", countryCode: "BW", sortOrder: 2 },
-    { id: "d-3", name: "Kweneng", administrativeRegion: "Kweneng", countryCode: "BW", sortOrder: 3 },
-    { id: "d-4", name: "Ngamiland", administrativeRegion: "North-West", countryCode: "BW", sortOrder: 4 },
-    { id: "d-5", name: "Central", administrativeRegion: "Central", countryCode: "BW", sortOrder: 5 },
-    { id: "d-6", name: "North-East", administrativeRegion: "North-East", countryCode: "BW", sortOrder: 6 },
-    { id: "d-7", name: "Southern", administrativeRegion: "Southern", countryCode: "BW", sortOrder: 7 },
-    { id: "d-8", name: "Kgatleng", administrativeRegion: "Kgatleng", countryCode: "BW", sortOrder: 8 }
-  ],
-  documentTypes: [
-    { id: "dt-cipa", organizationId: null, code: "CIPA_CERT", name: "CIPA Certificate of Incorporation", description: "Official company registration certificate from CIPA", issuingAuthority: "CIPA", requiresExpiry: false, defaultValidityDays: null, maxFileSizeMb: 10, allowedMimeTypes: ["application/pdf"], verificationMethod: "api", isMandatoryDefault: true, sortOrder: 1 },
-    { id: "dt-burs", organizationId: null, code: "BURS_TAX", name: "BURS Tax Clearance Certificate", description: "Tax compliance PIN & clearance document from BURS", issuingAuthority: "BURS", requiresExpiry: true, defaultValidityDays: 365, maxFileSizeMb: 10, allowedMimeTypes: ["application/pdf"], verificationMethod: "manual", isMandatoryDefault: true, sortOrder: 2 },
-    { id: "dt-ppra", organizationId: null, code: "PPRA_CERT", name: "PPRA Contractor Registration Certificate", description: "Contractor codes, subcodes and grade registration certificate", issuingAuthority: "PPRA", requiresExpiry: true, defaultValidityDays: 365, maxFileSizeMb: 10, allowedMimeTypes: ["application/pdf"], verificationMethod: "manual", isMandatoryDefault: true, sortOrder: 3 },
-    { id: "dt-work", organizationId: null, code: "WORK_COMP", name: "Workers Compensation Insurance Certificate", description: "Valid labor & workplace injury liability insurance policy", issuingAuthority: "Insurer", requiresExpiry: true, defaultValidityDays: 365, maxFileSizeMb: 10, allowedMimeTypes: ["application/pdf"], verificationMethod: "manual", isMandatoryDefault: false, sortOrder: 4 },
-    { id: "dt-edd", organizationId: null, code: "EDD_CERT", name: "Economic Diversification Drive (EDD) Certificate", description: "Official Ministry certificate establishing citizen procurement preferential margin", issuingAuthority: "Ministry of Trade", requiresExpiry: true, defaultValidityDays: 730, maxFileSizeMb: 10, allowedMimeTypes: ["application/pdf"], verificationMethod: "manual", isMandatoryDefault: false, sortOrder: 5 }
-  ],
-  disciplines: [
-    { id: "disc-1", code: "01", title: "Civil Engineering & Construction", description: "Public works, roads, bridges, and infrastructure", sortOrder: 1 },
-    { id: "disc-2", code: "02", title: "Electrical Engineering & Power", description: "Grid infrastructure, substations, and electrification", sortOrder: 2 },
-    { id: "disc-3", code: "03", title: "Mechanical Engineering & HVAC", description: "Heavy machinery, plant maintenance, and industrial air systems", sortOrder: 3 },
-    { id: "disc-4", code: "04", title: "ICT, Software & Telecommunications", description: "Enterprise systems, cloud services, and security operations", sortOrder: 4 },
-    { id: "disc-5", code: "05", title: "General Supplies & Consumables", description: "Commercial goods, office provisions, and medical materials", sortOrder: 5 }
-  ],
-  categories: [
-    { id: "cat-1", parentId: null, code: "CAT_CIVIL", name: "Civil & Infrastructure", description: "Public works, earthworks, and structures", level: 1, sortOrder: 1 },
-    { id: "cat-2", parentId: null, code: "CAT_ICT", name: "ICT & Software", description: "Technology, software, and managed networks", level: 1, sortOrder: 2 },
-    { id: "cat-3", parentId: null, code: "CAT_RE", name: "Renewable Energy", description: "Solar PV, battery storage, and clean power", level: 1, sortOrder: 3 },
-    { id: "cat-4", parentId: null, code: "CAT_MED", name: "Medical & Logistics", description: "Healthcare equipment, pharmaceuticals, and logistics", level: 1, sortOrder: 4 },
-    { id: "cat-5", parentId: null, code: "CAT_PROF", name: "Professional Services", description: "Auditing, consulting, and engineering advisory", level: 1, sortOrder: 5 }
-  ],
-  calls: [
-    {
-      id: "call-1",
-      referenceNo: "GRC/WORKS/2026/014",
-      title: "Construction of Gaborone South Stormwater Drainage Network (Phase II)",
-      callType: "rfp",
-      summary: "Civil engineering works for stormwater infrastructure in Gaborone South, including channel widening, culverts, and road reinstatement.",
-      description: "The Gaborone Regional Council invites sealed bids from registered 100% citizen-owned contractors for Phase II stormwater construction. Bidders must possess valid PPRA Code 01 (Civil Engineering), Subcode 01 (Grade D/E).",
-      status: "open",
-      visibility: "open",
-      opensAt: new Date(Date.now() - 5 * 864e5).toISOString(),
-      clarificationDeadline: new Date(Date.now() + 14 * 864e5).toISOString(),
-      closesAt: new Date(Date.now() + 28 * 864e5).toISOString(),
-      estimatedValue: "12500000.00",
-      currency: "BWP",
-      organizationId: "org-grc",
-      organizationName: "Gaborone Regional Council",
-      organizationSlug: "org-grc",
-      daysRemaining: 28,
-      categories: [{ id: "cat-1", name: "Civil & Infrastructure" }]
-    },
-    {
-      id: "call-2",
-      referenceNo: "DEB/ICT/2026/088",
-      title: "Supply, Implementation, and Support of Enterprise Cybersecurity Operations Framework",
-      callType: "rfp",
-      summary: "Turnkey SOC deployment, SIEM implementation, and 24/7 managed security monitoring across Jwaneng and Orapa mine operations.",
-      description: "Debswana Diamond Company requires a tier-1 cybersecurity partner to deploy threat monitoring tools, automated response playbooks, and local technical skills transfer.",
-      status: "open",
-      visibility: "open",
-      opensAt: new Date(Date.now() - 3 * 864e5).toISOString(),
-      clarificationDeadline: new Date(Date.now() + 10 * 864e5).toISOString(),
-      closesAt: new Date(Date.now() + 21 * 864e5).toISOString(),
-      estimatedValue: "8400000.00",
-      currency: "BWP",
-      organizationId: "org-debswana",
-      organizationName: "Debswana Diamond Company",
-      organizationSlug: "org-debswana",
-      daysRemaining: 21,
-      categories: [{ id: "cat-2", name: "ICT & Software" }]
-    },
-    {
-      id: "call-3",
-      referenceNo: "BPC/RE/2026/003",
-      title: "Engineering, Procurement, & Construction (EPC) of 15MW Grid-Tied Solar PV Plant",
-      callType: "rfp",
-      summary: "Design, supply, installation, testing, and commissioning of a 15MW solar PV facility in Tutume District.",
-      description: "Botswana Power Corporation invites international and local joint ventures to submit turnkey EPC proposals for grid-tied solar generation. EDD citizen participation preferences apply.",
-      status: "open",
-      visibility: "open",
-      opensAt: new Date(Date.now() - 7 * 864e5).toISOString(),
-      clarificationDeadline: new Date(Date.now() + 20 * 864e5).toISOString(),
-      closesAt: new Date(Date.now() + 45 * 864e5).toISOString(),
-      estimatedValue: "45000000.00",
-      currency: "BWP",
-      organizationId: "org-bpc",
-      organizationName: "Botswana Power Corporation (BPC)",
-      organizationSlug: "org-bpc",
-      daysRemaining: 45,
-      categories: [{ id: "cat-3", name: "Renewable Energy" }]
-    },
-    {
-      id: "call-4",
-      referenceNo: "BURS/SUP/2026/001",
-      title: "Annual Registration Drive for Citizen Contractors & Professional Consultants",
-      callType: "registration_drive",
-      summary: "Open continuous registration drive for citizen suppliers across all procurement categories for FY 2026/2027.",
-      description: "BURS invites all qualified 100% citizen-owned entities to submit their Supplier Passport credentials to qualify for BURS direct sourcing and restricted bidding rosters.",
-      status: "open",
-      visibility: "open",
-      opensAt: new Date(Date.now() - 10 * 864e5).toISOString(),
-      clarificationDeadline: new Date(Date.now() + 90 * 864e5).toISOString(),
-      closesAt: new Date(Date.now() + 180 * 864e5).toISOString(),
-      estimatedValue: "0.00",
-      currency: "BWP",
-      organizationId: "org-burs",
-      organizationName: "Botswana Unified Revenue Service (BURS)",
-      organizationSlug: "org-burs",
-      daysRemaining: 180,
-      categories: [{ id: "cat-5", name: "Professional Services" }]
-    }
-  ],
-  clarifications: [],
-  documents: [],
-  applications: [],
-  bids: [],
-  auditEvents: []
-};
-function executeMockQuery(text, params = []) {
-  const norm = text.trim();
-  const lower = norm.toLowerCase();
-  if (lower.includes("from users") && lower.includes("email = $1")) {
-    const emailParam = String(params[0] || "").trim().toLowerCase();
-    const user = Array.from(mockStore.users.values()).find(
-      (u) => u.email.toLowerCase() === emailParam && u.status !== "deleted"
-    );
-    return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
+    dbVerified = true;
+    console.log(`[DATABASE GUARD] Successfully verified database: ${actualDb}`);
+  } catch (err) {
+    console.error("[DATABASE GUARD FAILED]:", err.message);
+    throw err;
   }
-  if (lower.includes("from users") && lower.includes("is_platform_admin = true")) {
-    const admin = Array.from(mockStore.users.values()).find((u) => u.isPlatformAdmin && u.status !== "deleted");
-    return { rows: admin ? [admin] : [], rowCount: admin ? 1 : 0 };
-  }
-  if (lower.includes("from users") && lower.includes("id = $1")) {
-    const idParam = String(params[0] || "");
-    const user = mockStore.users.get(idParam);
-    return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
-  }
-  if (lower.startsWith("insert into users")) {
-    const newId = `usr-${Date.now()}-${Math.floor(Math.random() * 1e3)}`;
-    const email = String(params[0] || "").trim().toLowerCase();
-    const passwordHash = params[1] || null;
-    const fullName = String(params[2] || "User");
-    const phone = params[3] || null;
-    const isPlatformAdmin = Boolean(params[4] ?? false);
-    const newUser = {
-      id: newId,
-      email,
-      passwordHash,
-      fullName,
-      phone,
-      preferredLanguage: "en",
-      status: "active",
-      isPlatformAdmin,
-      emailVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      phoneVerifiedAt: null,
-      mfaEnabled: false,
-      mfaSecretEncrypted: null,
-      mfaType: null,
-      lastLoginAt: (/* @__PURE__ */ new Date()).toISOString(),
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    mockStore.users.set(newId, newUser);
-    return {
-      rows: [{ id: newId, email, fullName, isPlatformAdmin }],
-      rowCount: 1
-    };
-  }
-  if (lower.includes("from suppliers") && (lower.includes("cipa_uin = $1") || lower.includes("email = $2"))) {
-    const cipaParam = String(params[0] || "").trim().toUpperCase();
-    const emailParam = String(params[1] || "").trim().toLowerCase();
-    const supplier = Array.from(mockStore.suppliers.values()).find(
-      (s) => s.cipaUin === cipaParam || s.email === emailParam
-    );
-    return { rows: supplier ? [supplier] : [], rowCount: supplier ? 1 : 0 };
-  }
-  if (lower.includes("from suppliers") && lower.includes("id = $1")) {
-    const idParam = String(params[0] || "");
-    const supplier = mockStore.suppliers.get(idParam);
-    return { rows: supplier ? [supplier] : [], rowCount: supplier ? 1 : 0 };
-  }
-  if (lower.startsWith("insert into suppliers")) {
-    const newId = `sup-${Date.now()}`;
-    const legalName = String(params[0] || "Supplier (Pty) Ltd");
-    const cipaUin = String(params[1] || `BW${Date.now()}`);
-    const email = String(params[2] || "");
-    const primaryPhone = params[3] || null;
-    const newSupplier = {
-      id: newId,
-      legalName,
-      tradingName: legalName,
-      cipaUin,
-      email,
-      primaryPhone,
-      status: "active",
-      verificationStatus: "verified",
-      complianceStatus: "Action required",
-      profileCompleteness: 50,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    mockStore.suppliers.set(newId, newSupplier);
-    return {
-      rows: [{ id: newId, legalName }],
-      rowCount: 1
-    };
-  }
-  if (lower.includes("from roles") && lower.includes("scope =")) {
-    const scopeMatch = norm.match(/scope\s*=\s*'([^']+)'/i);
-    const scope = scopeMatch ? scopeMatch[1] : "supplier";
-    const matchingRoles = mockStore.roles.filter((r) => r.scope === scope);
-    return { rows: matchingRoles, rowCount: matchingRoles.length };
-  }
-  if (lower.includes("from supplier_members") || lower.includes("from organization_members")) {
-    const userIdParam = String(params[0] || "");
-    const userMemberships = mockStore.memberships.filter((m) => m.userId === userIdParam);
-    return { rows: userMemberships, rowCount: userMemberships.length };
-  }
-  if (lower.includes("from geographic_districts")) {
-    return { rows: mockStore.districts, rowCount: mockStore.districts.length };
-  }
-  if (lower.includes("from document_types")) {
-    return { rows: mockStore.documentTypes, rowCount: mockStore.documentTypes.length };
-  }
-  if (lower.includes("from procurement_disciplines")) {
-    return { rows: mockStore.disciplines, rowCount: mockStore.disciplines.length };
-  }
-  if (lower.includes("from categories")) {
-    return { rows: mockStore.categories, rowCount: mockStore.categories.length };
-  }
-  if (lower.includes("from capability_tiers") || lower.includes("from plans") || lower.includes("from permissions") || lower.includes("from platform_financial_configs") || lower.includes("from notification_templates")) {
-    return { rows: [], rowCount: 0 };
-  }
-  if (lower.includes("from calls")) {
-    if (lower.includes("where c.id = $1") || lower.includes("where id = $1")) {
-      const callId = String(params[0] || "");
-      const call = mockStore.calls.find((c) => c.id === callId);
-      return { rows: call ? [call] : [], rowCount: call ? 1 : 0 };
-    }
-    return { rows: mockStore.calls, rowCount: mockStore.calls.length };
-  }
-  if (lower.startsWith("insert") || lower.startsWith("update") || lower.startsWith("delete")) {
-    return { rows: [{ id: `gen-${Date.now()}` }], rowCount: 1 };
-  }
-  return { rows: [], rowCount: 0 };
 }
 async function query(text, params = []) {
-  if (realPool) {
-    try {
-      const res = await realPool.query(text, params);
-      return { rows: res.rows, rowCount: res.rowCount ?? 0 };
-    } catch (err) {
-      console.warn(`[AI Studio] Real database query failed (${err.code || "ERR"}):`, err.message, "\nQuery was:", text.slice(0, 300));
-      return executeMockQuery(text, params);
+  try {
+    const res = await pool.query(text, params);
+    return { rows: res.rows, rowCount: res.rowCount ?? 0 };
+  } catch (err) {
+    if (err.code === "ECONNREFUSED" || err.code === "ETIMEDOUT" || err.code === "57P01" || err.code === "57P02" || err.code === "57P03" || err.code === "08001" || err.code === "08006") {
+      const dbErr = new Error("Database service is currently unreachable. Please try again shortly.");
+      dbErr.code = "DATABASE_UNAVAILABLE";
+      dbErr.status = 503;
+      throw dbErr;
     }
+    throw err;
   }
-  return executeMockQuery(text, params);
 }
 async function withTransaction(callback) {
-  if (realPool) {
-    try {
-      const client = await realPool.connect();
-      try {
-        await client.query("BEGIN");
-        const result = await callback(client);
-        await client.query("COMMIT");
-        return result;
-      } catch (err) {
-        await client.query("ROLLBACK");
-        throw err;
-      } finally {
-        client.release();
-      }
-    } catch (err) {
-      if (!hasLoggedStatus) {
-        console.warn(`[AI Studio] Real database transaction failed (${err.code || "ERR"}). Falling back to mock:`, err.message);
-        hasLoggedStatus = true;
-      }
-    }
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (err) {
+    const dbErr = new Error("Database service is currently unreachable. Please try again shortly.");
+    dbErr.code = "DATABASE_UNAVAILABLE";
+    dbErr.status = 503;
+    throw dbErr;
   }
-  const mockClient = {
-    query: async (sql, p = []) => executeMockQuery(sql, p),
-    release: () => {
+  try {
+    await client.query("BEGIN");
+    const wrappedClient = {
+      query: async (text, p = []) => {
+        const res = await client.query(text, p);
+        return { rows: res.rows, rowCount: res.rowCount ?? 0 };
+      },
+      release: () => client.release()
+    };
+    const result = await callback(wrappedClient);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
     }
-  };
-  return callback(mockClient);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // server/repositories/users.repository.ts
@@ -619,40 +213,6 @@ var UsersRepository = class {
     return res.rows[0] || null;
   }
   async findById(id) {
-    if (id === "admin-platform") {
-      const adminRes = await query(
-        `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
-                phone, preferred_language AS "preferredLanguage", status,
-                is_platform_admin AS "isPlatformAdmin", email_verified_at AS "emailVerifiedAt",
-                phone_verified_at AS "phoneVerifiedAt", mfa_enabled AS "mfaEnabled",
-                mfa_secret_encrypted AS "mfaSecretEncrypted", mfa_type AS "mfaType",
-                last_login_at AS "lastLoginAt", failed_login_attempts AS "failedLoginAttempts",
-                locked_until AS "lockedUntil", created_at AS "createdAt"
-         FROM users WHERE is_platform_admin = TRUE AND deleted_at IS NULL LIMIT 1`
-      );
-      if (adminRes.rows[0]) return adminRes.rows[0];
-    }
-    if (id === "officer-grc") {
-      return {
-        id: "officer-grc",
-        email: "procurement@grc.gov.bw",
-        passwordHash: null,
-        fullName: "Procurement Officer",
-        phone: "+267 365 7400",
-        preferredLanguage: "en",
-        status: "active",
-        isPlatformAdmin: false,
-        emailVerifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        phoneVerifiedAt: null,
-        mfaEnabled: false,
-        mfaSecretEncrypted: null,
-        mfaType: null,
-        lastLoginAt: (/* @__PURE__ */ new Date()).toISOString(),
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-    }
     const res = await query(
       `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
               phone, preferred_language AS "preferredLanguage", status,
@@ -713,20 +273,6 @@ var UsersRepository = class {
     );
   }
   async getUserMemberships(userId) {
-    if (userId === "officer-grc") {
-      return [
-        {
-          tenantType: "organization",
-          tenantId: "3f1b5fee-5fab-4d61-b316-af37bd19c904",
-          tenantName: "Gaborone Regional Council",
-          roleId: "role-org-admin",
-          roleName: "Org Admin",
-          isOwner: true,
-          status: "active",
-          permissions: ["calls:read", "calls:write", "bids:read", "evaluations:read", "evaluations:write", "awards:read", "awards:write"]
-        }
-      ];
-    }
     const orgMembersRes = await query(
       `SELECT 'organization' AS "tenantType",
               o.id AS "tenantId",
@@ -775,40 +321,113 @@ var UsersRepository = class {
 var usersRepository = new UsersRepository();
 
 // server/middleware/auth.middleware.ts
+function csrfProtection(req, res, next) {
+  const method = req.method.toUpperCase();
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        const host = req.headers.host;
+        if (host && originUrl.host !== host) {
+          res.status(403).json({
+            error: "FORBIDDEN_CSRF",
+            message: "Cross-origin request blocked."
+          });
+          return;
+        }
+      } catch {
+        res.status(403).json({
+          error: "FORBIDDEN_CSRF",
+          message: "Invalid request origin header."
+        });
+        return;
+      }
+    }
+  }
+  next();
+}
 async function authenticate(req, res, next) {
-  let token;
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.substring(7);
-  } else if (req.cookies && req.cookies.session_token) {
-    token = req.cookies.session_token;
+  let rawToken;
+  if (req.cookies && req.cookies.session_token) {
+    rawToken = req.cookies.session_token;
+  } else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    rawToken = req.headers.authorization.substring(7);
   }
-  if (!token) {
-    return next();
-  }
-  const payload = verifySessionToken(token);
-  if (!payload) {
+  if (!rawToken || !rawToken.trim()) {
     return next();
   }
   try {
-    const user = await usersRepository.findById(payload.userId);
-    if (!user || user.status !== "active") {
+    const tokenHash = hashToken(rawToken);
+    const sessionRes = await query(
+      `SELECT s.id AS "sessionId", s.user_id AS "userId", s.tenant_type AS "tenantType", s.tenant_id AS "tenantId"
+       FROM sessions s
+       WHERE s.token_hash = $1
+         AND s.expires_at > NOW()
+         AND s.revoked_at IS NULL
+       LIMIT 1`,
+      [tokenHash]
+    );
+    if (sessionRes.rows.length === 0) {
+      return next();
+    }
+    const sess = sessionRes.rows[0];
+    const userRes = await query(
+      `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
+              phone, preferred_language AS "preferredLanguage", status,
+              is_platform_admin AS "isPlatformAdmin", email_verified_at AS "emailVerifiedAt",
+              phone_verified_at AS "phoneVerifiedAt", mfa_enabled AS "mfaEnabled",
+              mfa_secret_encrypted AS "mfaSecretEncrypted", mfa_type AS "mfaType",
+              last_login_at AS "lastLoginAt", failed_login_attempts AS "failedLoginAttempts",
+              locked_until AS "lockedUntil", created_at AS "createdAt"
+       FROM users
+       WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+      [sess.userId]
+    );
+    const user = userRes.rows[0];
+    if (!user) {
       return next();
     }
     const memberships = await usersRepository.getUserMemberships(user.id);
-    const requestedTenantId = req.headers["x-tenant-id"] || payload.activeTenantId;
-    const activeTenant = memberships.find((m) => m.tenantId === requestedTenantId) || memberships[0] || void 0;
+    let activeTenant;
+    if (sess.tenantType === "platform" && user.isPlatformAdmin) {
+      activeTenant = {
+        tenantType: "organization",
+        // administrative umbrella
+        tenantId: "platform",
+        tenantName: "Platform Administration",
+        roleId: "role-platform-admin",
+        roleName: "Super Admin",
+        isOwner: true,
+        status: "active",
+        permissions: ["*"]
+      };
+    } else if (sess.tenantId) {
+      activeTenant = memberships.find((m) => m.tenantId === sess.tenantId);
+    }
+    if (!activeTenant && memberships.length > 0) {
+      activeTenant = memberships[0];
+    }
     req.user = user;
+    req.session = {
+      id: sess.sessionId,
+      rawToken,
+      tokenHash,
+      tenantType: sess.tenantType,
+      tenantId: sess.tenantId
+    };
     req.activeTenant = activeTenant;
-    req.permissions = new Set(activeTenant?.permissions || []);
+    req.permissions = new Set(
+      user.isPlatformAdmin ? ["*"] : activeTenant?.permissions || []
+    );
     return next();
   } catch (err) {
-    console.error("[AUTH MIDDLEWARE] Failed to resolve session context:", err);
+    console.error("[AUTH MIDDLEWARE ERROR]:", err);
     return next();
   }
 }
 function requireAuth(req, res, next) {
-  if (!req.user) {
+  if (!req.user || !req.session) {
     res.status(401).json({
       error: "AUTHENTICATION_REQUIRED",
       message: "You must be signed in to access this resource."
@@ -819,10 +438,10 @@ function requireAuth(req, res, next) {
 }
 function requirePermission(...requiredPermissions) {
   return (req, res, next) => {
-    if (!req.user) {
+    if (!req.user || !req.session) {
       res.status(401).json({
         error: "AUTHENTICATION_REQUIRED",
-        message: "You must be signed in to perform this action."
+        message: "You must be signed in to access this resource."
       });
       return;
     }
@@ -836,7 +455,7 @@ function requirePermission(...requiredPermissions) {
       });
       return;
     }
-    const hasAll = requiredPermissions.every((perm) => req.permissions.has(perm));
+    const hasAll = requiredPermissions.every((perm) => req.permissions.has(perm) || req.permissions.has("*"));
     if (!hasAll) {
       res.status(403).json({
         error: "FORBIDDEN_INSUFFICIENT_PERMISSIONS",
@@ -850,8 +469,11 @@ function requirePermission(...requiredPermissions) {
 }
 function requireTenantType(tenantType) {
   return (req, res, next) => {
-    if (!req.user) {
-      res.status(401).json({ error: "AUTHENTICATION_REQUIRED", message: "Sign in required." });
+    if (!req.user || !req.session) {
+      res.status(401).json({
+        error: "AUTHENTICATION_REQUIRED",
+        message: "You must be signed in to access this resource."
+      });
       return;
     }
     if (req.user.isPlatformAdmin) {
@@ -1157,6 +779,111 @@ var referenceRouter = router;
 // server/routes/auth.routes.ts
 import { Router as Router2 } from "express";
 
+// server/repositories/audit.repository.ts
+import crypto2 from "crypto";
+var AuditRepository = class {
+  /**
+   * Appends an immutable audit event with a cryptographic hash chain.
+   */
+  async logEvent(dto) {
+    const lastRowRes = await query(
+      `SELECT row_hash FROM audit_log ORDER BY occurred_at DESC, id DESC LIMIT 1`
+    );
+    const prevHash = lastRowRes.rows[0]?.row_hash || "0".repeat(64);
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const payloadToHash = `${prevHash}|${timestamp}|${dto.actorName}|${dto.actorRole}|${dto.action}|${dto.entityType}|${dto.entityId || ""}|${dto.details}`;
+    const rowHash = crypto2.createHash("sha256").update(payloadToHash).digest("hex");
+    const res = await query(
+      `INSERT INTO audit_log (
+        occurred_at, actor_type, actor_user_id, actor_name, actor_role,
+        organization_id, supplier_id, organization_name, action,
+        entity_type, entity_id, ip_address, user_agent,
+        before_json, after_json, details, prev_hash, row_hash
+      ) VALUES (
+        NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+      ) RETURNING 
+        id, occurred_at AS "occurredAt", actor_type AS "actorType", actor_user_id AS "actorUserId",
+        actor_name AS "actorName", actor_role AS "actorRole", organization_id AS "organizationId",
+        supplier_id AS "supplierId", organization_name AS "organizationName", action,
+        entity_type AS "entityType", entity_id AS "entityId", ip_address AS "ipAddress",
+        user_agent AS "userAgent", before_json AS "beforeJson", after_json AS "afterJson",
+        details, prev_hash AS "prevHash", row_hash AS "rowHash"`,
+      [
+        dto.actorType || "user",
+        dto.actorUserId || null,
+        dto.actorName,
+        dto.actorRole,
+        dto.organizationId || null,
+        dto.supplierId || null,
+        dto.organizationName || null,
+        dto.action,
+        dto.entityType,
+        dto.entityId || null,
+        dto.ipAddress || null,
+        dto.userAgent || null,
+        dto.beforeJson ? JSON.stringify(dto.beforeJson) : null,
+        dto.afterJson ? JSON.stringify(dto.afterJson) : null,
+        dto.details,
+        prevHash,
+        rowHash
+      ]
+    );
+    return res.rows[0];
+  }
+  async listEvents(filters) {
+    const conditions = [];
+    const params = [];
+    if (filters.organizationId) {
+      params.push(filters.organizationId);
+      conditions.push(`(organization_id = $${params.length} OR organization_id IS NULL)`);
+    }
+    if (filters.supplierId) {
+      params.push(filters.supplierId);
+      conditions.push(`supplier_id = $${params.length}`);
+    }
+    if (filters.entityType) {
+      params.push(filters.entityType);
+      conditions.push(`entity_type = $${params.length}`);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filters.limit || 100;
+    params.push(limit);
+    const res = await query(
+      `SELECT 
+        id, occurred_at AS "occurredAt", actor_type AS "actorType", actor_user_id AS "actorUserId",
+        actor_name AS "actorName", actor_role AS "actorRole", organization_id AS "organizationId",
+        supplier_id AS "supplierId", organization_name AS "organizationName", action,
+        entity_type AS "entityType", entity_id AS "entityId", ip_address AS "ipAddress",
+        user_agent AS "userAgent", before_json AS "beforeJson", after_json AS "afterJson",
+        details, prev_hash AS "prevHash", row_hash AS "rowHash"
+       FROM audit_log
+       ${whereClause}
+       ORDER BY occurred_at DESC
+       LIMIT $${params.length}`,
+      params
+    );
+    return res.rows;
+  }
+  async recordExport(data) {
+    await query(
+      `INSERT INTO audit_exports (
+        organization_id, exported_by_user_id, export_type,
+        records_count, checksum_sha256, ip_address, user_agent, exported_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [
+        data.organizationId,
+        data.exportedByUserId,
+        data.exportType,
+        data.recordsCount,
+        data.checksumSha256,
+        data.ipAddress || null,
+        data.userAgent || null
+      ]
+    );
+  }
+};
+var auditRepository = new AuditRepository();
+
 // server/utils/ip.ts
 function sanitizeIp(rawIp) {
   if (!rawIp) return null;
@@ -1187,185 +914,157 @@ function extractClientIp(req) {
 // server/services/auth.service.ts
 var AuthService = class {
   /**
-   * Register a new Supplier account and link the primary user as owner.
+   * Records an authentication attempt into PostgreSQL login_attempts table.
    */
-  async registerSupplier(dto) {
-    const cleanEmail = dto.email.trim().toLowerCase();
-    const cleanCipa = dto.cipaUin.trim().toUpperCase();
-    const existingUser = await usersRepository.findByEmail(cleanEmail);
-    if (existingUser) {
-      const err = new Error("An account with this email address already exists.");
-      err.code = "23505";
-      err.detail = "Key (email)=(" + cleanEmail + ")";
-      throw err;
+  async recordLoginAttempt(emailNorm, ip, succeeded) {
+    try {
+      await query(
+        `INSERT INTO login_attempts (email_norm, ip, succeeded, attempted_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [emailNorm, ip || null, succeeded]
+      );
+    } catch (err) {
+      console.error("[AUTH RECORD ATTEMPT ERROR]:", err.message);
     }
-    const passwordHash = await hashPassword(dto.password);
-    const { newUser, newSupplier } = await withTransaction(async (client) => {
-      const existingCipa = await client.query("SELECT id FROM suppliers WHERE cipa_uin = $1 LIMIT 1", [cleanCipa]);
-      if (existingCipa.rows.length > 0) {
-        const err = new Error("A company with this CIPA registration number is already registered.");
-        err.code = "23505";
-        err.detail = "Key (cipa_uin)=(" + cleanCipa + ")";
-        err.field = "cipa_uin";
-        throw err;
-      }
-      const userRes = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
-         VALUES ($1, $2, $3, $4, 'active', NULL)
-         RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
-        [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
-      );
-      const user = userRes.rows[0];
-      const supplierRes = await client.query(
-        `INSERT INTO suppliers (legal_name, cipa_uin, email, primary_phone, status, verification_status, compliance_status)
-         VALUES ($1, $2, $3, $4, 'active', 'unverified', 'Action required')
-         RETURNING id, legal_name AS "legalName"`,
-        [dto.legalName.trim(), cleanCipa, cleanEmail, dto.phone || null]
-      );
-      const supplier = supplierRes.rows[0];
-      const roleRes = await client.query(
-        `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' AND is_system = TRUE LIMIT 1`
-      );
-      const roleId = roleRes.rows[0]?.id;
-      await client.query(
-        `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
-         VALUES ($1, $2, $3, TRUE, 'active', NOW())`,
-        [supplier.id, user.id, roleId]
-      );
-      await client.query(
-        `INSERT INTO supplier_people (supplier_id, full_name, person_role, email, is_active)
-         VALUES ($1, $2, 'director', $3, TRUE)`,
-        [supplier.id, dto.fullName.trim(), cleanEmail]
-      );
-      await client.query(
-        `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
-         VALUES ($1, 'supplier_terms', '1.0', $2, $3)`,
-        [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
-      );
-      return { newUser: user, newSupplier: supplier };
-    });
-    const memberships = await usersRepository.getUserMemberships(newUser.id);
-    const token = signSessionToken({
-      userId: newUser.id,
-      email: newUser.email,
-      isPlatformAdmin: false,
-      activeTenantType: "supplier",
-      activeTenantId: newSupplier.id,
-      role: "Supplier Admin"
-    });
-    return {
-      token,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        isPlatformAdmin: false,
-        memberships
-      }
-    };
   }
   /**
-   * Register a new Buying Entity (Organization).
-   * Status defaults to 'pending' with 'pending_review' verification gate.
+   * Enforces brute-force lockout:
+   * - 5 failures for the same email within 15 minutes
+   * - 20 failures from the same IP within 15 minutes
+   * Returns HTTP 429 when threshold exceeded.
    */
-  async registerOrganization(dto) {
-    const cleanEmail = dto.email.trim().toLowerCase();
-    const cleanOrgName = dto.organizationName.trim();
-    const slug = cleanOrgName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "org-" + Date.now();
-    const existingUser = await usersRepository.findByEmail(cleanEmail);
-    if (existingUser) {
-      const err = new Error("An account with this email address already exists.");
-      err.code = "23505";
-      err.detail = "Key (email)=(" + cleanEmail + ")";
+  async checkBruteForce(emailNorm, ip) {
+    const emailFailRes = await query(
+      `SELECT COUNT(*)::text AS count
+       FROM login_attempts
+       WHERE email_norm = $1
+         AND succeeded = FALSE
+         AND attempted_at > NOW() - INTERVAL '15 minutes'`,
+      [emailNorm]
+    );
+    const emailFails = parseInt(emailFailRes.rows[0]?.count || "0", 10);
+    let ipFails = 0;
+    if (ip && ip.trim()) {
+      const ipFailRes = await query(
+        `SELECT COUNT(*)::text AS count
+         FROM login_attempts
+         WHERE ip = $1
+           AND succeeded = FALSE
+           AND attempted_at > NOW() - INTERVAL '15 minutes'`,
+        [ip.trim()]
+      );
+      ipFails = parseInt(ipFailRes.rows[0]?.count || "0", 10);
+    }
+    if (emailFails >= 5 || ipFails >= 20) {
+      await auditRepository.logEvent({
+        actorType: "system",
+        actorName: emailNorm,
+        actorRole: "Security Guard",
+        action: "lockout",
+        entityType: "login_attempt",
+        ipAddress: ip,
+        details: `Brute force protection triggered: ${emailFails} email failures, ${ipFails} IP failures in 15 minutes.`
+      }).catch(() => {
+      });
+      const err = new Error("Too many attempts. Try again in 15 minutes.");
+      err.status = 429;
+      err.code = "RATE_LIMIT_EXCEEDED";
       throw err;
     }
-    const passwordHash = await hashPassword(dto.password);
-    const { newUser, newOrg } = await withTransaction(async (client) => {
-      const userRes = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
-         VALUES ($1, $2, $3, $4, 'active', NOW())
-         RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
-        [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
-      );
-      const user = userRes.rows[0];
-      const orgRes = await client.query(
-        `INSERT INTO organizations (name, slug, organization_type, status, verification_status, contact_email, verification_submitted_at)
-         VALUES ($1, $2, $3, 'pending', 'pending_review', $4, NOW())
-         RETURNING id, name`,
-        [cleanOrgName, slug, dto.organizationType || "other", cleanEmail]
-      );
-      const org = orgRes.rows[0];
-      const roleRes = await client.query(
-        `SELECT id FROM roles WHERE scope = 'organization' AND name = 'Org Admin' AND is_system = TRUE LIMIT 1`
-      );
-      const roleId = roleRes.rows[0]?.id;
-      await client.query(
-        `INSERT INTO organization_members (organization_id, user_id, role_id, is_owner, status, joined_at)
-         VALUES ($1, $2, $3, TRUE, 'active', NOW())`,
-        [org.id, user.id, roleId]
-      );
-      await client.query(
-        `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
-         VALUES ($1, 'buyer_terms', '1.0', $2, $3)`,
-        [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
-      );
-      return { newUser: user, newOrg: org };
-    });
-    const memberships = await usersRepository.getUserMemberships(newUser.id);
-    const token = signSessionToken({
-      userId: newUser.id,
-      email: newUser.email,
-      isPlatformAdmin: false,
-      activeTenantType: "organization",
-      activeTenantId: newOrg.id,
-      role: "Org Admin"
-    });
-    return {
-      token,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        isPlatformAdmin: false,
-        memberships
-      }
-    };
   }
   /**
-   * Authenticate user with password & check account locking.
-   * Auto-provisions user if not found and resets lockouts to prevent login blockage.
+   * Rate limits sensitive actions like signups, password resets, and verification resends.
    */
-  async login(email, passwordPlain, ip) {
+  async checkActionRateLimit(key, maxAttempts, windowMinutes, message) {
+    const res = await query(
+      `SELECT COUNT(*)::text AS count
+       FROM audit_log
+       WHERE action = $1
+         AND occurred_at > NOW() - ($2 || ' minutes')::INTERVAL`,
+      [key, windowMinutes]
+    );
+    const count = parseInt(res.rows[0]?.count || "0", 10);
+    if (count >= maxAttempts) {
+      const err = new Error(message);
+      err.status = 429;
+      err.code = "RATE_LIMIT_EXCEEDED";
+      throw err;
+    }
+  }
+  /**
+   * Authenticate user strictly from PostgreSQL.
+   * Uses bcrypt cost 12 with dummy timing checks on user-not-found to prevent timing attacks.
+   * Generates a 32-byte cryptographically secure session token stored hashed in `sessions`.
+   */
+  async login(email, passwordPlain, ip, userAgent) {
     const cleanEmail = email.trim().toLowerCase();
-    let user = await usersRepository.findByEmail(cleanEmail);
-    if (!user) {
-      try {
-        const defaultLegalName = cleanEmail.split("@")[0] ? cleanEmail.split("@")[0].toUpperCase() + " ENTERPRISES" : "KOPANO ENTERPRISES";
-        const defaultCipa = "BW" + Math.floor(1e5 + Math.random() * 9e5);
-        const signupResult = await this.registerSupplier({
-          legalName: defaultLegalName,
-          cipaUin: defaultCipa,
-          fullName: "Valued Supplier",
-          email: cleanEmail,
-          password: passwordPlain || "Password123!",
-          ip
-        });
-        return signupResult;
-      } catch (regErr) {
-        console.warn("[AUTO-REGISTER ON LOGIN WARN]", regErr);
-      }
-      user = await usersRepository.findByEmail(cleanEmail);
+    const cleanIp = sanitizeIp(ip);
+    await this.checkBruteForce(cleanEmail, cleanIp);
+    const userRes = await query(
+      `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
+              phone, status, email_verified_at AS "emailVerifiedAt",
+              is_platform_admin AS "isPlatformAdmin", mfa_enabled AS "mfaEnabled",
+              mfa_secret_encrypted AS "mfaSecretEncrypted"
+       FROM users
+       WHERE LOWER(email::text) = LOWER($1)
+         AND deleted_at IS NULL
+       LIMIT 1`,
+      [cleanEmail]
+    );
+    const user = userRes.rows[0];
+    if (!user || !user.passwordHash || !user.passwordHash.trim()) {
+      await verifyPassword(passwordPlain, DUMMY_HASH);
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      await auditRepository.logEvent({
+        actorType: "user",
+        actorName: cleanEmail,
+        actorRole: "Anonymous",
+        action: "login.failure",
+        entityType: "session",
+        ipAddress: cleanIp,
+        userAgent,
+        details: "Failed login attempt: unknown email or user with no password hash."
+      }).catch(() => {
+      });
+      const err = new Error("Email or password is incorrect.");
+      err.status = 401;
+      err.code = "INVALID_CREDENTIALS";
+      throw err;
     }
-    if (!user) {
-      throw new Error("Invalid email or password.");
+    const isMatch = await verifyPassword(passwordPlain, user.passwordHash);
+    if (!isMatch) {
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      await auditRepository.logEvent({
+        actorType: "user",
+        actorUserId: user.id,
+        actorName: user.fullName || cleanEmail,
+        actorRole: user.isPlatformAdmin ? "Super Admin" : "User",
+        action: "login.failure",
+        entityType: "session",
+        ipAddress: cleanIp,
+        userAgent,
+        details: "Failed login attempt: incorrect password."
+      }).catch(() => {
+      });
+      const err = new Error("Email or password is incorrect.");
+      err.status = 401;
+      err.code = "INVALID_CREDENTIALS";
+      throw err;
     }
-    if (user.lockedUntil || user.failedLoginAttempts > 0) {
-      await query(`UPDATE users SET locked_until = NULL, failed_login_attempts = 0 WHERE id = $1`, [user.id]);
+    if (user.status === "pending" || !user.emailVerifiedAt) {
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      const err = new Error("Verify your email first");
+      err.status = 403;
+      err.code = "EMAIL_NOT_VERIFIED";
+      err.email = cleanEmail;
+      throw err;
     }
-    const isMatch = user.passwordHash ? await verifyPassword(passwordPlain, user.passwordHash) : true;
-    if (!isMatch && passwordPlain) {
-      const newHash = await hashPassword(passwordPlain);
-      await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newHash, user.id]);
+    if (user.status !== "active") {
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      const err = new Error("This account has been deactivated. Please contact support.");
+      err.status = 403;
+      err.code = "ACCOUNT_DISABLED";
+      throw err;
     }
     if (user.mfaEnabled && user.mfaSecretEncrypted) {
       return {
@@ -1373,120 +1072,811 @@ var AuthService = class {
         mfaUserId: user.id
       };
     }
-    await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
-    let memberships = await usersRepository.getUserMemberships(user.id);
-    if (memberships.length === 0 && !user.isPlatformAdmin) {
-      try {
-        let supplierId = null;
-        let supplierName = "";
-        const existingSup = await query(
-          `SELECT id, legal_name FROM suppliers WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
-          [user.email]
-        );
-        if (existingSup.rows.length > 0) {
-          supplierId = existingSup.rows[0].id;
-          supplierName = existingSup.rows[0].legal_name;
-        } else {
-          const domain = user.email.includes("@") ? user.email.split("@")[1] : "";
-          const domainName = domain ? domain.split(".")[0] : "";
-          supplierName = domainName ? domainName.charAt(0).toUpperCase() + domainName.slice(1) + " (Pty) Ltd" : `${user.fullName || "Supplier"} (Pty) Ltd`;
-          const cipaUin = "BW" + Math.floor(1e7 + Math.random() * 9e7);
-          const newSupRes = await query(
-            `INSERT INTO suppliers (
-               legal_name, trading_name, cipa_uin, email, primary_phone, status, verification_status, compliance_status, profile_completeness
-             ) VALUES (
-               $1, $1, $2, $3, $4, 'active', 'unverified', 'Action required', 30
-             ) RETURNING id, legal_name`,
-            [supplierName, cipaUin, user.email, user.phone]
-          );
-          supplierId = newSupRes.rows[0]?.id;
-          supplierName = newSupRes.rows[0]?.legal_name;
-        }
-        if (supplierId) {
-          const roleRes = await query(
-            `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
-          );
-          const roleId = roleRes.rows[0]?.id;
-          if (roleId) {
-            await query(
-              `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
-               VALUES ($1, $2, $3, TRUE, 'active', NOW())
-               ON CONFLICT DO NOTHING`,
-              [supplierId, user.id, roleId]
-            );
-          }
-          await query(
-            `INSERT INTO supplier_people (
-               supplier_id, full_name, person_role, nationality, is_citizen, email, phone, kyc_status, is_active
-             ) VALUES (
-               $1, $2, 'director', 'Motswana', TRUE, $3, $4, 'verified', TRUE
-             ) ON CONFLICT DO NOTHING`,
-            [supplierId, user.fullName || "Director", user.email, user.phone]
-          );
-          memberships = await usersRepository.getUserMemberships(user.id);
-        }
-      } catch (provErr) {
-        console.warn("[AUTO-PROVISION SUPPLIER WORKSPACE ERROR]", provErr);
-      }
+    await this.recordLoginAttempt(cleanEmail, cleanIp, true);
+    await usersRepository.recordLoginSuccess(user.id, cleanIp);
+    const memberships = await usersRepository.getUserMemberships(user.id);
+    let tenantType = null;
+    let tenantId = null;
+    let activeTenant;
+    if (user.isPlatformAdmin) {
+      tenantType = "platform";
+      tenantId = null;
+      activeTenant = {
+        tenantType: "organization",
+        tenantId: "platform",
+        tenantName: "Platform Administration",
+        roleId: "role-platform-admin",
+        roleName: "Super Admin",
+        isOwner: true,
+        status: "active",
+        permissions: ["*"]
+      };
+    } else if (memberships.length > 0) {
+      activeTenant = memberships[0];
+      tenantType = activeTenant.tenantType;
+      tenantId = activeTenant.tenantId;
     }
-    const primaryMembership = memberships[0] || {
-      tenantType: "supplier",
-      tenantId: "sup-1",
-      tenantName: user.fullName || "Default Supplier",
-      roleName: "Supplier Admin"
-    };
-    const token = signSessionToken({
-      userId: user.id,
-      email: user.email,
-      isPlatformAdmin: user.isPlatformAdmin,
-      activeTenantType: primaryMembership?.tenantType,
-      activeTenantId: primaryMembership?.tenantId,
-      role: primaryMembership?.roleName
+    const rawToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+    await query(
+      `INSERT INTO sessions (user_id, token_hash, tenant_type, tenant_id, ip, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, tokenHash, tenantType, tenantId, cleanIp || null, userAgent || null, expiresAt]
+    );
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: user.id,
+      actorName: user.fullName || cleanEmail,
+      actorRole: activeTenant?.roleName || (user.isPlatformAdmin ? "Super Admin" : "User"),
+      organizationId: tenantType === "organization" ? tenantId || void 0 : void 0,
+      supplierId: tenantType === "supplier" ? tenantId || void 0 : void 0,
+      action: "login.success",
+      entityType: "session",
+      ipAddress: cleanIp,
+      userAgent,
+      details: "User authenticated successfully. Active tenant established."
+    }).catch(() => {
     });
     return {
-      token,
+      token: rawToken,
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        phone: user.phone,
         isPlatformAdmin: user.isPlatformAdmin,
         memberships
-      }
+      },
+      activeTenant
     };
   }
   /**
-   * Complete MFA verification and issue authenticated session token.
+   * Complete MFA verification with 6-digit TOTP code and issue session token.
    */
-  async verifyMfa(userId, totpCode, ip) {
+  async verifyMfa(userId, totpCode, ip, userAgent) {
     const user = await usersRepository.findById(userId);
     if (!user || !user.mfaSecretEncrypted) {
-      throw new Error("Invalid MFA session.");
+      const err = new Error("Invalid MFA session.");
+      err.status = 400;
+      throw err;
     }
     const secretHex = decryptData(user.mfaSecretEncrypted);
     const isValid = verifyTotpCode(secretHex, totpCode);
     if (!isValid) {
-      throw new Error("Invalid or expired MFA verification code. Please check your authenticator.");
+      await this.recordLoginAttempt(user.email, sanitizeIp(ip), false);
+      const err = new Error("Invalid or expired MFA verification code. Please check your authenticator.");
+      err.status = 401;
+      throw err;
     }
-    await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
+    const cleanIp = sanitizeIp(ip);
+    await this.recordLoginAttempt(user.email, cleanIp, true);
+    await usersRepository.recordLoginSuccess(user.id, cleanIp);
     const memberships = await usersRepository.getUserMemberships(user.id);
-    const primaryMembership = memberships[0];
-    const token = signSessionToken({
-      userId: user.id,
-      email: user.email,
-      isPlatformAdmin: user.isPlatformAdmin,
-      activeTenantType: primaryMembership?.tenantType,
-      activeTenantId: primaryMembership?.tenantId,
-      role: primaryMembership?.roleName
+    let tenantType = null;
+    let tenantId = null;
+    let activeTenant;
+    if (user.isPlatformAdmin) {
+      tenantType = "platform";
+      activeTenant = {
+        tenantType: "organization",
+        tenantId: "platform",
+        tenantName: "Platform Administration",
+        roleId: "role-platform-admin",
+        roleName: "Super Admin",
+        isOwner: true,
+        status: "active",
+        permissions: ["*"]
+      };
+    } else if (memberships.length > 0) {
+      activeTenant = memberships[0];
+      tenantType = activeTenant.tenantType;
+      tenantId = activeTenant.tenantId;
+    }
+    const rawToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+    await query(
+      `INSERT INTO sessions (user_id, token_hash, tenant_type, tenant_id, ip, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, tokenHash, tenantType, tenantId, cleanIp || null, userAgent || null, expiresAt]
+    );
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: user.id,
+      actorName: user.fullName || user.email,
+      actorRole: activeTenant?.roleName || "User",
+      action: "login.mfa.success",
+      entityType: "session",
+      ipAddress: cleanIp,
+      userAgent,
+      details: "MFA verified and session issued."
+    }).catch(() => {
     });
     return {
-      token,
+      token: rawToken,
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
+        phone: user.phone,
         isPlatformAdmin: user.isPlatformAdmin,
         memberships
+      },
+      activeTenant
+    };
+  }
+  /**
+   * Switch active tenant workspace for an authenticated session.
+   */
+  async switchTenant(rawToken, targetTenantId, targetTenantType) {
+    const tokenHash = hashToken(rawToken);
+    const sessRes = await query(
+      `SELECT id, user_id
+       FROM sessions
+       WHERE token_hash = $1 AND expires_at > NOW() AND revoked_at IS NULL
+       LIMIT 1`,
+      [tokenHash]
+    );
+    if (sessRes.rows.length === 0) {
+      const err = new Error("Session is invalid or expired.");
+      err.status = 401;
+      throw err;
+    }
+    const sess = sessRes.rows[0];
+    const memberships = await usersRepository.getUserMemberships(sess.user_id);
+    const target = memberships.find((m) => m.tenantId === targetTenantId && m.tenantType === targetTenantType);
+    if (!target) {
+      const err = new Error("You do not belong to the selected workspace.");
+      err.status = 403;
+      throw err;
+    }
+    await query(
+      `UPDATE sessions
+       SET tenant_type = $1, tenant_id = $2
+       WHERE id = $3`,
+      [targetTenantType, targetTenantId, sess.id]
+    );
+    return target;
+  }
+  /**
+   * Revoke session on logout.
+   */
+  async logout(rawToken, ip, userAgent) {
+    if (!rawToken || !rawToken.trim()) return;
+    const tokenHash = hashToken(rawToken);
+    const revoked = await query(
+      `UPDATE sessions
+       SET revoked_at = NOW()
+       WHERE token_hash = $1 AND revoked_at IS NULL
+       RETURNING user_id, tenant_type, tenant_id`,
+      [tokenHash]
+    );
+    if (revoked.rows[0]) {
+      const row = revoked.rows[0];
+      await auditRepository.logEvent({
+        actorType: "user",
+        actorUserId: row.user_id,
+        actorName: "Authenticated User",
+        actorRole: "User",
+        action: "logout",
+        entityType: "session",
+        ipAddress: sanitizeIp(ip),
+        userAgent,
+        details: "User logged out and session revoked."
+      }).catch(() => {
+      });
+    }
+  }
+  /**
+   * Supplier registration:
+   * - Enforces password rules: 10-128 chars, != email, rejects common list
+   * - Sets user status to 'pending'
+   * - Generates single-use 24-hour verification token stored hashed in auth_tokens
+   */
+  async registerSupplier(dto) {
+    const cleanEmail = dto.email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(dto.ip);
+    const passCheck = validatePassword(dto.password, cleanEmail);
+    if (!passCheck.isValid) {
+      const err = new Error(passCheck.error || "Password does not meet security requirements.");
+      err.status = 400;
+      err.code = "WEAK_PASSWORD";
+      throw err;
+    }
+    const existing = await query(`SELECT id FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`, [cleanEmail]);
+    if (existing.rows.length > 0) {
+      const err = new Error("An account with this email address already exists. Please sign in.");
+      err.status = 400;
+      err.code = "EMAIL_ALREADY_EXISTS";
+      throw err;
+    }
+    const passwordHash = await hashPassword(dto.password);
+    const userRes = await query(
+      `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
+       VALUES ($1, $2, $3, $4, 'pending', NULL)
+       RETURNING id, email`,
+      [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
+    );
+    const userId = userRes.rows[0].id;
+    const supRes = await query(
+      `INSERT INTO suppliers (
+         legal_name, trading_name, cipa_uin, email, primary_phone, city, country_code,
+         status, verification_status, compliance_status, profile_completeness
+       ) VALUES (
+         $1, $1, $2, $3, $4, 'Gaborone', 'BW',
+         'active', 'unverified', 'Action required', 30
+       ) RETURNING id`,
+      [dto.legalName.trim(), dto.cipaUin.trim().toUpperCase(), cleanEmail, dto.phone || null]
+    );
+    const supplierId = supRes.rows[0].id;
+    const roleRes = await query(
+      `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
+    );
+    const roleId = roleRes.rows[0]?.id;
+    if (roleId) {
+      await query(
+        `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
+         VALUES ($1, $2, $3, TRUE, 'active', NOW())
+         ON CONFLICT (supplier_id, user_id) DO NOTHING`,
+        [supplierId, userId, roleId]
+      );
+    }
+    const rawVerifyToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawVerifyToken);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+    await query(
+      `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+       VALUES ($1, 'email_verify', $2, $3)`,
+      [userId, tokenHash, expiresAt]
+    );
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: userId,
+      actorName: dto.fullName.trim(),
+      actorRole: "Supplier Admin",
+      supplierId,
+      action: "supplier.register",
+      entityType: "user",
+      entityId: userId,
+      ipAddress: cleanIp,
+      userAgent: dto.userAgent,
+      details: "New supplier company registered. Verification email sent."
+    }).catch(() => {
+    });
+    return {
+      success: true,
+      message: "Account created. Please verify your email before logging in.",
+      email: cleanEmail,
+      verificationToken: rawVerifyToken
+    };
+  }
+  /**
+   * Buyer organization registration:
+   * - Enforces password rules
+   * - Creates user with status 'pending'
+   * - Creates buyer organization with status 'pending'
+   * - Issues single-use 24-hour verification token
+   */
+  async registerOrganization(dto) {
+    const cleanEmail = dto.email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(dto.ip);
+    const passCheck = validatePassword(dto.password, cleanEmail);
+    if (!passCheck.isValid) {
+      const err = new Error(passCheck.error || "Password does not meet security requirements.");
+      err.status = 400;
+      err.code = "WEAK_PASSWORD";
+      throw err;
+    }
+    const existing = await query(`SELECT id FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`, [cleanEmail]);
+    if (existing.rows.length > 0) {
+      const err = new Error("An account with this email address already exists. Please sign in.");
+      err.status = 400;
+      err.code = "EMAIL_ALREADY_EXISTS";
+      throw err;
+    }
+    const passwordHash = await hashPassword(dto.password);
+    const userRes = await query(
+      `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
+       VALUES ($1, $2, $3, $4, 'pending', NULL)
+       RETURNING id`,
+      [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
+    );
+    const userId = userRes.rows[0].id;
+    const baseSlug = "org-" + dto.organizationName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const orgSlug = `${baseSlug}-${Math.floor(1e3 + Math.random() * 9e3)}`;
+    const orgRes = await query(
+      `INSERT INTO organizations (
+         name, slug, organization_type, contact_email, contact_phone, status, verification_status
+       ) VALUES (
+         $1, $2, $3, $4, $5, 'pending', 'pending_review'
+       ) RETURNING id`,
+      [dto.organizationName.trim(), orgSlug, dto.organizationType || "parastatal", cleanEmail, dto.phone || null]
+    );
+    const orgId = orgRes.rows[0].id;
+    const roleRes = await query(
+      `SELECT id FROM roles WHERE scope = 'organization' AND name = 'Buyer Admin' LIMIT 1`
+    );
+    const roleId = roleRes.rows[0]?.id;
+    if (roleId) {
+      await query(
+        `INSERT INTO organization_members (organization_id, user_id, role_id, is_primary_contact, status, joined_at)
+         VALUES ($1, $2, $3, TRUE, 'active', NOW())
+         ON CONFLICT (organization_id, user_id) DO NOTHING`,
+        [orgId, userId, roleId]
+      );
+    }
+    const rawVerifyToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawVerifyToken);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+    await query(
+      `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+       VALUES ($1, 'email_verify', $2, $3)`,
+      [userId, tokenHash, expiresAt]
+    );
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: userId,
+      actorName: dto.fullName.trim(),
+      actorRole: "Buyer Admin",
+      organizationId: orgId,
+      action: "organization.register",
+      entityType: "organization",
+      entityId: orgId,
+      ipAddress: cleanIp,
+      userAgent: dto.userAgent,
+      details: "New procuring entity registered with pending status. Verification email sent."
+    }).catch(() => {
+    });
+    return {
+      success: true,
+      message: "Procuring entity registration submitted. Please verify your email before signing in.",
+      email: cleanEmail,
+      verificationToken: rawVerifyToken
+    };
+  }
+  /**
+   * Verify email using single-use 24-hour verification token.
+   * Sets user status to 'active' and marks token as used.
+   */
+  async verifyEmailWithToken(token, ip, userAgent) {
+    if (!token || !token.trim()) {
+      const err = new Error("Verification token is required.");
+      err.status = 400;
+      throw err;
+    }
+    const tokenHash = hashToken(token);
+    const tokenRes = await query(
+      `SELECT id, user_id, expires_at, used_at
+       FROM auth_tokens
+       WHERE token_hash = $1 AND purpose = 'email_verify'
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const row = tokenRes.rows[0];
+    if (!row || row.used_at !== null || new Date(row.expires_at) < /* @__PURE__ */ new Date()) {
+      const err = new Error("Verification link is invalid or has expired.");
+      err.status = 400;
+      err.code = "INVALID_TOKEN";
+      throw err;
+    }
+    await query(`UPDATE auth_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
+    const userRes = await query(
+      `UPDATE users
+       SET status = 'active', email_verified_at = NOW(), updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, email, full_name`,
+      [row.user_id]
+    );
+    const user = userRes.rows[0];
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: user?.id,
+      actorName: user?.full_name || user?.email || "User",
+      actorRole: "User",
+      action: "email.verified",
+      entityType: "user",
+      entityId: user?.id,
+      ipAddress: sanitizeIp(ip),
+      userAgent,
+      details: "User email address verified successfully."
+    }).catch(() => {
+    });
+    return {
+      success: true,
+      message: "Email verified successfully. You may now sign in."
+    };
+  }
+  /**
+   * Resend email verification link (rate limited: max 3 attempts per 15 minutes per email).
+   */
+  async resendVerification(email, ip, userAgent) {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(ip);
+    const countRes = await query(
+      `SELECT COUNT(*)::text AS count
+       FROM auth_tokens at
+       JOIN users u ON u.id = at.user_id
+       WHERE LOWER(u.email::text) = LOWER($1)
+         AND at.purpose = 'email_verify'
+         AND at.created_at > NOW() - INTERVAL '15 minutes'`,
+      [cleanEmail]
+    );
+    if (parseInt(countRes.rows[0]?.count || "0", 10) >= 5) {
+      const err = new Error("Too many verification requests. Please try again in 15 minutes.");
+      err.status = 429;
+      err.code = "RATE_LIMIT_EXCEEDED";
+      throw err;
+    }
+    const userRes = await query(
+      `SELECT id, email, email_verified_at FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+      [cleanEmail]
+    );
+    const user = userRes.rows[0];
+    let rawToken;
+    if (user && !user.email_verified_at) {
+      await query(
+        `UPDATE auth_tokens SET used_at = NOW() WHERE user_id = $1 AND purpose = 'email_verify' AND used_at IS NULL`,
+        [user.id]
+      );
+      rawToken = generateRandomToken(32);
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+      await query(
+        `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+         VALUES ($1, 'email_verify', $2, $3)`,
+        [user.id, tokenHash, expiresAt]
+      );
+      await auditRepository.logEvent({
+        actorType: "user",
+        actorUserId: user.id,
+        actorName: cleanEmail,
+        actorRole: "User",
+        action: "verification.resent",
+        entityType: "auth_token",
+        ipAddress: cleanIp,
+        userAgent,
+        details: "Verification email re-sent upon request."
+      }).catch(() => {
+      });
+    }
+    return {
+      success: true,
+      message: "If an unverified account exists for this email, a verification link has been sent.",
+      token: rawToken
+    };
+  }
+  /**
+   * Request password reset link (single-use 1-hour token).
+   * Always returns the same neutral message: "If that email is registered, we sent a link."
+   */
+  async forgotPassword(email, ip, userAgent) {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(ip);
+    const ipCheck = await query(
+      `SELECT COUNT(*)::text AS count
+       FROM audit_log
+       WHERE action = 'password_reset.requested'
+         AND ip_address = $1
+         AND occurred_at > NOW() - INTERVAL '15 minutes'`,
+      [cleanIp]
+    );
+    if (parseInt(ipCheck.rows[0]?.count || "0", 10) >= 5) {
+      const err = new Error("Too many requests. Please try again in 15 minutes.");
+      err.status = 429;
+      err.code = "RATE_LIMIT_EXCEEDED";
+      throw err;
+    }
+    const userRes = await query(
+      `SELECT id, email, full_name, status FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+      [cleanEmail]
+    );
+    const user = userRes.rows[0];
+    let rawToken;
+    if (user && user.status === "active") {
+      await query(
+        `UPDATE auth_tokens SET used_at = NOW() WHERE user_id = $1 AND purpose = 'password_reset' AND used_at IS NULL`,
+        [user.id]
+      );
+      rawToken = generateRandomToken(32);
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1e3);
+      await query(
+        `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+         VALUES ($1, 'password_reset', $2, $3)`,
+        [user.id, tokenHash, expiresAt]
+      );
+      await auditRepository.logEvent({
+        actorType: "user",
+        actorUserId: user.id,
+        actorName: user.full_name || cleanEmail,
+        actorRole: "User",
+        action: "password_reset.requested",
+        entityType: "auth_token",
+        ipAddress: cleanIp,
+        userAgent,
+        details: "Password reset link requested."
+      }).catch(() => {
+      });
+    }
+    return {
+      success: true,
+      message: "If that email is registered, we sent a link.",
+      token: rawToken
+    };
+  }
+  /**
+   * Reset password with single-use token:
+   * - Validates password rules: 10-128 chars, != email, rejects common passwords
+   * - Sets new password hash (bcrypt cost 12)
+   * - Revokes ALL active sessions for that user
+   */
+  async resetPassword(token, newPasswordPlain, ip, userAgent) {
+    if (!token || !token.trim()) {
+      const err = new Error("Reset token is required.");
+      err.status = 400;
+      throw err;
+    }
+    const tokenHash = hashToken(token);
+    const tokenRes = await query(
+      `SELECT id, user_id, expires_at, used_at
+       FROM auth_tokens
+       WHERE token_hash = $1 AND purpose = 'password_reset'
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const row = tokenRes.rows[0];
+    if (!row || row.used_at !== null || new Date(row.expires_at) < /* @__PURE__ */ new Date()) {
+      const err = new Error("Password reset link is invalid or has expired.");
+      err.status = 400;
+      err.code = "INVALID_RESET_TOKEN";
+      throw err;
+    }
+    const userRes = await query(
+      `SELECT id, email, full_name FROM users WHERE id = $1`,
+      [row.user_id]
+    );
+    const user = userRes.rows[0];
+    const passCheck = validatePassword(newPasswordPlain, user?.email);
+    if (!passCheck.isValid) {
+      const err = new Error(passCheck.error || "Password does not meet security requirements.");
+      err.status = 400;
+      err.code = "WEAK_PASSWORD";
+      throw err;
+    }
+    await query(`UPDATE auth_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
+    const newHash = await hashPassword(newPasswordPlain);
+    await query(
+      `UPDATE users
+       SET password_hash = $1, failed_login_attempts = 0, locked_until = NULL, updated_at = NOW()
+       WHERE id = $2`,
+      [newHash, row.user_id]
+    );
+    await query(
+      `UPDATE sessions
+       SET revoked_at = NOW()
+       WHERE user_id = $1 AND revoked_at IS NULL`,
+      [row.user_id]
+    );
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: row.user_id,
+      actorName: user?.full_name || user?.email || "User",
+      actorRole: "User",
+      action: "password_reset.done",
+      entityType: "user",
+      entityId: row.user_id,
+      ipAddress: sanitizeIp(ip),
+      userAgent,
+      details: "Password was reset successfully. All active sessions revoked."
+    }).catch(() => {
+    });
+    return {
+      success: true,
+      message: "Password reset successfully. Please sign in with your new password."
+    };
+  }
+  /**
+   * Save incremental supplier registration progress (Step 1, Step 2, or Step 3).
+   */
+  async saveSupplierRegistrationStep(dto) {
+    const cleanEmail = dto.email.trim().toLowerCase();
+    if (!cleanEmail) {
+      throw new Error("Email address is required.");
+    }
+    if (dto.step === 1) {
+      if (!dto.fullName?.trim()) {
+        throw new Error("Full name is required for Step 1.");
       }
+      let user = await usersRepository.findByEmail(cleanEmail);
+      let userId;
+      if (!user) {
+        if (!dto.password) {
+          throw new Error("Password is required.");
+        }
+        const passCheck = validatePassword(dto.password, cleanEmail);
+        if (!passCheck.isValid) {
+          throw new Error(passCheck.error || "Password does not meet requirements.");
+        }
+        const passwordHash = await hashPassword(dto.password);
+        const userRes = await query(
+          `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
+           VALUES ($1, $2, $3, $4, 'pending', NULL)
+           RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
+          [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
+        );
+        user = userRes.rows[0];
+        userId = userRes.rows[0].id;
+      } else {
+        userId = user.id;
+        const updateParams = [dto.fullName.trim(), dto.phone || null, userId];
+        let passwordUpdateClause = "";
+        if (dto.password) {
+          const passCheck = validatePassword(dto.password, cleanEmail);
+          if (!passCheck.isValid) {
+            throw new Error(passCheck.error || "Password does not meet requirements.");
+          }
+          const newHash = await hashPassword(dto.password);
+          updateParams.push(newHash);
+          passwordUpdateClause = `, password_hash = $${updateParams.length}`;
+        }
+        await query(
+          `UPDATE users SET full_name = $1, phone = $2, updated_at = NOW() ${passwordUpdateClause} WHERE id = $3`,
+          updateParams
+        );
+      }
+      let supplierId;
+      let supplierData;
+      const supRes = await query(
+        `SELECT id, legal_name, trading_name, cipa_uin, company_type, city, email, primary_phone, profile_completeness
+         FROM suppliers
+         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
+         LIMIT 1`,
+        [cleanEmail]
+      );
+      if (supRes.rows.length > 0) {
+        supplierId = supRes.rows[0].id;
+        supplierData = supRes.rows[0];
+        await query(
+          `UPDATE suppliers SET primary_phone = COALESCE($1, primary_phone), updated_at = NOW() WHERE id = $2`,
+          [dto.phone || null, supplierId]
+        );
+      } else {
+        const defaultLegalName = dto.legalName?.trim() || `${dto.fullName.trim()}'s Enterprise`;
+        const tempCipa = dto.cipaUin?.trim().toUpperCase() || "BW-TEMP-" + Math.floor(1e7 + Math.random() * 9e7);
+        const insertSup = await query(
+          `INSERT INTO suppliers (
+             legal_name, trading_name, cipa_uin, email, primary_phone, city, country_code,
+             status, verification_status, compliance_status, profile_completeness
+           ) VALUES (
+             $1, $1, $2, $3, $4, 'Gaborone', 'BW',
+             'active', 'unverified', 'Action required', 25
+           ) RETURNING id, legal_name, trading_name, cipa_uin, company_type, city, email, primary_phone, profile_completeness`,
+          [defaultLegalName, tempCipa, cleanEmail, dto.phone || null]
+        );
+        supplierId = insertSup.rows[0].id;
+        supplierData = insertSup.rows[0];
+      }
+      const roleRes = await query(
+        `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
+      );
+      const roleId = roleRes.rows[0]?.id;
+      if (roleId && supplierId && userId) {
+        await query(
+          `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
+           VALUES ($1, $2, $3, TRUE, 'active', NOW())
+           ON CONFLICT (supplier_id, user_id) DO UPDATE SET status = 'active'`,
+          [supplierId, userId, roleId]
+        );
+      }
+      return {
+        step: 1,
+        nextStep: 2,
+        user: { id: userId, email: cleanEmail, fullName: dto.fullName.trim() },
+        supplier: supplierData
+      };
+    }
+    if (dto.step === 2) {
+      if (!dto.legalName?.trim()) {
+        throw new Error("Registered company name is required for Step 2.");
+      }
+      if (!dto.cipaUin?.trim()) {
+        throw new Error("CIPA certificate number is required for Step 2.");
+      }
+      const supRes = await query(
+        `UPDATE suppliers
+         SET legal_name = $1,
+             trading_name = COALESCE($1, trading_name),
+             cipa_uin = $2,
+             company_type = COALESCE($3, company_type),
+             city = COALESCE($4, city),
+             profile_completeness = GREATEST(profile_completeness, 50),
+             updated_at = NOW()
+         WHERE LOWER(email::text) = LOWER($5) AND deleted_at IS NULL
+         RETURNING id, legal_name, trading_name, cipa_uin, company_type, city, email, primary_phone, profile_completeness`,
+        [dto.legalName.trim(), dto.cipaUin.trim().toUpperCase(), dto.companyType || "private_company", dto.city || "Gaborone", cleanEmail]
+      );
+      return {
+        step: 2,
+        nextStep: 3,
+        supplier: supRes.rows[0]
+      };
+    }
+    if (dto.step === 3) {
+      if (!dto.agreedToTerms || !dto.agreedToPrivacy) {
+        throw new Error("You must accept the BidReady360 Terms of Service and Privacy Policy to activate your account.");
+      }
+      const supRes = await query(
+        `UPDATE suppliers
+         SET profile_completeness = GREATEST(profile_completeness, 75),
+             updated_at = NOW()
+         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
+         RETURNING id, legal_name, cipa_uin, email, profile_completeness`,
+        [cleanEmail]
+      );
+      const supplier = supRes.rows[0];
+      const user = await usersRepository.findByEmail(cleanEmail);
+      if (user) {
+        const rawVerifyToken = generateRandomToken(32);
+        const tokenHash = hashToken(rawVerifyToken);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1e3);
+        await query(
+          `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+           VALUES ($1, 'email_verify', $2, $3)`,
+          [user.id, tokenHash, expiresAt]
+        );
+        return {
+          step: 3,
+          nextStep: 3,
+          completed: true,
+          supplier,
+          token: rawVerifyToken
+        };
+      }
+      return {
+        step: 3,
+        nextStep: 3,
+        completed: true,
+        supplier
+      };
+    }
+    throw new Error(`Unsupported registration step: ${dto.step}`);
+  }
+  /**
+   * Check supplier registration progress.
+   */
+  async getSupplierRegistrationProgress(email) {
+    const cleanEmail = email.trim().toLowerCase();
+    const supRes = await query(
+      `SELECT s.id, s.legal_name, s.cipa_uin, s.company_type, s.city, s.email, s.primary_phone,
+              u.full_name
+       FROM suppliers s
+       LEFT JOIN supplier_members sm ON sm.supplier_id = s.id AND sm.is_owner = TRUE
+       LEFT JOIN users u ON u.id = sm.user_id
+       WHERE LOWER(s.email::text) = LOWER($1) AND s.deleted_at IS NULL
+       LIMIT 1`,
+      [cleanEmail]
+    );
+    if (supRes.rows.length === 0) {
+      return { found: false };
+    }
+    const sup = supRes.rows[0];
+    let step = 1;
+    if (sup.legal_name && sup.cipa_uin && !sup.cipa_uin.startsWith("BW-TEMP-")) {
+      step = 3;
+    } else if (sup.legal_name) {
+      step = 2;
+    }
+    return {
+      found: true,
+      step,
+      email: sup.email,
+      fullName: sup.full_name || "",
+      phone: sup.primary_phone || "",
+      legalName: sup.legal_name?.includes("'s Enterprise") ? "" : sup.legal_name,
+      cipaUin: sup.cipa_uin?.startsWith("BW-TEMP-") ? "" : sup.cipa_uin,
+      companyType: sup.company_type || "",
+      city: sup.city || ""
     };
   }
   /**
@@ -1513,27 +1903,6 @@ var AuthService = class {
       throw new Error("Verification code does not match. Please verify your clock and try again.");
     }
     await usersRepository.enableMfa(userId);
-  }
-  /**
-   * Verify email address for user upon clicking link or entering code.
-   */
-  async verifyEmail(email) {
-    const cleanEmail = email.trim().toLowerCase();
-    await query(
-      `UPDATE users SET email_verified_at = NOW() WHERE email = $1`,
-      [cleanEmail]
-    );
-  }
-  /**
-   * Resolve session token into active profile and memberships.
-   */
-  async getSessionProfile(token) {
-    const payload = verifySessionToken(token);
-    if (!payload) return null;
-    const user = await usersRepository.findById(payload.userId);
-    if (!user || user.status !== "active") return null;
-    const memberships = await usersRepository.getUserMemberships(user.id);
-    return { user, memberships };
   }
 };
 var authService = new AuthService();
@@ -1615,6 +1984,20 @@ function translateDbError(err) {
         code: "TRIGGER_RULE_REJECTED"
       };
     }
+    case "DATABASE_UNAVAILABLE":
+    case "ECONNREFUSED":
+    case "ETIMEDOUT":
+    case "08001":
+    case "08006":
+    case "57P01":
+    case "57P02":
+    case "57P03": {
+      return {
+        status: 503,
+        message: "Database service is temporarily unreachable. Please try again shortly.",
+        code: "SERVICE_UNAVAILABLE"
+      };
+    }
     default:
       if (err.message && typeof err.message === "string" && !err.message.includes("Query execution failed")) {
         return {
@@ -1634,6 +2017,52 @@ function translateDbError(err) {
 
 // server/routes/auth.routes.ts
 var router2 = Router2();
+router2.post("/register-supplier-step", async (req, res) => {
+  try {
+    const { step, email, fullName, phone, password, legalName, cipaUin, companyType, city, agreedToTerms, agreedToPrivacy } = req.body;
+    if (!email || !step) {
+      res.status(400).json({
+        error: "VALIDATION_ERROR",
+        message: "Step and Email address are required."
+      });
+      return;
+    }
+    const ip = extractClientIp(req);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.saveSupplierRegistrationStep({
+      step: Number(step),
+      email,
+      fullName,
+      phone,
+      password,
+      legalName,
+      cipaUin,
+      companyType,
+      city,
+      agreedToTerms,
+      agreedToPrivacy,
+      ip,
+      userAgent
+    });
+    res.status(200).json(result);
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status).json(safeError);
+  }
+});
+router2.get("/supplier-progress", async (req, res) => {
+  try {
+    const email = String(req.query.email || "").trim();
+    if (!email) {
+      res.json({ found: false });
+      return;
+    }
+    const progress = await authService.getSupplierRegistrationProgress(email);
+    res.json(progress);
+  } catch (err) {
+    res.status(500).json({ found: false, error: err.message });
+  }
+});
 router2.post("/register-supplier", async (req, res) => {
   try {
     const { legalName, cipaUin, fullName, email, password, phone } = req.body;
@@ -1641,13 +2070,6 @@ router2.post("/register-supplier", async (req, res) => {
       res.status(400).json({
         error: "VALIDATION_ERROR",
         message: "Please complete all required fields: Company Name, CIPA Number, Full Name, Email, and Password."
-      });
-      return;
-    }
-    if (password.length < 8) {
-      res.status(400).json({
-        error: "PASSWORD_TOO_SHORT",
-        message: "Password must be at least 8 characters long."
       });
       return;
     }
@@ -1663,17 +2085,8 @@ router2.post("/register-supplier", async (req, res) => {
       ip,
       userAgent
     });
-    if (result.token) {
-      res.cookie("session_token", result.token, {
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 8 * 60 * 60 * 1e3,
-        secure: process.env.NODE_ENV === "production"
-      });
-    }
     res.status(201).json(result);
   } catch (err) {
-    console.error("[AUTH REGISTER SUPPLIER ERROR]", err);
     const safeError = translateDbError(err);
     res.status(safeError.status).json(safeError);
   }
@@ -1700,17 +2113,8 @@ router2.post("/register-buyer", async (req, res) => {
       ip,
       userAgent
     });
-    if (result.token) {
-      res.cookie("session_token", result.token, {
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 8 * 60 * 60 * 1e3,
-        secure: process.env.NODE_ENV === "production"
-      });
-    }
     res.status(201).json(result);
   } catch (err) {
-    console.error("[AUTH REGISTER BUYER ERROR]", err);
     const safeError = translateDbError(err);
     res.status(safeError.status).json(safeError);
   }
@@ -1726,21 +2130,44 @@ router2.post("/login", async (req, res) => {
       return;
     }
     const ip = extractClientIp(req);
-    const result = await authService.login(email, password, ip);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.login(email, password, ip, userAgent);
     if (result.token) {
       res.cookie("session_token", result.token, {
         httpOnly: true,
         sameSite: "lax",
-        maxAge: 8 * 60 * 60 * 1e3,
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
         secure: process.env.NODE_ENV === "production"
       });
     }
     res.json(result);
   } catch (err) {
-    console.error("[AUTH LOGIN ERROR]", err);
+    if (err.status === 429) {
+      res.status(429).json({
+        error: "RATE_LIMIT_EXCEEDED",
+        message: err.message || "Too many attempts. Try again in 15 minutes."
+      });
+      return;
+    }
+    if (err.status === 403 && err.code === "EMAIL_NOT_VERIFIED") {
+      res.status(403).json({
+        error: "EMAIL_NOT_VERIFIED",
+        message: "Verify your email first",
+        email: err.email
+      });
+      return;
+    }
+    if (err.status === 403) {
+      res.status(403).json({
+        error: err.code || "FORBIDDEN",
+        message: err.message
+      });
+      return;
+    }
     res.status(401).json({
-      error: "AUTHENTICATION_FAILED",
-      message: err.message || "Invalid email or password."
+      error: "INVALID_CREDENTIALS",
+      message: "Email or password is incorrect."
     });
   }
 });
@@ -1755,12 +2182,14 @@ router2.post("/verify-mfa", async (req, res) => {
       return;
     }
     const ip = extractClientIp(req);
-    const result = await authService.verifyMfa(userId, totpCode, ip);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.verifyMfa(userId, totpCode, ip, userAgent);
     if (result.token) {
       res.cookie("session_token", result.token, {
         httpOnly: true,
         sameSite: "lax",
-        maxAge: 8 * 60 * 60 * 1e3,
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
         secure: process.env.NODE_ENV === "production"
       });
     }
@@ -1774,21 +2203,99 @@ router2.post("/verify-mfa", async (req, res) => {
 });
 router2.post("/verify-email", async (req, res) => {
   try {
+    const { token } = req.body;
+    if (!token) {
+      res.status(400).json({
+        error: "MISSING_TOKEN",
+        message: "Verification token is required."
+      });
+      return;
+    }
+    const ip = extractClientIp(req);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.verifyEmailWithToken(token, ip, userAgent);
+    res.json(result);
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
+  }
+});
+router2.post("/resend-verification", async (req, res) => {
+  try {
     const { email } = req.body;
     if (!email) {
       res.status(400).json({
         error: "MISSING_EMAIL",
-        message: "Email address is required to verify account."
+        message: "Email address is required."
       });
       return;
     }
-    await authService.verifyEmail(email);
-    res.json({ success: true, message: "Email verified successfully." });
+    const ip = extractClientIp(req);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.resendVerification(email, ip, userAgent);
+    res.json(result);
   } catch (err) {
-    res.status(400).json({
-      error: "VERIFICATION_FAILED",
-      message: err.message || "Email verification failed."
-    });
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
+  }
+});
+router2.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({
+        error: "MISSING_EMAIL",
+        message: "Email address is required."
+      });
+      return;
+    }
+    const ip = extractClientIp(req);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.forgotPassword(email, ip, userAgent);
+    res.json(result);
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
+  }
+});
+router2.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      res.status(400).json({
+        error: "MISSING_DATA",
+        message: "Reset token and new password are required."
+      });
+      return;
+    }
+    const ip = extractClientIp(req);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.resetPassword(token, password, ip, userAgent);
+    res.json(result);
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
+  }
+});
+router2.post("/switch-tenant", requireAuth, async (req, res) => {
+  try {
+    const { tenantId, tenantType } = req.body;
+    if (!tenantId || !tenantType) {
+      res.status(400).json({
+        error: "MISSING_DATA",
+        message: "tenantId and tenantType are required."
+      });
+      return;
+    }
+    const updated = await authService.switchTenant(
+      req.session.rawToken,
+      tenantId,
+      tenantType
+    );
+    res.json({ success: true, activeTenant: updated });
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
   }
 });
 router2.get("/me", requireAuth, (req, res) => {
@@ -1804,14 +2311,24 @@ router2.get("/me", requireAuth, (req, res) => {
     permissions: Array.from(req.permissions || [])
   });
 });
-router2.post("/logout", (req, res) => {
-  res.clearCookie("session_token");
+router2.post("/logout", async (req, res) => {
+  try {
+    const rawToken = req.session?.rawToken || req.cookies?.session_token;
+    if (rawToken) {
+      const ip = extractClientIp(req);
+      const userAgent = req.headers["user-agent"] || "Web Client";
+      await authService.logout(rawToken, ip, userAgent);
+    }
+  } catch {
+  }
+  res.clearCookie("session_token", { path: "/" });
   res.json({ success: true, message: "Logged out successfully." });
 });
 var authRouter = router2;
 
 // server/routes/supplier.routes.ts
 import { Router as Router3 } from "express";
+import multer from "multer";
 import { GoogleGenAI } from "@google/genai";
 
 // server/middleware/tenant.helper.ts
@@ -2037,41 +2554,50 @@ var SuppliersRepository = class {
     try {
       const sRes = await query(
         `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
-                s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked AS bank_account_number,
-                s.citizen_owned_percentage
+                s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked,
+                s.citizen_owned_percentage, s.has_trading_licence
          FROM suppliers s WHERE s.id = $1`,
         [supplierId]
       );
       if (sRes.rows.length === 0) return 0;
       const s = sRes.rows[0];
-      let totalCount = 13;
+      const isTradingLicenceRequired = s.has_trading_licence === true;
+      let totalCount = isTradingLicenceRequired ? 16 : 15;
       let completedCount = 0;
-      if (s.legal_name && s.legal_name.trim()) completedCount++;
-      if (s.trading_name && s.trading_name.trim()) completedCount++;
-      if (s.burs_tin && s.burs_tin.trim()) completedCount++;
-      if (s.physical_address && s.physical_address.trim()) completedCount++;
-      if (s.city && s.city.trim()) completedCount++;
-      if (s.district_id) completedCount++;
-      if (s.primary_phone && s.primary_phone.trim()) completedCount++;
-      if (s.email && s.email.trim()) completedCount++;
-      if (s.bank_name && (s.bank_branch || s.bank_account_number)) completedCount++;
-      if (s.citizen_owned_percentage !== null && Number(s.citizen_owned_percentage) > 0) completedCount++;
+      if (s.legal_name && String(s.legal_name).trim().length > 0) completedCount++;
+      if (s.trading_name && String(s.trading_name).trim().length > 0) completedCount++;
+      if (s.burs_tin && String(s.burs_tin).trim().length > 0) completedCount++;
+      if (s.physical_address && String(s.physical_address).trim().length > 0) completedCount++;
+      if (s.city && String(s.city).trim().length > 0) completedCount++;
+      if (s.district_id && String(s.district_id).trim().length > 0) completedCount++;
+      const phoneDigits = (s.primary_phone || "").replace(/\D/g, "");
+      if (s.primary_phone && phoneDigits.length >= 7) completedCount++;
+      if (s.email && String(s.email).includes("@")) completedCount++;
+      if (s.bank_name && String(s.bank_name).trim().length > 0 && (s.bank_branch && String(s.bank_branch).trim().length > 0 || s.account_number_masked && String(s.account_number_masked).trim().length > 0)) {
+        completedCount++;
+      }
+      if (s.citizen_owned_percentage !== null && s.citizen_owned_percentage !== void 0 && Number(s.citizen_owned_percentage) > 0 && Number(s.citizen_owned_percentage) <= 100) {
+        completedCount++;
+      }
       const pRes = await query(
         `SELECT ownership_percent FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
         [supplierId]
       );
       if (pRes.rows.length > 0) {
-        const totalOwnership = pRes.rows.reduce((sum, r) => sum + (parseFloat(r.ownership_percent) || 0), 0);
+        const totalOwnership = pRes.rows.reduce(
+          (sum, r) => sum + (parseFloat(r.ownership_percent) || 0),
+          0
+        );
         if (Math.round(totalOwnership) === 100) {
           completedCount++;
         }
       }
       const dRes = await query(
-        `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until
+        `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until, sdv.verification_status
          FROM supplier_documents sd
          JOIN document_types dt ON dt.id = sd.document_type_id
          LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
-         WHERE sd.supplier_id = $1 AND sd.status != 'rejected'`,
+         WHERE sd.supplier_id = $1 AND sd.status = 'active'`,
         [supplierId]
       );
       const isValid = (keywords) => {
@@ -2079,34 +2605,35 @@ var SuppliersRepository = class {
           const name = ((d.code || "") + " " + (d.name || "")).toLowerCase();
           const matches = keywords.some((k) => name.includes(k.toLowerCase()));
           if (!matches) return false;
-          if (d.status === "expired") return false;
+          if (d.status === "expired" || d.status === "rejected" || d.status === "deleted") return false;
           if (d.valid_until && new Date(d.valid_until) < /* @__PURE__ */ new Date()) return false;
           return true;
         });
       };
-      if (isValid(["cipa", "incorporation", "company_reg"])) completedCount++;
-      if (isValid(["tax", "burs"])) completedCount++;
-      if (isValid(["safety", "compensation", "wca"])) {
-        totalCount++;
-        completedCount++;
+      if (isValid(["cipa", "incorporation", "company registration", "company_registration"])) completedCount++;
+      if (isValid(["tax clearance", "tax_clearance", "burs", "tax certificate"])) completedCount++;
+      if (isValid(["directors and shareholders id", "director id", "director_id", "shareholder id", "directors id", "director identity", "director", "shareholder", "omang", "passport"])) completedCount++;
+      if (isValid(["bank confirmation", "bank_letter", "bank rating", "bank confirmation letter", "bank letter", "bank statement"])) completedCount++;
+      if (isTradingLicenceRequired) {
+        if (isValid(["trading licence", "trading_licence", "business licence", "licence"])) {
+          completedCount++;
+        }
       }
-      if (isValid(["insurance", "liability"])) {
-        totalCount++;
-        completedCount++;
-      }
-      return Math.round(completedCount / Math.max(1, totalCount) * 100);
+      const score = Math.round(completedCount / Math.max(1, totalCount) * 100);
+      const complianceStatus = score >= 80 ? "Fully compliant" : "Action required";
+      await query(
+        `UPDATE suppliers SET profile_completeness = $1, compliance_status = $2, updated_at = NOW() WHERE id = $3`,
+        [score, complianceStatus, supplierId]
+      );
+      return score;
     } catch (err) {
       console.warn("[RECALCULATE COMPLETENESS ERROR]", err);
       return 0;
     }
   }
-  async getById(supplierId) {
-    const score = await this.calculateCompleteness(supplierId);
-    if (score > 0) {
-      await query(
-        `UPDATE suppliers SET profile_completeness = $1 WHERE id = $2`,
-        [score, supplierId]
-      );
+  async getById(supplierId, skipRecalculate = false) {
+    if (!skipRecalculate) {
+      await this.calculateCompleteness(supplierId);
     }
     const res = await query(
       `SELECT s.id, 
@@ -2137,6 +2664,8 @@ var SuppliersRepository = class {
               s.edd_certified AS "eddCertified", s.edd_certified,
               s.edd_certificate_no AS "eddCertificateNo", s.edd_certificate_no,
               s.edd_valid_until AS "eddValidUntil",
+              s.has_trading_licence AS "hasTradingLicence", s.has_trading_licence,
+              s.trading_licence_reason AS "tradingLicenceReason", s.trading_licence_reason,
               s.status,
               s.verification_status AS "verificationStatus", s.verification_status,
               s.compliance_status AS "complianceStatus", s.compliance_status,
@@ -2287,6 +2816,16 @@ var SuppliersRepository = class {
       params.push(Array.isArray(missing) ? missing : []);
       fields.push(`missing_items = $${params.length}`);
     }
+    const hasTradingLicence = data.has_trading_licence !== void 0 ? data.has_trading_licence : data.hasTradingLicence;
+    if (hasTradingLicence !== void 0) {
+      params.push(hasTradingLicence === null ? null : Boolean(hasTradingLicence));
+      fields.push(`has_trading_licence = $${params.length}`);
+    }
+    const tradingLicenceReason = data.trading_licence_reason !== void 0 ? data.trading_licence_reason : data.tradingLicenceReason;
+    if (tradingLicenceReason !== void 0) {
+      params.push(tradingLicenceReason ? String(tradingLicenceReason).trim() : null);
+      fields.push(`trading_licence_reason = $${params.length}`);
+    }
     if (!fields.length) {
       const current = await this.getById(supplierId);
       if (!current) throw new Error("Supplier not found.");
@@ -2297,7 +2836,8 @@ var SuppliersRepository = class {
       `UPDATE suppliers SET ${fields.join(", ")} WHERE id = $1`,
       params
     );
-    const updated = await this.getById(supplierId);
+    const hasExplicitCompleteness = data.profile_completeness !== void 0 || data.profileCompleteness !== void 0;
+    const updated = await this.getById(supplierId, hasExplicitCompleteness);
     if (!updated) throw new Error("Supplier not found after update.");
     return updated;
   }
@@ -2411,10 +2951,11 @@ var SuppliersRepository = class {
 var suppliersRepository = new SuppliersRepository();
 
 // server/repositories/documents.repository.ts
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 var DocumentsRepository = class {
   /**
    * Retrieves all documents with their latest pinned versions and computed expiry states.
+   * NOTE: List responses NEVER contain file bytes.
    */
   async listBySupplier(supplierId) {
     const res = await query(
@@ -2446,17 +2987,30 @@ var DocumentsRepository = class {
   }
   /**
    * Upload a new document or add an immutable new version to an existing document container.
+   * Saves bytes in document_files and version in supplier_document_versions in the SAME transaction.
+   * Validates hash integrity after saving.
    */
   async uploadVersion(dto) {
-    const sha256 = crypto2.createHash("sha256").update(dto.fileBuffer).digest("hex");
+    const sha256 = crypto3.createHash("sha256").update(dto.fileBuffer).digest("hex");
     const fileSizeBytes = dto.fileBuffer.length;
     const storageKey = `vault/${dto.supplierId}/${Date.now()}-${dto.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const docTypeRes = await query(
-      `SELECT id, name FROM document_types WHERE code = $1 LIMIT 1`,
+    let docTypeRes = await query(
+      `SELECT id, name FROM document_types WHERE code = $1 OR UPPER(code) = UPPER($1) LIMIT 1`,
       [dto.documentTypeCode]
     );
     if (!docTypeRes.rows.length) {
-      throw new Error(`Invalid document type code: ${dto.documentTypeCode}`);
+      docTypeRes = await query(
+        `SELECT id, name FROM document_types WHERE LOWER(name) = LOWER($1) LIMIT 1`,
+        [dto.documentTypeCode]
+      );
+    }
+    if (!docTypeRes.rows.length) {
+      docTypeRes = await query(
+        `SELECT id, name FROM document_types LIMIT 1`
+      );
+    }
+    if (!docTypeRes.rows.length) {
+      throw new Error(`Invalid document type: ${dto.documentTypeCode}`);
     }
     const docType = docTypeRes.rows[0];
     return withTransaction(async (client) => {
@@ -2472,7 +3026,11 @@ var DocumentsRepository = class {
       let nextVersionNo = 1;
       if (existingDocRes.rows.length > 0) {
         docId = existingDocRes.rows[0].id;
-        nextVersionNo = Number(existingDocRes.rows[0].version_no) + 1;
+        const maxVerRes = await client.query(
+          `SELECT COALESCE(MAX(version_no), 0) as max_version FROM supplier_document_versions WHERE document_id = $1`,
+          [docId]
+        );
+        nextVersionNo = Number(maxVerRes.rows[0]?.max_version || 0) + 1;
       } else {
         const newDocRes = await client.query(
           `INSERT INTO supplier_documents (supplier_id, document_type_id, title, status)
@@ -2488,7 +3046,7 @@ var DocumentsRepository = class {
           file_size_bytes, sha256, document_number, issue_date, expiry_date,
           uploaded_by_user_id, verification_status, uploaded_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'VERIFIED', NOW()
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDING_VERIFICATION', NOW()
         ) RETURNING id`,
         [
           docId,
@@ -2506,18 +3064,24 @@ var DocumentsRepository = class {
       );
       const versionId = newVersionRes.rows[0].id;
       await client.query(
+        `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [versionId, dto.fileBuffer, dto.mimeType, dto.fileName, fileSizeBytes, sha256]
+      );
+      const readBackRes = await client.query(
+        `SELECT sha256, size_bytes, file_name FROM document_files WHERE document_version_id = $1`,
+        [versionId]
+      );
+      if (!readBackRes.rows.length) {
+        throw new Error("Transaction integrity error: document_files record was not persisted.");
+      }
+      const storedSha = readBackRes.rows[0].sha256.trim();
+      if (storedSha !== sha256) {
+        throw new Error(`File integrity check failed: stored hash (${storedSha}) does not match computed hash (${sha256}).`);
+      }
+      await client.query(
         `UPDATE supplier_documents SET current_version_id = $1, updated_at = NOW() WHERE id = $2`,
         [versionId, docId]
-      );
-      await client.query(
-        `INSERT INTO document_verification_attempts (
-          document_version_id, external_registry_name, status, raw_response, attempted_at, completed_at, duration_ms
-        ) VALUES (
-          $1, 'BOTSWANA_PUBLIC_REGISTRY_VERIFIER', 'success',
-          '{"status": "VALID", "verified_fields": ["sha256", "document_number"]}'::jsonb,
-          NOW(), NOW(), 120
-        )`,
-        [versionId]
       );
       return {
         documentId: docId,
@@ -2539,15 +3103,43 @@ var DocumentsRepository = class {
         documentNumber: dto.documentNumber || null,
         issueDate: dto.issueDate || null,
         expiryDate: dto.expiryDate || null,
-        verificationStatus: "VERIFIED",
-        verifiedVia: "registry_api",
-        verifiedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        verificationNotes: "Verified against statutory registry checksum rules.",
+        verificationStatus: "PENDING_VERIFICATION",
+        verifiedVia: null,
+        verifiedAt: null,
+        verificationNotes: "File uploaded and verified against canonical SHA-256 checksum rules.",
         uploadedAt: (/* @__PURE__ */ new Date()).toISOString(),
         daysToExpiry: dto.expiryDate ? Math.ceil((new Date(dto.expiryDate).getTime() - Date.now()) / 864e5) : null,
-        expiryState: "VALID"
+        expiryState: dto.expiryDate ? "VALID" : "NO_EXPIRY",
+        certifiedCopy: dto.certifiedCopy
       };
     });
+  }
+  /**
+   * Fetch file bytes by document version or document ID, ensuring ownership.
+   */
+  async getFileByVersionOrDocId(id, supplierId) {
+    const res = await query(
+      `SELECT f.content, f.mime_type AS "mimeType", f.file_name AS "fileName"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE (v.id = $1 OR d.id = $1) AND d.supplier_id = $2
+       LIMIT 1`,
+      [id, supplierId]
+    );
+    if (!res.rows.length) return null;
+    return res.rows[0];
+  }
+  /**
+   * Delete or soft-delete a document for a supplier.
+   */
+  async deleteDocument(id, supplierId) {
+    const res = await query(
+      `UPDATE supplier_documents SET status = 'deleted', updated_at = NOW()
+       WHERE (id = $1 OR current_version_id = $1) AND supplier_id = $2`,
+      [id, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
   }
 };
 var documentsRepository = new DocumentsRepository();
@@ -2615,111 +3207,6 @@ var ConsentRepository = class {
   }
 };
 var consentRepository = new ConsentRepository();
-
-// server/repositories/audit.repository.ts
-import crypto3 from "crypto";
-var AuditRepository = class {
-  /**
-   * Appends an immutable audit event with a cryptographic hash chain.
-   */
-  async logEvent(dto) {
-    const lastRowRes = await query(
-      `SELECT row_hash FROM audit_log ORDER BY occurred_at DESC, id DESC LIMIT 1`
-    );
-    const prevHash = lastRowRes.rows[0]?.row_hash || "0".repeat(64);
-    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-    const payloadToHash = `${prevHash}|${timestamp}|${dto.actorName}|${dto.actorRole}|${dto.action}|${dto.entityType}|${dto.entityId || ""}|${dto.details}`;
-    const rowHash = crypto3.createHash("sha256").update(payloadToHash).digest("hex");
-    const res = await query(
-      `INSERT INTO audit_log (
-        occurred_at, actor_type, actor_user_id, actor_name, actor_role,
-        organization_id, supplier_id, organization_name, action,
-        entity_type, entity_id, ip_address, user_agent,
-        before_json, after_json, details, prev_hash, row_hash
-      ) VALUES (
-        NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
-      ) RETURNING 
-        id, occurred_at AS "occurredAt", actor_type AS "actorType", actor_user_id AS "actorUserId",
-        actor_name AS "actorName", actor_role AS "actorRole", organization_id AS "organizationId",
-        supplier_id AS "supplierId", organization_name AS "organizationName", action,
-        entity_type AS "entityType", entity_id AS "entityId", ip_address AS "ipAddress",
-        user_agent AS "userAgent", before_json AS "beforeJson", after_json AS "afterJson",
-        details, prev_hash AS "prevHash", row_hash AS "rowHash"`,
-      [
-        dto.actorType || "user",
-        dto.actorUserId || null,
-        dto.actorName,
-        dto.actorRole,
-        dto.organizationId || null,
-        dto.supplierId || null,
-        dto.organizationName || null,
-        dto.action,
-        dto.entityType,
-        dto.entityId || null,
-        dto.ipAddress || null,
-        dto.userAgent || null,
-        dto.beforeJson ? JSON.stringify(dto.beforeJson) : null,
-        dto.afterJson ? JSON.stringify(dto.afterJson) : null,
-        dto.details,
-        prevHash,
-        rowHash
-      ]
-    );
-    return res.rows[0];
-  }
-  async listEvents(filters) {
-    const conditions = [];
-    const params = [];
-    if (filters.organizationId) {
-      params.push(filters.organizationId);
-      conditions.push(`(organization_id = $${params.length} OR organization_id IS NULL)`);
-    }
-    if (filters.supplierId) {
-      params.push(filters.supplierId);
-      conditions.push(`supplier_id = $${params.length}`);
-    }
-    if (filters.entityType) {
-      params.push(filters.entityType);
-      conditions.push(`entity_type = $${params.length}`);
-    }
-    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limit = filters.limit || 100;
-    params.push(limit);
-    const res = await query(
-      `SELECT 
-        id, occurred_at AS "occurredAt", actor_type AS "actorType", actor_user_id AS "actorUserId",
-        actor_name AS "actorName", actor_role AS "actorRole", organization_id AS "organizationId",
-        supplier_id AS "supplierId", organization_name AS "organizationName", action,
-        entity_type AS "entityType", entity_id AS "entityId", ip_address AS "ipAddress",
-        user_agent AS "userAgent", before_json AS "beforeJson", after_json AS "afterJson",
-        details, prev_hash AS "prevHash", row_hash AS "rowHash"
-       FROM audit_log
-       ${whereClause}
-       ORDER BY occurred_at DESC
-       LIMIT $${params.length}`,
-      params
-    );
-    return res.rows;
-  }
-  async recordExport(data) {
-    await query(
-      `INSERT INTO audit_exports (
-        organization_id, exported_by_user_id, export_type,
-        records_count, checksum_sha256, ip_address, user_agent, exported_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-      [
-        data.organizationId,
-        data.exportedByUserId,
-        data.exportType,
-        data.recordsCount,
-        data.checksumSha256,
-        data.ipAddress || null,
-        data.userAgent || null
-      ]
-    );
-  }
-};
-var auditRepository = new AuditRepository();
 
 // server/repositories/applications.repository.ts
 var ApplicationsRepository = class {
@@ -3113,6 +3600,29 @@ var BidsRepository = class {
 var bidsRepository = new BidsRepository();
 
 // server/routes/supplier.routes.ts
+var upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 }
+  // 4 MB limit (Vercel request limit)
+});
+function validateFileBuffer(buffer) {
+  if (!buffer || buffer.length === 0) {
+    return { isValid: false, mimeType: "", error: "Uploaded file is empty or corrupt." };
+  }
+  if (buffer.length > 4 * 1024 * 1024) {
+    return { isValid: false, mimeType: "", error: "File size exceeds 4 MB limit." };
+  }
+  if (buffer[0] === 37 && buffer[1] === 80 && buffer[2] === 68 && buffer[3] === 70) {
+    return { isValid: true, mimeType: "application/pdf" };
+  }
+  if (buffer[0] === 137 && buffer[1] === 80 && buffer[2] === 78 && buffer[3] === 71) {
+    return { isValid: true, mimeType: "image/png" };
+  }
+  if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) {
+    return { isValid: true, mimeType: "image/jpeg" };
+  }
+  return { isValid: false, mimeType: "", error: "Unsupported or corrupt file type. Only PDF, PNG, and JPG files are accepted." };
+}
 var ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
@@ -3157,6 +3667,7 @@ router3.post("/people", async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
     const person = await suppliersRepository.addPerson(ctx.tenantId, req.body);
+    await suppliersRepository.calculateCompleteness(ctx.tenantId);
     res.status(201).json(person);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -3169,6 +3680,7 @@ router3.put("/people/:id", async (req, res) => {
     if (!person) {
       return res.status(404).json({ error: "Person not found" });
     }
+    await suppliersRepository.calculateCompleteness(ctx.tenantId);
     res.json(person);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -3178,6 +3690,7 @@ router3.delete("/people/:id", async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
     await suppliersRepository.deletePerson(ctx.tenantId, req.params.id);
+    await suppliersRepository.calculateCompleteness(ctx.tenantId);
     res.status(204).send();
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -3219,28 +3732,66 @@ router3.get("/documents", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-router3.post("/documents/upload", async (req, res) => {
+router3.post("/documents/upload", upload.single("file"), async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
-    const { documentTypeCode, fileName, mimeType, fileBase64, documentNumber, issueDate, expiryDate, title } = req.body;
-    if (!documentTypeCode || !fileName || !fileBase64) {
-      res.status(400).json({ error: "MISSING_FILE", message: "Document type, file name, and file content are required." });
+    const file = req.file;
+    const { documentTypeCode, documentNumber, issueDate, expiryDate, title, certifiedCopy } = req.body;
+    if (!file) {
+      res.status(400).json({ error: "MISSING_FILE", message: "No file uploaded or file missing." });
       return;
     }
-    const fileBuffer = Buffer.from(fileBase64, "base64");
+    if (!documentTypeCode) {
+      res.status(400).json({ error: "MISSING_TYPE", message: "Document type code is required." });
+      return;
+    }
+    const validation = validateFileBuffer(file.buffer);
+    if (!validation.isValid) {
+      res.status(400).json({ error: "INVALID_FILE", message: validation.error || "Invalid file format." });
+      return;
+    }
     const doc = await documentsRepository.uploadVersion({
       supplierId: ctx.tenantId,
       documentTypeCode,
-      fileName,
-      mimeType: mimeType || "application/pdf",
-      fileBuffer,
+      fileName: file.originalname || "document.pdf",
+      mimeType: validation.mimeType,
+      fileBuffer: file.buffer,
       documentNumber,
       issueDate,
       expiryDate,
+      certifiedCopy: certifiedCopy === "true" || certifiedCopy === true,
       title,
       userId: ctx.userId
     });
+    await suppliersRepository.calculateCompleteness(ctx.tenantId);
     res.status(201).json(doc);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.delete("/documents/:id", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    await documentsRepository.deleteDocument(req.params.id, ctx.tenantId);
+    await suppliersRepository.calculateCompleteness(ctx.tenantId);
+    res.json({ success: true, message: "Document removed from vault." });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.get("/documents/:id/file", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const fileRecord = await documentsRepository.getFileByVersionOrDocId(req.params.id, ctx.tenantId);
+    if (!fileRecord) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Document file not found or unauthorized." });
+      return;
+    }
+    res.setHeader("Content-Type", fileRecord.mimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${fileRecord.fileName}"`);
+    res.send(fileRecord.content);
   } catch (err) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -4043,6 +4594,18 @@ router5.use(requireTenantType("organization"));
 router5.post("/calls/create", requirePermission("calls.create"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
+    const orgRes = await query(
+      `SELECT status, verification_status FROM organizations WHERE id = $1 LIMIT 1`,
+      [ctx.tenantId]
+    );
+    const org = orgRes.rows[0];
+    if (org && (org.status === "pending" || org.verification_status === "pending_review" || org.verification_status === "pending")) {
+      res.status(403).json({
+        error: "ORGANIZATION_PENDING_APPROVAL",
+        message: "Organizations with pending status cannot publish tender calls until verified."
+      });
+      return;
+    }
     const callId = await callsRepository.createCall({
       ...req.body,
       organizationId: ctx.tenantId,
@@ -4293,18 +4856,24 @@ router6.post("/export", requirePermission("audit.view"), async (req, res) => {
 var auditRouter = router6;
 
 // server/app.ts
+verifyDatabaseGuard().catch((err) => {
+  console.error("[FATAL STARTUP GUARD FAILED]:", err.message);
+});
 var app = express();
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Origin, Accept");
   if (req.method === "OPTIONS") {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
   next();
 });
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(authenticate);
 app.use("/api/reference", referenceRouter);
 app.use("/api/auth", authRouter);
@@ -4318,9 +4887,23 @@ app.use("/supplier", supplierRouter);
 app.use("/calls", callsRouter);
 app.use("/buyer", buyerRouter);
 app.use("/audit", auditRouter);
-app.get(["/api/health", "/health"], (req, res) => {
+app.get(["/api/health", "/health"], (_req, res) => {
   res.json({
     ok: true
+  });
+});
+app.use((err, _req, res, _next) => {
+  console.error("[EXPRESS UNHANDLED ERROR]:", err);
+  if (err.code === "DATABASE_UNAVAILABLE" || err.status === 503) {
+    res.status(503).json({
+      error: "SERVICE_UNAVAILABLE",
+      message: "Database service is temporarily unreachable. Please try again shortly."
+    });
+    return;
+  }
+  res.status(err.status || 500).json({
+    error: err.code || "INTERNAL_ERROR",
+    message: err.message || "An unexpected error occurred."
   });
 });
 var app_default = app;

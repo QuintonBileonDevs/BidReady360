@@ -18,6 +18,8 @@ import {
   ChevronUp,
 } from 'lucide-react';
 
+import { authApi } from '../../services/api';
+
 interface AdminLoginProps {
   onNavigate: (route: string) => void;
 }
@@ -26,15 +28,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
   const { setRole, setActiveNav, loginSuccess } = useApp();
 
   const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
+  const [mfaUserId, setMfaUserId] = useState<string>('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
 
-  const handleCredentialsSubmit = (e: React.FormEvent) => {
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { email?: string; password?: string; general?: string } = {};
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = 'Enter an official administrator email address.';
     }
@@ -48,28 +51,71 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setStep('mfa');
-    }, 600);
-  };
+    setErrors({});
 
-  const handleMfaComplete = (code: string) => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const res = await authApi.login(email.trim().toLowerCase(), password);
+
+      if (res.requiresMfa && res.mfaUserId) {
+        setMfaUserId(res.mfaUserId);
+        setStep('mfa');
+        return;
+      }
+
+      if (!res.user?.isPlatformAdmin) {
+        setErrors({ general: 'Access restricted: this account lacks platform administrator privileges.' });
+        return;
+      }
+
       loginSuccess(
         {
-          user: {
-            id: 'admin-platform',
-            email: email.trim().toLowerCase() || 'admin@bidready360.bw',
-            fullName: 'Platform Administrator',
-            isPlatformAdmin: true,
+          user: res.user,
+          token: res.token,
+          activeTenant: {
+            tenantType: 'organization',
+            tenantId: 'platform',
+            tenantName: 'Platform Administration',
+            roleName: 'Super Admin',
           },
         },
         'admin'
       );
-    }, 700);
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Email or password is incorrect.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMfaComplete = async (code: string) => {
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      const res = await authApi.verifyMfa(mfaUserId, code.trim());
+      if (!res.user?.isPlatformAdmin) {
+        setErrors({ general: 'Access restricted: this account lacks platform administrator privileges.' });
+        return;
+      }
+
+      loginSuccess(
+        {
+          user: res.user,
+          token: res.token,
+          activeTenant: {
+            tenantType: 'organization',
+            tenantId: 'platform',
+            tenantName: 'Platform Administration',
+            roleName: 'Super Admin',
+          },
+        },
+        'admin'
+      );
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Invalid or expired verification code.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -91,6 +137,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
 
         {/* Form Card */}
         <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 sm:p-8 shadow-none space-y-6">
+          {errors.general && (
+            <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[14px] text-[#C2412D] flex items-center gap-2.5">
+              <ShieldAlert className="w-4 h-4 shrink-0" strokeWidth={1.5} />
+              <span>{errors.general}</span>
+            </div>
+          )}
+
           {step === 'credentials' ? (
             <form onSubmit={handleCredentialsSubmit} className="space-y-4">
               <Input

@@ -1,7 +1,8 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
-import { authenticate } from './middleware/auth.middleware';
+import { authenticate, csrfProtection } from './middleware/auth.middleware';
+import { verifyDatabaseGuard } from './db/client';
 import { referenceRouter } from './routes/reference.routes';
 import { authRouter } from './routes/auth.routes';
 import { supplierRouter } from './routes/supplier.routes';
@@ -9,21 +10,29 @@ import { callsRouter } from './routes/calls.routes';
 import { buyerRouter } from './routes/buyer.routes';
 import { auditRouter } from './routes/audit.routes';
 
+// Run startup database verification guard
+verifyDatabaseGuard().catch((err) => {
+  console.error('[FATAL STARTUP GUARD FAILED]:', err.message);
+});
+
 const app = express();
 
 // CORS & preflight handling
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Origin, Accept');
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
   next();
 });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(authenticate);
 
 // API routes with '/api' prefix
@@ -43,9 +52,25 @@ app.use('/buyer', buyerRouter);
 app.use('/audit', auditRouter);
 
 // Health check
-app.get(['/api/health', '/health'], (req, res) => {
+app.get(['/api/health', '/health'], (_req: Request, res: Response) => {
   res.json({
     ok: true,
+  });
+});
+
+// Centralized error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[EXPRESS UNHANDLED ERROR]:', err);
+  if (err.code === 'DATABASE_UNAVAILABLE' || err.status === 503) {
+    res.status(503).json({
+      error: 'SERVICE_UNAVAILABLE',
+      message: 'Database service is temporarily unreachable. Please try again shortly.',
+    });
+    return;
+  }
+  res.status(err.status || 500).json({
+    error: err.code || 'INTERNAL_ERROR',
+    message: err.message || 'An unexpected error occurred.',
   });
 });
 

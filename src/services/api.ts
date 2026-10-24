@@ -40,6 +40,7 @@ export async function apiRequest<T = any>(endpoint: string, options: RequestInit
   }
 
   const res = await fetch(endpoint, {
+    credentials: 'include',
     ...options,
     headers,
   });
@@ -52,6 +53,7 @@ export async function apiRequest<T = any>(endpoint: string, options: RequestInit
     err.status = res.status;
     err.code = data.code || 'API_ERROR';
     err.field = data.field;
+    err.email = data.email;
     throw err;
   }
 
@@ -151,10 +153,38 @@ export const authApi = {
     return res;
   },
 
-  async verifyEmail(email: string) {
+  async verifyEmail(tokenOrEmail: string) {
     return await apiRequest<{ success: boolean; message: string }>('/api/auth/verify-email', {
       method: 'POST',
+      body: JSON.stringify({ token: tokenOrEmail, email: tokenOrEmail }),
+    });
+  },
+
+  async resendVerification(email: string) {
+    return await apiRequest<{ success: boolean; message: string }>('/api/auth/resend-verification', {
+      method: 'POST',
       body: JSON.stringify({ email }),
+    });
+  },
+
+  async forgotPassword(email: string) {
+    return await apiRequest<{ success: boolean; message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async resetPassword(token: string, passwordPlain: string) {
+    return await apiRequest<{ success: boolean; message: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password: passwordPlain }),
+    });
+  },
+
+  async switchTenant(tenantId: string, tenantType: 'supplier' | 'organization') {
+    return await apiRequest<{ success: boolean; activeTenant: any }>('/api/auth/switch-tenant', {
+      method: 'POST',
+      body: JSON.stringify({ tenantId, tenantType }),
     });
   },
 
@@ -168,6 +198,8 @@ export const authApi = {
 
   async logout() {
     localStorage.removeItem('bidready_token');
+    localStorage.removeItem('bidready_session');
+    localStorage.removeItem('bidready_last_active');
     await apiRequest('/api/auth/logout', { method: 'POST' }).catch(() => {});
   },
 };

@@ -102,10 +102,14 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
       );
     } catch (err: any) {
       console.error('[LOGIN ERROR]', err);
-      const msg = err.message || 'Invalid email or password.';
-      if (msg.toLowerCase().includes('locked')) {
+      const msg = err.message || 'Email or password is incorrect.';
+      if (err.code === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('verify your email')) {
+        setIsUnverified(true);
+        setErrors({ general: 'Verify your email first' });
+      } else if (msg.toLowerCase().includes('locked')) {
         onNavigate('account-locked');
       } else {
+        setIsUnverified(false);
         setErrors({ general: msg });
       }
     } finally {
@@ -145,6 +149,20 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     }
   };
 
+  const [isUnverified, setIsUnverified] = useState(false);
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+
+  const handleResendLink = async () => {
+    if (!email) return;
+    try {
+      setResendStatus('Sending...');
+      const res = await authApi.resendVerification(email.trim().toLowerCase());
+      setResendStatus(res.message || 'Verification link sent to your email.');
+    } catch (err: any) {
+      setResendStatus(err.message || 'Failed to resend. Please try again later.');
+    }
+  };
+
   return (
     <AuthLayout
       leftMessage="Register once. Bid anywhere."
@@ -163,11 +181,27 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
         {/* Error Alert */}
         {errors.general && (
           <div
-            className="p-3.5 rounded-[8px] text-[14px] flex items-start gap-2.5 bg-rose-50 dark:bg-rose-950/40 text-[#C2412D] border border-rose-200 dark:border-rose-900"
+            className="p-3.5 rounded-[8px] text-[14px] flex flex-col gap-2 bg-rose-50 dark:bg-rose-950/40 text-[#C2412D] border border-rose-200 dark:border-rose-900"
             role="alert"
           >
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.5} />
-            <span>{errors.general}</span>
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.5} />
+              <span className="font-medium">{errors.general}</span>
+            </div>
+            {isUnverified && (
+              <div className="pt-1 flex items-center justify-between border-t border-rose-200/60 dark:border-rose-900/60">
+                <span className="text-[12px] text-[#8C2314] dark:text-rose-300">
+                  {resendStatus || 'Check your inbox or request a new activation link:'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleResendLink}
+                  className="text-[12px] font-semibold underline text-[#C2412D] hover:text-[#8C2314] cursor-pointer shrink-0 ml-2"
+                >
+                  Resend link
+                </button>
+              </div>
+            )}
           </div>
         )}
 

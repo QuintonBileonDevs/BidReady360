@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthLayout } from './AuthLayout';
 import { useApp } from '../../context/AppContext';
+import { authApi } from '../../services/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { DigitCodeInput } from './DigitCodeInput';
@@ -61,7 +62,7 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const [mfaCountdown, setMfaCountdown] = useState(60);
 
   useEffect(() => {
@@ -97,9 +98,11 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
     setErrors(newErrors);
   };
 
-  const handleCredentialsSubmit = (e: React.FormEvent) => {
+  const [mfaUserId, setMfaUserId] = useState<string>('');
+
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { email?: string; password?: string; general?: string } = {};
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
       newErrors.email = `Enter an official work email like name@${activeOrg.domain}`;
     }
@@ -113,26 +116,29 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setStep('mfa');
-      setMfaCountdown(60);
-    }, 600);
-  };
+    setErrors({});
 
-  const handleMfaComplete = (code: string) => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const res = await authApi.login(email.trim().toLowerCase(), password);
+
+      if (res.requiresMfa && res.mfaUserId) {
+        setMfaUserId(res.mfaUserId);
+        setStep('mfa');
+        setMfaCountdown(60);
+        return;
+      }
+
+      const buyerMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'organization');
+      if (!buyerMembership && !res.user?.isPlatformAdmin) {
+        setErrors({ general: 'Access restricted: this account does not belong to a procuring organization.' });
+        return;
+      }
+
       loginSuccess(
         {
-          user: {
-            id: `officer-${Date.now()}`,
-            email: email || `officer@${activeOrg.domain}`,
-            fullName: 'Procurement Officer',
-            isPlatformAdmin: false,
-          },
-          activeTenant: {
+          user: res.user,
+          token: res.token,
+          activeTenant: buyerMembership || {
             tenantType: 'organization',
             tenantId: activeOrg.slug,
             tenantName: activeOrg.name,
@@ -140,7 +146,42 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
         },
         'buyer'
       );
-    }, 700);
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Email or password is incorrect.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMfaComplete = async (code: string) => {
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      const res = await authApi.verifyMfa(mfaUserId, code.trim());
+      const buyerMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'organization');
+      if (!buyerMembership && !res.user?.isPlatformAdmin) {
+        setErrors({ general: 'Access restricted: this account does not belong to a procuring organization.' });
+        return;
+      }
+
+      loginSuccess(
+        {
+          user: res.user,
+          token: res.token,
+          activeTenant: buyerMembership || {
+            tenantType: 'organization',
+            tenantId: activeOrg.slug,
+            tenantName: activeOrg.name,
+          },
+        },
+        'buyer'
+      );
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Invalid or expired verification code.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const customLogoNode = (
@@ -189,6 +230,12 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
                 Sign in to manage your organization's tenders and evaluation scorecards.
               </p>
             </div>
+
+            {errors.general && (
+              <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[14px] text-[#C2412D] flex items-center gap-2.5">
+                <span>{errors.general}</span>
+              </div>
+            )}
 
             <form onSubmit={handleCredentialsSubmit} className="space-y-4">
               <Input

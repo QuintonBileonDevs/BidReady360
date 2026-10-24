@@ -1,13 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifySessionToken } from '../utils/crypto';
+import { hashToken } from '../utils/crypto';
 import { usersRepository, User, UserTenantMembership } from '../repositories/users.repository';
 import { query } from '../db/client';
+
+export interface UserSessionContext {
+  id: string;
+  rawToken: string;
+  tokenHash: string;
+  tenantType: 'supplier' | 'organization' | 'platform' | null;
+  tenantId: string | null;
+}
 
 // Extend Express Request interface to include authenticated session context
 declare global {
   namespace Express {
     interface Request {
       user?: User;
+      session?: UserSessionContext;
       activeTenant?: UserTenantMembership;
       permissions?: Set<string>;
     }
@@ -15,101 +24,141 @@ declare global {
 }
 
 /**
- * Authenticate incoming request via Authorization Bearer header or session cookie.
+ * Reject state-changing requests (POST, PUT, PATCH, DELETE) whose Origin header is not our own site.
+ */
+export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
+  const method = req.method.toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const originUrl = new URL(origin);
+        const host = (req.headers['x-forwarded-host'] as string) || req.headers.host;
+        const originHostname = originUrl.hostname;
+        const hostOnly = host ? host.split(':')[0] : '';
+
+        const isLocal = originHostname === 'localhost' || originHostname === '127.0.0.1' || originHostname === '0.0.0.0';
+        const isMatch = host && (originUrl.host === host || originHostname === hostOnly || originHostname.endsWith('.run.app') || hostOnly.endsWith('.run.app'));
+
+        if (!isMatch && !isLocal && !originHostname.endsWith('.run.app') && !originHostname.includes('aistudio')) {
+          res.status(403).json({
+            error: 'FORBIDDEN_CSRF',
+            message: 'Cross-origin request blocked.',
+          });
+          return;
+        }
+      } catch {
+        res.status(403).json({
+          error: 'FORBIDDEN_CSRF',
+          message: 'Invalid request origin header.',
+        });
+        return;
+      }
+    }
+  }
+  next();
+}
+
+/**
+ * Authenticate incoming request via httpOnly session cookie (or Authorization Bearer header).
+ * Looks up valid, non-expired, non-revoked session from PostgreSQL `sessions` table.
  */
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
-  let token: string | undefined;
+  let rawToken: string | undefined;
 
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  } else if (req.cookies && req.cookies.session_token) {
-    token = req.cookies.session_token;
+  if (req.cookies && req.cookies.session_token) {
+    rawToken = req.cookies.session_token;
+  } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    rawToken = req.headers.authorization.substring(7);
   }
 
-  if (!token) {
-    return next();
-  }
-
-  const payload = verifySessionToken(token);
-  if (!payload) {
+  if (!rawToken || !rawToken.trim()) {
     return next();
   }
 
   try {
-    let user = await usersRepository.findById(payload.userId);
-    if (!user && payload.email) {
-      // Auto-provision user if missing in database
-      const userRes = await query(
-        `INSERT INTO users (email, full_name, status, email_verified_at)
-         VALUES ($1, $2, 'active', NOW())
-         ON CONFLICT (email) DO UPDATE SET status = 'active'
-         RETURNING id, email, full_name AS "fullName", status, is_platform_admin AS "isPlatformAdmin"`,
-        [payload.email, payload.email.split('@')[0].toUpperCase()]
-      );
-      user = userRes.rows[0];
-    }
+    const tokenHash = hashToken(rawToken);
 
-    if (!user || user.status !== 'active') {
+    // 1. Query sessions table for active, unexpired, unrevoked session
+    const sessionRes = await query<{
+      sessionId: string;
+      userId: string;
+      tenantType: 'supplier' | 'organization' | 'platform' | null;
+      tenantId: string | null;
+    }>(
+      `SELECT s.id AS "sessionId", s.user_id AS "userId", s.tenant_type AS "tenantType", s.tenant_id AS "tenantId"
+       FROM sessions s
+       WHERE s.token_hash = $1
+         AND s.expires_at > NOW()
+         AND s.revoked_at IS NULL
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    if (sessionRes.rows.length === 0) {
       return next();
     }
 
-    let memberships = await usersRepository.getUserMemberships(user.id);
-    if (memberships.length === 0 && !user.isPlatformAdmin) {
-      // Auto-provision supplier workspace membership
-      const supRes = await query(
-        `SELECT id, legal_name FROM suppliers WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
-        [user.email]
-      );
-      let supplierId: string;
-      if (supRes.rows.length > 0) {
-        supplierId = supRes.rows[0].id;
-      } else {
-        const newSup = await query(
-          `INSERT INTO suppliers (legal_name, trading_name, cipa_uin, email, status, verification_status, compliance_status, profile_completeness)
-           VALUES ($1, $1, $2, $3, 'active', 'unverified', 'Action required', 30)
-           RETURNING id`,
-          [user.email.split('@')[0].toUpperCase() + ' (Pty) Ltd', 'BW' + Math.floor(10000000 + Math.random() * 90000000), user.email]
-        );
-        supplierId = newSup.rows[0].id;
-      }
+    const sess = sessionRes.rows[0];
 
-      const roleRes = await query(`SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`);
-      const roleId = roleRes.rows[0]?.id;
-      if (roleId && supplierId) {
-        await query(
-          `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
-           VALUES ($1, $2, $3, TRUE, 'active', NOW())
-           ON CONFLICT DO NOTHING`,
-          [supplierId, user.id, roleId]
-        );
-      }
-      memberships = await usersRepository.getUserMemberships(user.id);
+    // 2. Load user strictly from PostgreSQL (must be active and verified)
+    const userRes = await query<User>(
+      `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
+              phone, preferred_language AS "preferredLanguage", status,
+              is_platform_admin AS "isPlatformAdmin", email_verified_at AS "emailVerifiedAt",
+              phone_verified_at AS "phoneVerifiedAt", mfa_enabled AS "mfaEnabled",
+              mfa_secret_encrypted AS "mfaSecretEncrypted", mfa_type AS "mfaType",
+              last_login_at AS "lastLoginAt", failed_login_attempts AS "failedLoginAttempts",
+              locked_until AS "lockedUntil", created_at AS "createdAt"
+       FROM users
+       WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
+      [sess.userId]
+    );
+
+    const user = userRes.rows[0];
+    if (!user) {
+      return next();
     }
 
-    // Determine active tenant based on header override or token payload
-    const requestedTenantId = (req.headers['x-tenant-id'] as string) || payload.activeTenantId;
-    const activeTenant =
-      memberships.find((m) => m.tenantId === requestedTenantId) ||
-      memberships[0] ||
-      (payload.activeTenantType && payload.activeTenantId ? {
-        tenantType: payload.activeTenantType,
-        tenantId: payload.activeTenantId,
-        tenantName: 'Workspace',
-        roleId: 'role-admin',
-        roleName: payload.role || 'Admin',
+    // 3. Resolve tenant membership
+    const memberships = await usersRepository.getUserMemberships(user.id);
+    let activeTenant: UserTenantMembership | undefined;
+
+    if (sess.tenantType === 'platform' && user.isPlatformAdmin) {
+      activeTenant = {
+        tenantType: 'organization', // administrative umbrella
+        tenantId: 'platform',
+        tenantName: 'Platform Administration',
+        roleId: 'role-platform-admin',
+        roleName: 'Super Admin',
         isOwner: true,
         status: 'active',
         permissions: ['*'],
-      } : undefined);
+      };
+    } else if (sess.tenantId) {
+      activeTenant = memberships.find((m) => m.tenantId === sess.tenantId);
+    }
+
+    if (!activeTenant && memberships.length > 0) {
+      activeTenant = memberships[0];
+    }
 
     req.user = user;
+    req.session = {
+      id: sess.sessionId,
+      rawToken,
+      tokenHash,
+      tenantType: sess.tenantType,
+      tenantId: sess.tenantId,
+    };
     req.activeTenant = activeTenant;
-    req.permissions = new Set<string>(activeTenant?.permissions || ['*']);
+    req.permissions = new Set<string>(
+      user.isPlatformAdmin ? ['*'] : activeTenant?.permissions || []
+    );
 
     return next();
   } catch (err) {
-    console.error('[AUTH MIDDLEWARE] Failed to resolve session context:', err);
+    console.error('[AUTH MIDDLEWARE ERROR]:', err);
     return next();
   }
 }
@@ -118,7 +167,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
  * Guard requiring an active authenticated user session.
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user) {
+  if (!req.user || !req.session) {
     res.status(401).json({
       error: 'AUTHENTICATION_REQUIRED',
       message: 'You must be signed in to access this resource.',
@@ -133,10 +182,10 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
  */
 export function requirePermission(...requiredPermissions: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
+    if (!req.user || !req.session) {
       res.status(401).json({
         error: 'AUTHENTICATION_REQUIRED',
-        message: 'You must be signed in to perform this action.',
+        message: 'You must be signed in to access this resource.',
       });
       return;
     }
@@ -154,7 +203,7 @@ export function requirePermission(...requiredPermissions: string[]) {
       return;
     }
 
-    const hasAll = requiredPermissions.every((perm) => req.permissions!.has(perm));
+    const hasAll = requiredPermissions.every((perm) => req.permissions!.has(perm) || req.permissions!.has('*'));
     if (!hasAll) {
       res.status(403).json({
         error: 'FORBIDDEN_INSUFFICIENT_PERMISSIONS',
@@ -173,8 +222,11 @@ export function requirePermission(...requiredPermissions: string[]) {
  */
 export function requireTenantType(tenantType: 'organization' | 'supplier') {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({ error: 'AUTHENTICATION_REQUIRED', message: 'Sign in required.' });
+    if (!req.user || !req.session) {
+      res.status(401).json({
+        error: 'AUTHENTICATION_REQUIRED',
+        message: 'You must be signed in to access this resource.',
+      });
       return;
     }
 

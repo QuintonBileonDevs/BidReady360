@@ -126,7 +126,11 @@ export class DocumentsRepository {
       let nextVersionNo = 1;
       if (existingDocRes.rows.length > 0) {
         docId = existingDocRes.rows[0].id;
-        nextVersionNo = Number(existingDocRes.rows[0].version_no) + 1;
+        const maxVerRes = await client.query<{ max_version: number }>(
+          `SELECT COALESCE(MAX(version_no), 0) as max_version FROM supplier_document_versions WHERE document_id = $1`,
+          [docId]
+        );
+        nextVersionNo = Number(maxVerRes.rows[0]?.max_version || 0) + 1;
       } else {
         const newDocRes = await client.query<{ id: string }>(
           `INSERT INTO supplier_documents (supplier_id, document_type_id, title, status)

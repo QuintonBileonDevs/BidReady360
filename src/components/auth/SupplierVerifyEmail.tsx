@@ -47,7 +47,10 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
     completeVerification();
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
+    if (supplier.email) {
+      await authApi.resendVerification(supplier.email).catch(() => {});
+    }
     setResendCountdown(45);
   };
 

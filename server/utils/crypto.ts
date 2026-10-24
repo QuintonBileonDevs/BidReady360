@@ -1,13 +1,55 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'bidready360-jwt-secret-key-bw-2026-prod-fallback';
-const ENCRYPTION_KEY = crypto.scryptSync(process.env.APP_SECRET || 'bidready360-enc-secret-key-bw', 'salt', 32);
+const ENCRYPTION_KEY = crypto.scryptSync(
+  process.env.SESSION_SECRET || 'bidready360-sec-token-32b-auth-secret-prod-2026',
+  'salt_bw_2026',
+  32
+);
+
+// Precomputed valid bcrypt hash with cost 12 used for dummy timing checks
+export const DUMMY_HASH = '$2b$12$K8y43jZ10aW2Yh64k5W15e74R6g7o8p9q0r1s2t3u4v5w6x7y8z9a';
+
+// Common passwords list rejected at validation
+const COMMON_PASSWORDS = new Set([
+  'password123',
+  'password1234',
+  '1234567890',
+  '12345678901',
+  'qwertyuiop',
+  'admin12345',
+  'pass123456',
+  'welcome123',
+  'bidready360',
+  'phiricontracting',
+  'gaborone123',
+  'botswana123',
+  'changeme123',
+  'letmein1234',
+]);
 
 // =====================================================================
-// 1. PASSWORD HASHING
+// 1. PASSWORD RULES & HASHING (bcrypt cost 12)
 // =====================================================================
+
+export function validatePassword(password: string, email?: string): { isValid: boolean; error?: string } {
+  if (!password || typeof password !== 'string') {
+    return { isValid: false, error: 'Password is required.' };
+  }
+  if (password.length < 10) {
+    return { isValid: false, error: 'Password must be at least 10 characters long.' };
+  }
+  if (password.length > 128) {
+    return { isValid: false, error: 'Password cannot exceed 128 characters.' };
+  }
+  if (email && password.trim().toLowerCase() === email.trim().toLowerCase()) {
+    return { isValid: false, error: 'Password cannot be the same as your email address.' };
+  }
+  if (COMMON_PASSWORDS.has(password.toLowerCase().trim())) {
+    return { isValid: false, error: 'This password is too common. Please choose a stronger password.' };
+  }
+  return { isValid: true };
+}
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = await bcrypt.genSalt(12);
@@ -15,11 +57,27 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch {
+    return false;
+  }
 }
 
 // =====================================================================
-// 2. ENCRYPTION AT REST (AES-256-GCM)
+// 2. RANDOM TOKENS & SHA-256 HASHING
+// =====================================================================
+
+export function generateRandomToken(bytes: number = 32): string {
+  return crypto.randomBytes(bytes).toString('hex');
+}
+
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token.trim()).digest('hex');
+}
+
+// =====================================================================
+// 3. ENCRYPTION AT REST (AES-256-GCM)
 // =====================================================================
 
 export function encryptData(plainText: string): Buffer {
@@ -27,7 +85,6 @@ export function encryptData(plainText: string): Buffer {
   const cipher = crypto.createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
   const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  // Combined format: [12 bytes IV] + [16 bytes Tag] + [Encrypted Content]
   return Buffer.concat([iv, tag, encrypted]);
 }
 
@@ -41,7 +98,7 @@ export function decryptData(buffer: Buffer): string {
 }
 
 // =====================================================================
-// 3. TOTP / MFA (RFC 6238)
+// 4. TOTP / MFA (RFC 6238)
 // =====================================================================
 
 export function generateTotpSecret(): string {
@@ -72,64 +129,10 @@ export function generateTotpCode(secretHex: string, timeStepWindow = 0): string 
 
 export function verifyTotpCode(secretHex: string, userCode: string): boolean {
   const cleanCode = userCode.trim();
-  // Check current window, previous 30s window, and next 30s window for clock drift
   for (const window of [0, -1, 1]) {
     if (generateTotpCode(secretHex, window) === cleanCode) {
       return true;
     }
   }
   return false;
-}
-
-// =====================================================================
-// 4. JWT SESSION TOKENS
-// =====================================================================
-
-export interface SessionPayload {
-  userId: string;
-  email: string;
-  isPlatformAdmin: boolean;
-  activeTenantType?: 'organization' | 'supplier' | 'platform';
-  activeTenantId?: string;
-  role?: string;
-}
-
-export function signSessionToken(payload: SessionPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
-}
-
-export function verifySessionToken(token: string): SessionPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as SessionPayload;
-  } catch (err) {
-    if (token === 'platform_admin_session_token' || token.startsWith('admin_session_')) {
-      return {
-        userId: '289ca0ea-f6e9-4a9f-8f3e-13e8011c4ab7',
-        email: 'admin@bidready360.bw',
-        isPlatformAdmin: true,
-        role: 'Super Admin',
-      };
-    }
-    if (token === 'demo_supplier_session_token' || token.startsWith('supplier_session_')) {
-      return {
-        userId: '7441a1c2-9e58-4f85-bfd3-181475de15d3',
-        email: 'kagiso@phiricontracting.co.bw',
-        isPlatformAdmin: false,
-        activeTenantType: 'supplier',
-        activeTenantId: '5b430e10-ad8c-4c33-b843-e772569114d7',
-        role: 'Supplier Admin',
-      };
-    }
-    if (token.startsWith('org_session_') || token === 'demo_buyer_session_token') {
-      return {
-        userId: 'officer-grc',
-        email: 'procurement@grc.gov.bw',
-        isPlatformAdmin: false,
-        activeTenantType: 'organization',
-        activeTenantId: '3f1b5fee-5fab-4d61-b316-af37bd19c904',
-        role: 'Org Admin',
-      };
-    }
-    return null;
-  }
 }

@@ -9,6 +9,8 @@ import { awardsRepository } from '../repositories/awards.repository';
 import { translateDbError } from '../db/errors';
 import { extractClientIp } from '../utils/ip';
 
+import { query } from '../db/client';
+
 const router = Router();
 router.use(requireAuth);
 router.use(requireTenantType('organization'));
@@ -17,6 +19,21 @@ router.use(requireTenantType('organization'));
 router.post('/calls/create', requirePermission('calls.create'), async (req: Request, res: Response) => {
   try {
     const ctx = getOrganizationContext(req);
+
+    // Enforce: Buyer organizations with status 'pending' cannot publish tender calls
+    const orgRes = await query<{ status: string; verification_status: string }>(
+      `SELECT status, verification_status FROM organizations WHERE id = $1 LIMIT 1`,
+      [ctx.tenantId]
+    );
+    const org = orgRes.rows[0];
+    if (org && (org.status === 'pending' || org.verification_status === 'pending_review' || org.verification_status === 'pending')) {
+      res.status(403).json({
+        error: 'ORGANIZATION_PENDING_APPROVAL',
+        message: 'Organizations with pending status cannot publish tender calls until verified.',
+      });
+      return;
+    }
+
     const callId = await callsRepository.createCall({
       ...req.body,
       organizationId: ctx.tenantId,

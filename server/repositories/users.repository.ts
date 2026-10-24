@@ -48,42 +48,6 @@ export class UsersRepository {
   }
 
   async findById(id: string): Promise<User | null> {
-    if (id === 'admin-platform') {
-      const adminRes = await query<User>(
-        `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
-                phone, preferred_language AS "preferredLanguage", status,
-                is_platform_admin AS "isPlatformAdmin", email_verified_at AS "emailVerifiedAt",
-                phone_verified_at AS "phoneVerifiedAt", mfa_enabled AS "mfaEnabled",
-                mfa_secret_encrypted AS "mfaSecretEncrypted", mfa_type AS "mfaType",
-                last_login_at AS "lastLoginAt", failed_login_attempts AS "failedLoginAttempts",
-                locked_until AS "lockedUntil", created_at AS "createdAt"
-         FROM users WHERE is_platform_admin = TRUE AND deleted_at IS NULL LIMIT 1`
-      );
-      if (adminRes.rows[0]) return adminRes.rows[0];
-    }
-
-    if (id === 'officer-grc') {
-      return {
-        id: 'officer-grc',
-        email: 'procurement@grc.gov.bw',
-        passwordHash: null,
-        fullName: 'Procurement Officer',
-        phone: '+267 365 7400',
-        preferredLanguage: 'en',
-        status: 'active',
-        isPlatformAdmin: false,
-        emailVerifiedAt: new Date().toISOString(),
-        phoneVerifiedAt: null,
-        mfaEnabled: false,
-        mfaSecretEncrypted: null,
-        mfaType: null,
-        lastLoginAt: new Date().toISOString(),
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        createdAt: new Date().toISOString(),
-      };
-    }
-
     const res = await query<User>(
       `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
               phone, preferred_language AS "preferredLanguage", status,
@@ -150,21 +114,6 @@ export class UsersRepository {
   }
 
   async getUserMemberships(userId: string): Promise<UserTenantMembership[]> {
-    if (userId === 'officer-grc') {
-      return [
-        {
-          tenantType: 'organization',
-          tenantId: '3f1b5fee-5fab-4d61-b316-af37bd19c904',
-          tenantName: 'Gaborone Regional Council',
-          roleId: 'role-org-admin',
-          roleName: 'Org Admin',
-          isOwner: true,
-          status: 'active',
-          permissions: ['calls:read', 'calls:write', 'bids:read', 'evaluations:read', 'evaluations:write', 'awards:read', 'awards:write'],
-        },
-      ];
-    }
-
     // Fetch Organization memberships
     const orgMembersRes = await query(
       `SELECT 'organization' AS "tenantType",

@@ -3,13 +3,16 @@ import { AuthLayout } from './AuthLayout';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { PasswordRulesCheck } from './PasswordRulesCheck';
-import { Lock, Eye, EyeOff, CheckCircle2, ArrowRight } from 'lucide-react';
+import { authApi } from '../../services/api';
+import { Lock, Eye, EyeOff, CheckCircle2, ArrowRight, KeyRound } from 'lucide-react';
 
 interface ResetPasswordProps {
   onNavigate: (route: string) => void;
 }
 
 export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
+  const initialToken = new URLSearchParams(window.location.search).get('token') || '';
+  const [token, setToken] = useState(initialToken);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,10 +20,14 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token.trim()) {
+      setError('Password reset token is required. Please check the link from your email.');
+      return;
+    }
     if (password.length < 10) {
-      setError('Password must meet all minimum criteria.');
+      setError('Password must meet all minimum criteria (at least 10 characters).');
       return;
     }
     if (password !== confirmPassword) {
@@ -31,13 +38,17 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
     setIsLoading(true);
     setError(null);
 
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.resetPassword(token.trim(), password);
       setIsSuccess(true);
       setTimeout(() => {
         onNavigate('supplier-login');
-      }, 1000);
-    }, 700);
+      }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Password reset link is invalid or has expired.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -51,7 +62,7 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
             Create new password
           </h2>
           <p className="text-[14px] text-[#6B7A87]">
-            Your new password will take effect immediately.
+            Your new password will take effect immediately and sign out all existing sessions.
           </p>
         </div>
 
@@ -66,9 +77,21 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3.5 rounded-[8px] bg-rose-50 text-[#C2412D] border border-rose-200 text-[14px]">
+              <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 text-[#C2412D] border border-rose-200 dark:border-rose-900 text-[14px]">
                 {error}
               </div>
+            )}
+
+            {!initialToken && (
+              <Input
+                label="Reset security token *"
+                type="text"
+                placeholder="Paste the reset token from your email"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                leftIcon={<KeyRound className="w-4 h-4" />}
+                required
+              />
             )}
 
             <div className="space-y-1">
@@ -83,7 +106,7 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="focus:outline-none hover:text-[#10212E] dark:hover:text-white"
+                    className="focus:outline-none hover:text-[#10212E] dark:hover:text-white cursor-pointer"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

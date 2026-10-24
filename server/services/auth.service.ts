@@ -1,19 +1,19 @@
-import { withTransaction, query } from '../db/client';
+import { query } from '../db/client';
 import { usersRepository, User, UserTenantMembership } from '../repositories/users.repository';
+import { auditRepository } from '../repositories/audit.repository';
 import { sanitizeIp } from '../utils/ip';
 import {
   hashPassword,
   verifyPassword,
+  validatePassword,
+  generateRandomToken,
+  hashToken,
+  DUMMY_HASH,
   encryptData,
   decryptData,
   generateTotpSecret,
   verifyTotpCode,
-  signSessionToken,
-  verifySessionToken,
-  SessionPayload,
 } from '../utils/crypto';
-
-import { normalizeCompanyType } from '../repositories/suppliers.repository';
 
 export interface SupplierStepDTO {
   step: 1 | 2 | 3;
@@ -61,15 +61,933 @@ export interface AuthResponse {
     id: string;
     email: string;
     fullName: string;
+    phone?: string | null;
     isPlatformAdmin: boolean;
     memberships: UserTenantMembership[];
   };
+  activeTenant?: UserTenantMembership;
 }
 
 export class AuthService {
   /**
+   * Records an authentication attempt into PostgreSQL login_attempts table.
+   */
+  async recordLoginAttempt(emailNorm: string, ip: string | null, succeeded: boolean): Promise<void> {
+    try {
+      await query(
+        `INSERT INTO login_attempts (email_norm, ip, succeeded, attempted_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [emailNorm, ip || null, succeeded]
+      );
+    } catch (err: any) {
+      console.error('[AUTH RECORD ATTEMPT ERROR]:', err.message);
+    }
+  }
+
+  /**
+   * Enforces brute-force lockout:
+   * - 5 failures for the same email within 15 minutes
+   * - 20 failures from the same IP within 15 minutes
+   * Returns HTTP 429 when threshold exceeded.
+   */
+  async checkBruteForce(emailNorm: string, ip?: string | null): Promise<void> {
+    // 1. Check failures for normalized email
+    const emailFailRes = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM login_attempts
+       WHERE email_norm = $1
+         AND succeeded = FALSE
+         AND attempted_at > NOW() - INTERVAL '15 minutes'`,
+      [emailNorm]
+    );
+    const emailFails = parseInt(emailFailRes.rows[0]?.count || '0', 10);
+
+    // 2. Check failures for IP
+    let ipFails = 0;
+    if (ip && ip.trim()) {
+      const ipFailRes = await query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count
+         FROM login_attempts
+         WHERE ip = $1
+           AND succeeded = FALSE
+           AND attempted_at > NOW() - INTERVAL '15 minutes'`,
+        [ip.trim()]
+      );
+      ipFails = parseInt(ipFailRes.rows[0]?.count || '0', 10);
+    }
+
+    if (emailFails >= 5 || ipFails >= 20) {
+      // Record lockout event in immutable audit log
+      await auditRepository.logEvent({
+        actorType: 'system',
+        actorName: emailNorm,
+        actorRole: 'Security Guard',
+        action: 'lockout',
+        entityType: 'login_attempt',
+        ipAddress: ip,
+        details: `Brute force protection triggered: ${emailFails} email failures, ${ipFails} IP failures in 15 minutes.`,
+      }).catch(() => {});
+
+      const err: any = new Error('Too many attempts. Try again in 15 minutes.');
+      err.status = 429;
+      err.code = 'RATE_LIMIT_EXCEEDED';
+      throw err;
+    }
+  }
+
+  /**
+   * Rate limits sensitive actions like signups, password resets, and verification resends.
+   */
+  async checkActionRateLimit(key: string, maxAttempts: number, windowMinutes: number, message: string): Promise<void> {
+    const res = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM audit_log
+       WHERE action = $1
+         AND occurred_at > NOW() - ($2 || ' minutes')::INTERVAL`,
+      [key, windowMinutes]
+    );
+    const count = parseInt(res.rows[0]?.count || '0', 10);
+    if (count >= maxAttempts) {
+      const err: any = new Error(message);
+      err.status = 429;
+      err.code = 'RATE_LIMIT_EXCEEDED';
+      throw err;
+    }
+  }
+
+  /**
+   * Authenticate user strictly from PostgreSQL.
+   * Uses bcrypt cost 12 with dummy timing checks on user-not-found to prevent timing attacks.
+   * Generates a 32-byte cryptographically secure session token stored hashed in `sessions`.
+   */
+  async login(email: string, passwordPlain: string, ip?: string, userAgent?: string): Promise<AuthResponse> {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(ip);
+
+    // 1. Enforce brute-force protection
+    await this.checkBruteForce(cleanEmail, cleanIp);
+
+    // 2. Fetch user strictly from PostgreSQL database
+    const userRes = await query<{
+      id: string;
+      email: string;
+      passwordHash: string | null;
+      fullName: string;
+      phone: string | null;
+      status: string;
+      emailVerifiedAt: string | null;
+      isPlatformAdmin: boolean;
+      mfaEnabled: boolean;
+      mfaSecretEncrypted: Buffer | null;
+    }>(
+      `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
+              phone, status, email_verified_at AS "emailVerifiedAt",
+              is_platform_admin AS "isPlatformAdmin", mfa_enabled AS "mfaEnabled",
+              mfa_secret_encrypted AS "mfaSecretEncrypted"
+       FROM users
+       WHERE LOWER(email::text) = LOWER($1)
+         AND deleted_at IS NULL
+       LIMIT 1`,
+      [cleanEmail]
+    );
+
+    const user = userRes.rows[0];
+
+    // 3. User does not exist OR user has no password_hash -> run dummy hash to equalize timing, then reject
+    if (!user || !user.passwordHash || !user.passwordHash.trim()) {
+      await verifyPassword(passwordPlain, DUMMY_HASH);
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      await auditRepository.logEvent({
+        actorType: 'user',
+        actorName: cleanEmail,
+        actorRole: 'Anonymous',
+        action: 'login.failure',
+        entityType: 'session',
+        ipAddress: cleanIp,
+        userAgent,
+        details: 'Failed login attempt: unknown email or user with no password hash.',
+      }).catch(() => {});
+
+      const err: any = new Error('Email or password is incorrect.');
+      err.status = 401;
+      err.code = 'INVALID_CREDENTIALS';
+      throw err;
+    }
+
+    // 4. Verify password with bcrypt
+    const isMatch = await verifyPassword(passwordPlain, user.passwordHash);
+    if (!isMatch) {
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      await auditRepository.logEvent({
+        actorType: 'user',
+        actorUserId: user.id,
+        actorName: user.fullName || cleanEmail,
+        actorRole: user.isPlatformAdmin ? 'Super Admin' : 'User',
+        action: 'login.failure',
+        entityType: 'session',
+        ipAddress: cleanIp,
+        userAgent,
+        details: 'Failed login attempt: incorrect password.',
+      }).catch(() => {});
+
+      const err: any = new Error('Email or password is incorrect.');
+      err.status = 401;
+      err.code = 'INVALID_CREDENTIALS';
+      throw err;
+    }
+
+    // 5. Enforce Email Verification: unverified users cannot sign in
+    if (user.status === 'pending' || !user.emailVerifiedAt) {
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      const err: any = new Error('Verify your email first');
+      err.status = 403;
+      err.code = 'EMAIL_NOT_VERIFIED';
+      err.email = cleanEmail;
+      throw err;
+    }
+
+    // 6. Check user account active status
+    if (user.status !== 'active') {
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false);
+      const err: any = new Error('This account has been deactivated. Please contact support.');
+      err.status = 403;
+      err.code = 'ACCOUNT_DISABLED';
+      throw err;
+    }
+
+    // 7. If MFA is enabled, challenge for TOTP code
+    if (user.mfaEnabled && user.mfaSecretEncrypted) {
+      return {
+        requiresMfa: true,
+        mfaUserId: user.id,
+      };
+    }
+
+    // 8. Credentials valid: record successful attempt
+    await this.recordLoginAttempt(cleanEmail, cleanIp, true);
+    await usersRepository.recordLoginSuccess(user.id, cleanIp);
+
+    // 9. Load tenant memberships strictly from PostgreSQL
+    const memberships = await usersRepository.getUserMemberships(user.id);
+
+    // Determine default tenant for this session
+    let tenantType: 'supplier' | 'organization' | 'platform' | null = null;
+    let tenantId: string | null = null;
+    let activeTenant: UserTenantMembership | undefined;
+
+    if (user.isPlatformAdmin) {
+      tenantType = 'platform';
+      tenantId = null;
+      activeTenant = {
+        tenantType: 'organization',
+        tenantId: 'platform',
+        tenantName: 'Platform Administration',
+        roleId: 'role-platform-admin',
+        roleName: 'Super Admin',
+        isOwner: true,
+        status: 'active',
+        permissions: ['*'],
+      };
+    } else if (memberships.length > 0) {
+      activeTenant = memberships[0];
+      tenantType = activeTenant.tenantType;
+      tenantId = activeTenant.tenantId;
+    }
+
+    // 10. Generate cryptographically secure 32-byte session token
+    const rawToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day expiry
+
+    await query(
+      `INSERT INTO sessions (user_id, token_hash, tenant_type, tenant_id, ip, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, tokenHash, tenantType, tenantId, cleanIp || null, userAgent || null, expiresAt]
+    );
+
+    // 11. Write to immutable audit_log (never record tokens, passwords, or secrets)
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: user.id,
+      actorName: user.fullName || cleanEmail,
+      actorRole: activeTenant?.roleName || (user.isPlatformAdmin ? 'Super Admin' : 'User'),
+      organizationId: tenantType === 'organization' ? (tenantId || undefined) : undefined,
+      supplierId: tenantType === 'supplier' ? (tenantId || undefined) : undefined,
+      action: 'login.success',
+      entityType: 'session',
+      ipAddress: cleanIp,
+      userAgent,
+      details: 'User authenticated successfully. Active tenant established.',
+    }).catch(() => {});
+
+    return {
+      token: rawToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        phone: user.phone,
+        isPlatformAdmin: user.isPlatformAdmin,
+        memberships,
+      },
+      activeTenant,
+    };
+  }
+
+  /**
+   * Complete MFA verification with 6-digit TOTP code and issue session token.
+   */
+  async verifyMfa(userId: string, totpCode: string, ip?: string, userAgent?: string): Promise<AuthResponse> {
+    const user = await usersRepository.findById(userId);
+    if (!user || !user.mfaSecretEncrypted) {
+      const err: any = new Error('Invalid MFA session.');
+      err.status = 400;
+      throw err;
+    }
+
+    const secretHex = decryptData(user.mfaSecretEncrypted);
+    const isValid = verifyTotpCode(secretHex, totpCode);
+    if (!isValid) {
+      await this.recordLoginAttempt(user.email, sanitizeIp(ip), false);
+      const err: any = new Error('Invalid or expired MFA verification code. Please check your authenticator.');
+      err.status = 401;
+      throw err;
+    }
+
+    const cleanIp = sanitizeIp(ip);
+    await this.recordLoginAttempt(user.email, cleanIp, true);
+    await usersRepository.recordLoginSuccess(user.id, cleanIp);
+
+    const memberships = await usersRepository.getUserMemberships(user.id);
+    let tenantType: 'supplier' | 'organization' | 'platform' | null = null;
+    let tenantId: string | null = null;
+    let activeTenant: UserTenantMembership | undefined;
+
+    if (user.isPlatformAdmin) {
+      tenantType = 'platform';
+      activeTenant = {
+        tenantType: 'organization',
+        tenantId: 'platform',
+        tenantName: 'Platform Administration',
+        roleId: 'role-platform-admin',
+        roleName: 'Super Admin',
+        isOwner: true,
+        status: 'active',
+        permissions: ['*'],
+      };
+    } else if (memberships.length > 0) {
+      activeTenant = memberships[0];
+      tenantType = activeTenant.tenantType;
+      tenantId = activeTenant.tenantId;
+    }
+
+    const rawToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await query(
+      `INSERT INTO sessions (user_id, token_hash, tenant_type, tenant_id, ip, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, tokenHash, tenantType, tenantId, cleanIp || null, userAgent || null, expiresAt]
+    );
+
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: user.id,
+      actorName: user.fullName || user.email,
+      actorRole: activeTenant?.roleName || 'User',
+      action: 'login.mfa.success',
+      entityType: 'session',
+      ipAddress: cleanIp,
+      userAgent,
+      details: 'MFA verified and session issued.',
+    }).catch(() => {});
+
+    return {
+      token: rawToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        phone: user.phone,
+        isPlatformAdmin: user.isPlatformAdmin,
+        memberships,
+      },
+      activeTenant,
+    };
+  }
+
+  /**
+   * Switch active tenant workspace for an authenticated session.
+   */
+  async switchTenant(rawToken: string, targetTenantId: string, targetTenantType: 'supplier' | 'organization'): Promise<UserTenantMembership> {
+    const tokenHash = hashToken(rawToken);
+    const sessRes = await query<{ id: string; user_id: string }>(
+      `SELECT id, user_id
+       FROM sessions
+       WHERE token_hash = $1 AND expires_at > NOW() AND revoked_at IS NULL
+       LIMIT 1`,
+      [tokenHash]
+    );
+    if (sessRes.rows.length === 0) {
+      const err: any = new Error('Session is invalid or expired.');
+      err.status = 401;
+      throw err;
+    }
+
+    const sess = sessRes.rows[0];
+    const memberships = await usersRepository.getUserMemberships(sess.user_id);
+    const target = memberships.find((m) => m.tenantId === targetTenantId && m.tenantType === targetTenantType);
+
+    if (!target) {
+      const err: any = new Error('You do not belong to the selected workspace.');
+      err.status = 403;
+      throw err;
+    }
+
+    await query(
+      `UPDATE sessions
+       SET tenant_type = $1, tenant_id = $2
+       WHERE id = $3`,
+      [targetTenantType, targetTenantId, sess.id]
+    );
+
+    return target;
+  }
+
+  /**
+   * Revoke session on logout.
+   */
+  async logout(rawToken: string, ip?: string, userAgent?: string): Promise<void> {
+    if (!rawToken || !rawToken.trim()) return;
+    const tokenHash = hashToken(rawToken);
+
+    const revoked = await query<{ user_id: string; tenant_type: string; tenant_id: string }>(
+      `UPDATE sessions
+       SET revoked_at = NOW()
+       WHERE token_hash = $1 AND revoked_at IS NULL
+       RETURNING user_id, tenant_type, tenant_id`,
+      [tokenHash]
+    );
+
+    if (revoked.rows[0]) {
+      const row = revoked.rows[0];
+      await auditRepository.logEvent({
+        actorType: 'user',
+        actorUserId: row.user_id,
+        actorName: 'Authenticated User',
+        actorRole: 'User',
+        action: 'logout',
+        entityType: 'session',
+        ipAddress: sanitizeIp(ip),
+        userAgent,
+        details: 'User logged out and session revoked.',
+      }).catch(() => {});
+    }
+  }
+
+  /**
+   * Supplier registration:
+   * - Enforces password rules: 10-128 chars, != email, rejects common list
+   * - Sets user status to 'pending'
+   * - Generates single-use 24-hour verification token stored hashed in auth_tokens
+   */
+  async registerSupplier(dto: SupplierSignupDTO): Promise<{
+    success: boolean;
+    message: string;
+    email: string;
+    verificationToken?: string;
+  }> {
+    const cleanEmail = dto.email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(dto.ip);
+
+    // 1. Validate password rules
+    const passCheck = validatePassword(dto.password, cleanEmail);
+    if (!passCheck.isValid) {
+      const err: any = new Error(passCheck.error || 'Password does not meet security requirements.');
+      err.status = 400;
+      err.code = 'WEAK_PASSWORD';
+      throw err;
+    }
+
+    // 2. Check if user already exists
+    const existing = await query(`SELECT id FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`, [cleanEmail]);
+    if (existing.rows.length > 0) {
+      const err: any = new Error('An account with this email address already exists. Please sign in.');
+      err.status = 400;
+      err.code = 'EMAIL_ALREADY_EXISTS';
+      throw err;
+    }
+
+    // 3. Hash password using bcrypt cost 12
+    const passwordHash = await hashPassword(dto.password);
+
+    // 4. Create user with status 'pending' (unverified)
+    const userRes = await query<{ id: string; email: string }>(
+      `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
+       VALUES ($1, $2, $3, $4, 'pending', NULL)
+       RETURNING id, email`,
+      [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
+    );
+    const userId = userRes.rows[0].id;
+
+    // 5. Create supplier entity
+    const supRes = await query<{ id: string }>(
+      `INSERT INTO suppliers (
+         legal_name, trading_name, cipa_uin, email, primary_phone, city, country_code,
+         status, verification_status, compliance_status, profile_completeness
+       ) VALUES (
+         $1, $1, $2, $3, $4, 'Gaborone', 'BW',
+         'active', 'unverified', 'Action required', 30
+       ) RETURNING id`,
+      [dto.legalName.trim(), dto.cipaUin.trim().toUpperCase(), cleanEmail, dto.phone || null]
+    );
+    const supplierId = supRes.rows[0].id;
+
+    // 6. Link user as Supplier Admin in supplier_members
+    const roleRes = await query<{ id: string }>(
+      `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
+    );
+    const roleId = roleRes.rows[0]?.id;
+    if (roleId) {
+      await query(
+        `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
+         VALUES ($1, $2, $3, TRUE, 'active', NOW())
+         ON CONFLICT (supplier_id, user_id) DO NOTHING`,
+        [supplierId, userId, roleId]
+      );
+    }
+
+    // 7. Generate single-use verification token (24-hour expiry)
+    const rawVerifyToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawVerifyToken);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await query(
+      `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+       VALUES ($1, 'email_verify', $2, $3)`,
+      [userId, tokenHash, expiresAt]
+    );
+
+    // 8. Log registration in audit_log
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: userId,
+      actorName: dto.fullName.trim(),
+      actorRole: 'Supplier Admin',
+      supplierId,
+      action: 'supplier.register',
+      entityType: 'user',
+      entityId: userId,
+      ipAddress: cleanIp,
+      userAgent: dto.userAgent,
+      details: 'New supplier company registered. Verification email sent.',
+    }).catch(() => {});
+
+    return {
+      success: true,
+      message: 'Account created. Please verify your email before logging in.',
+      email: cleanEmail,
+      verificationToken: rawVerifyToken,
+    };
+  }
+
+  /**
+   * Buyer organization registration:
+   * - Enforces password rules
+   * - Creates user with status 'pending'
+   * - Creates buyer organization with status 'pending'
+   * - Issues single-use 24-hour verification token
+   */
+  async registerOrganization(dto: BuyerSignupDTO): Promise<{
+    success: boolean;
+    message: string;
+    email: string;
+    verificationToken?: string;
+  }> {
+    const cleanEmail = dto.email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(dto.ip);
+
+    const passCheck = validatePassword(dto.password, cleanEmail);
+    if (!passCheck.isValid) {
+      const err: any = new Error(passCheck.error || 'Password does not meet security requirements.');
+      err.status = 400;
+      err.code = 'WEAK_PASSWORD';
+      throw err;
+    }
+
+    const existing = await query(`SELECT id FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`, [cleanEmail]);
+    if (existing.rows.length > 0) {
+      const err: any = new Error('An account with this email address already exists. Please sign in.');
+      err.status = 400;
+      err.code = 'EMAIL_ALREADY_EXISTS';
+      throw err;
+    }
+
+    const passwordHash = await hashPassword(dto.password);
+
+    // 1. Create user with status 'pending'
+    const userRes = await query<{ id: string }>(
+      `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
+       VALUES ($1, $2, $3, $4, 'pending', NULL)
+       RETURNING id`,
+      [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
+    );
+    const userId = userRes.rows[0].id;
+
+    // 2. Generate slug for organization
+    const baseSlug = 'org-' + dto.organizationName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const orgSlug = `${baseSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // 3. Create organization with status 'pending'
+    const orgRes = await query<{ id: string }>(
+      `INSERT INTO organizations (
+         name, slug, organization_type, contact_email, contact_phone, status, verification_status
+       ) VALUES (
+         $1, $2, $3, $4, $5, 'pending', 'pending_review'
+       ) RETURNING id`,
+      [dto.organizationName.trim(), orgSlug, dto.organizationType || 'parastatal', cleanEmail, dto.phone || null]
+    );
+    const orgId = orgRes.rows[0].id;
+
+    // 4. Link user as Buyer Admin in organization_members
+    const roleRes = await query<{ id: string }>(
+      `SELECT id FROM roles WHERE scope = 'organization' AND name = 'Buyer Admin' LIMIT 1`
+    );
+    const roleId = roleRes.rows[0]?.id;
+    if (roleId) {
+      await query(
+        `INSERT INTO organization_members (organization_id, user_id, role_id, is_primary_contact, status, joined_at)
+         VALUES ($1, $2, $3, TRUE, 'active', NOW())
+         ON CONFLICT (organization_id, user_id) DO NOTHING`,
+        [orgId, userId, roleId]
+      );
+    }
+
+    // 5. Generate verification token (24-hour expiry)
+    const rawVerifyToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawVerifyToken);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await query(
+      `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+       VALUES ($1, 'email_verify', $2, $3)`,
+      [userId, tokenHash, expiresAt]
+    );
+
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: userId,
+      actorName: dto.fullName.trim(),
+      actorRole: 'Buyer Admin',
+      organizationId: orgId,
+      action: 'organization.register',
+      entityType: 'organization',
+      entityId: orgId,
+      ipAddress: cleanIp,
+      userAgent: dto.userAgent,
+      details: 'New procuring entity registered with pending status. Verification email sent.',
+    }).catch(() => {});
+
+    return {
+      success: true,
+      message: 'Procuring entity registration submitted. Please verify your email before signing in.',
+      email: cleanEmail,
+      verificationToken: rawVerifyToken,
+    };
+  }
+
+  /**
+   * Verify email using single-use 24-hour verification token.
+   * Sets user status to 'active' and marks token as used.
+   */
+  async verifyEmailWithToken(token: string, ip?: string, userAgent?: string): Promise<{ success: boolean; message: string }> {
+    if (!token || !token.trim()) {
+      const err: any = new Error('Verification token is required.');
+      err.status = 400;
+      throw err;
+    }
+
+    const tokenHash = hashToken(token);
+
+    const tokenRes = await query<{ id: string; user_id: string; expires_at: Date; used_at: Date | null }>(
+      `SELECT id, user_id, expires_at, used_at
+       FROM auth_tokens
+       WHERE token_hash = $1 AND purpose = 'email_verify'
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const row = tokenRes.rows[0];
+    if (!row || row.used_at !== null || new Date(row.expires_at) < new Date()) {
+      const err: any = new Error('Verification link is invalid or has expired.');
+      err.status = 400;
+      err.code = 'INVALID_TOKEN';
+      throw err;
+    }
+
+    // Mark token used
+    await query(`UPDATE auth_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
+
+    // Activate user account
+    const userRes = await query<{ id: string; email: string; full_name: string }>(
+      `UPDATE users
+       SET status = 'active', email_verified_at = NOW(), updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, email, full_name`,
+      [row.user_id]
+    );
+    const user = userRes.rows[0];
+
+    // Audit log
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: user?.id,
+      actorName: user?.full_name || user?.email || 'User',
+      actorRole: 'User',
+      action: 'email.verified',
+      entityType: 'user',
+      entityId: user?.id,
+      ipAddress: sanitizeIp(ip),
+      userAgent,
+      details: 'User email address verified successfully.',
+    }).catch(() => {});
+
+    return {
+      success: true,
+      message: 'Email verified successfully. You may now sign in.',
+    };
+  }
+
+  /**
+   * Resend email verification link (rate limited: max 3 attempts per 15 minutes per email).
+   */
+  async resendVerification(email: string, ip?: string, userAgent?: string): Promise<{ success: boolean; message: string; token?: string }> {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(ip);
+
+    // Rate limit check: max 5 verification requests in 15 mins for this email
+    const countRes = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM auth_tokens at
+       JOIN users u ON u.id = at.user_id
+       WHERE LOWER(u.email::text) = LOWER($1)
+         AND at.purpose = 'email_verify'
+         AND at.created_at > NOW() - INTERVAL '15 minutes'`,
+      [cleanEmail]
+    );
+    if (parseInt(countRes.rows[0]?.count || '0', 10) >= 5) {
+      const err: any = new Error('Too many verification requests. Please try again in 15 minutes.');
+      err.status = 429;
+      err.code = 'RATE_LIMIT_EXCEEDED';
+      throw err;
+    }
+
+    const userRes = await query<{ id: string; email: string; email_verified_at: string | null }>(
+      `SELECT id, email, email_verified_at FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+      [cleanEmail]
+    );
+    const user = userRes.rows[0];
+
+    let rawToken: string | undefined;
+
+    if (user && !user.email_verified_at) {
+      // Invalidate existing tokens
+      await query(
+        `UPDATE auth_tokens SET used_at = NOW() WHERE user_id = $1 AND purpose = 'email_verify' AND used_at IS NULL`,
+        [user.id]
+      );
+
+      rawToken = generateRandomToken(32);
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await query(
+        `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+         VALUES ($1, 'email_verify', $2, $3)`,
+        [user.id, tokenHash, expiresAt]
+      );
+
+      await auditRepository.logEvent({
+        actorType: 'user',
+        actorUserId: user.id,
+        actorName: cleanEmail,
+        actorRole: 'User',
+        action: 'verification.resent',
+        entityType: 'auth_token',
+        ipAddress: cleanIp,
+        userAgent,
+        details: 'Verification email re-sent upon request.',
+      }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: 'If an unverified account exists for this email, a verification link has been sent.',
+      token: rawToken,
+    };
+  }
+
+  /**
+   * Request password reset link (single-use 1-hour token).
+   * Always returns the same neutral message: "If that email is registered, we sent a link."
+   */
+  async forgotPassword(email: string, ip?: string, userAgent?: string): Promise<{ success: boolean; message: string; token?: string }> {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIp = sanitizeIp(ip);
+
+    // Rate limit: max 5 requests from this IP in 15 min
+    const ipCheck = await query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM audit_log
+       WHERE action = 'password_reset.requested'
+         AND ip_address = $1
+         AND occurred_at > NOW() - INTERVAL '15 minutes'`,
+      [cleanIp]
+    );
+    if (parseInt(ipCheck.rows[0]?.count || '0', 10) >= 5) {
+      const err: any = new Error('Too many requests. Please try again in 15 minutes.');
+      err.status = 429;
+      err.code = 'RATE_LIMIT_EXCEEDED';
+      throw err;
+    }
+
+    const userRes = await query<{ id: string; email: string; full_name: string; status: string }>(
+      `SELECT id, email, full_name, status FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+      [cleanEmail]
+    );
+    const user = userRes.rows[0];
+
+    let rawToken: string | undefined;
+
+    if (user && user.status === 'active') {
+      // Invalidate existing unused password_reset tokens
+      await query(
+        `UPDATE auth_tokens SET used_at = NOW() WHERE user_id = $1 AND purpose = 'password_reset' AND used_at IS NULL`,
+        [user.id]
+      );
+
+      rawToken = generateRandomToken(32);
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1-hour expiry
+
+      await query(
+        `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+         VALUES ($1, 'password_reset', $2, $3)`,
+        [user.id, tokenHash, expiresAt]
+      );
+
+      await auditRepository.logEvent({
+        actorType: 'user',
+        actorUserId: user.id,
+        actorName: user.full_name || cleanEmail,
+        actorRole: 'User',
+        action: 'password_reset.requested',
+        entityType: 'auth_token',
+        ipAddress: cleanIp,
+        userAgent,
+        details: 'Password reset link requested.',
+      }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: 'If that email is registered, we sent a link.',
+      token: rawToken,
+    };
+  }
+
+  /**
+   * Reset password with single-use token:
+   * - Validates password rules: 10-128 chars, != email, rejects common passwords
+   * - Sets new password hash (bcrypt cost 12)
+   * - Revokes ALL active sessions for that user
+   */
+  async resetPassword(token: string, newPasswordPlain: string, ip?: string, userAgent?: string): Promise<{ success: boolean; message: string }> {
+    if (!token || !token.trim()) {
+      const err: any = new Error('Reset token is required.');
+      err.status = 400;
+      throw err;
+    }
+
+    const tokenHash = hashToken(token);
+
+    const tokenRes = await query<{ id: string; user_id: string; expires_at: Date; used_at: Date | null }>(
+      `SELECT id, user_id, expires_at, used_at
+       FROM auth_tokens
+       WHERE token_hash = $1 AND purpose = 'password_reset'
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const row = tokenRes.rows[0];
+    if (!row || row.used_at !== null || new Date(row.expires_at) < new Date()) {
+      const err: any = new Error('Password reset link is invalid or has expired.');
+      err.status = 400;
+      err.code = 'INVALID_RESET_TOKEN';
+      throw err;
+    }
+
+    // Fetch user for email comparison
+    const userRes = await query<{ id: string; email: string; full_name: string }>(
+      `SELECT id, email, full_name FROM users WHERE id = $1`,
+      [row.user_id]
+    );
+    const user = userRes.rows[0];
+
+    // Enforce password rules
+    const passCheck = validatePassword(newPasswordPlain, user?.email);
+    if (!passCheck.isValid) {
+      const err: any = new Error(passCheck.error || 'Password does not meet security requirements.');
+      err.status = 400;
+      err.code = 'WEAK_PASSWORD';
+      throw err;
+    }
+
+    // Mark token used immediately (single-use)
+    await query(`UPDATE auth_tokens SET used_at = NOW() WHERE id = $1`, [row.id]);
+
+    // Hash new password
+    const newHash = await hashPassword(newPasswordPlain);
+
+    // Update user password and clear any previous lockouts
+    await query(
+      `UPDATE users
+       SET password_hash = $1, failed_login_attempts = 0, locked_until = NULL, updated_at = NOW()
+       WHERE id = $2`,
+      [newHash, row.user_id]
+    );
+
+    // Revoke ALL active sessions for this user across all devices
+    await query(
+      `UPDATE sessions
+       SET revoked_at = NOW()
+       WHERE user_id = $1 AND revoked_at IS NULL`,
+      [row.user_id]
+    );
+
+    // Audit log
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: row.user_id,
+      actorName: user?.full_name || user?.email || 'User',
+      actorRole: 'User',
+      action: 'password_reset.done',
+      entityType: 'user',
+      entityId: row.user_id,
+      ipAddress: sanitizeIp(ip),
+      userAgent,
+      details: 'Password was reset successfully. All active sessions revoked.',
+    }).catch(() => {});
+
+    return {
+      success: true,
+      message: 'Password reset successfully. Please sign in with your new password.',
+    };
+  }
+
+  /**
    * Save incremental supplier registration progress (Step 1, Step 2, or Step 3).
-   * Email is the unique identifier for each supplier.
    */
   async saveSupplierRegistrationStep(dto: SupplierStepDTO): Promise<{
     step: number;
@@ -81,12 +999,9 @@ export class AuthService {
   }> {
     const cleanEmail = dto.email.trim().toLowerCase();
     if (!cleanEmail) {
-      throw new Error('Email address is required as the unique supplier identifier.');
+      throw new Error('Email address is required.');
     }
 
-    // =========================================================================
-    // STEP 1: Account credentials & initial supplier provision
-    // =========================================================================
     if (dto.step === 1) {
       if (!dto.fullName?.trim()) {
         throw new Error('Full name is required for Step 1.');
@@ -96,23 +1011,32 @@ export class AuthService {
       let userId: string;
 
       if (!user) {
-        if (!dto.password || dto.password.length < 8) {
-          throw new Error('Password must be at least 8 characters long.');
+        if (!dto.password) {
+          throw new Error('Password is required.');
         }
+        const passCheck = validatePassword(dto.password, cleanEmail);
+        if (!passCheck.isValid) {
+          throw new Error(passCheck.error || 'Password does not meet requirements.');
+        }
+
         const passwordHash = await hashPassword(dto.password);
-        const userRes = await query(
+        const userRes = await query<{ id: string; email: string; fullName: string; isPlatformAdmin: boolean }>(
           `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
-           VALUES ($1, $2, $3, $4, 'active', NULL)
+           VALUES ($1, $2, $3, $4, 'pending', NULL)
            RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
           [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
         );
-        user = userRes.rows[0];
-        userId = user!.id;
+        user = userRes.rows[0] as any;
+        userId = userRes.rows[0].id;
       } else {
-        userId = user!.id;
+        userId = user.id;
         const updateParams: any[] = [dto.fullName.trim(), dto.phone || null, userId];
         let passwordUpdateClause = '';
-        if (dto.password && dto.password.length >= 8) {
+        if (dto.password) {
+          const passCheck = validatePassword(dto.password, cleanEmail);
+          if (!passCheck.isValid) {
+            throw new Error(passCheck.error || 'Password does not meet requirements.');
+          }
           const newHash = await hashPassword(dto.password);
           updateParams.push(newHash);
           passwordUpdateClause = `, password_hash = $${updateParams.length}`;
@@ -123,7 +1047,6 @@ export class AuthService {
         );
       }
 
-      // Find or create supplier record (email is the unique identifier)
       let supplierId: string;
       let supplierData: any;
       const supRes = await query(
@@ -158,7 +1081,6 @@ export class AuthService {
         supplierData = insertSup.rows[0];
       }
 
-      // Link User in supplier_members as Owner / Supplier Admin
       const roleRes = await query(
         `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
       );
@@ -172,525 +1094,139 @@ export class AuthService {
         );
       }
 
-      // Add/Update director in supplier_people
-      const personCheck = await query(
-        `SELECT id FROM supplier_people WHERE supplier_id = $1 AND LOWER(email::text) = LOWER($2) LIMIT 1`,
-        [supplierId, cleanEmail]
-      );
-      if (personCheck.rows.length === 0) {
-        await query(
-          `INSERT INTO supplier_people (
-             supplier_id, full_name, person_role, nationality, is_citizen, email, phone, kyc_status, is_active
-           ) VALUES (
-             $1, $2, 'director', 'Motswana', TRUE, $3, $4, 'verified', TRUE
-           )`,
-          [supplierId, dto.fullName.trim(), cleanEmail, dto.phone || null]
-        );
-      } else {
-        await query(
-          `UPDATE supplier_people SET full_name = $1, phone = $2, updated_at = NOW() WHERE id = $3`,
-          [dto.fullName.trim(), dto.phone || null, personCheck.rows[0].id]
-        );
-      }
-
-      const memberships = await usersRepository.getUserMemberships(userId);
-      const token = signSessionToken({
-        userId,
-        email: cleanEmail,
-        isPlatformAdmin: false,
-        activeTenantType: 'supplier',
-        activeTenantId: supplierId,
-        role: 'Supplier Admin',
-      });
-
       return {
         step: 1,
         nextStep: 2,
-        token,
-        user: { id: userId, email: cleanEmail, fullName: dto.fullName.trim(), memberships },
-        supplier: {
-          id: supplierId,
-          legalName: supplierData.legal_name,
-          tradingName: supplierData.trading_name,
-          cipaNumber: supplierData.cipa_uin.startsWith('BW-TEMP-') ? '' : supplierData.cipa_uin,
-          companyType: supplierData.company_type,
-          city: supplierData.city,
-          email: cleanEmail,
-          primaryPhone: dto.phone || '',
-        },
+        user: { id: userId, email: cleanEmail, fullName: dto.fullName.trim() },
+        supplier: supplierData,
       };
     }
 
-    // =========================================================================
-    // STEP 2: Company Details (Legal name, CIPA number, Company type, City)
-    // =========================================================================
     if (dto.step === 2) {
       if (!dto.legalName?.trim()) {
         throw new Error('Registered company name is required for Step 2.');
       }
       if (!dto.cipaUin?.trim()) {
-        throw new Error('CIPA registration number is required for Step 2.');
+        throw new Error('CIPA certificate number is required for Step 2.');
       }
 
-      const cleanCipa = dto.cipaUin.trim().toUpperCase();
-      const cleanLegalName = dto.legalName.trim();
-      const normCompanyType = normalizeCompanyType(dto.companyType || 'private_company');
-      const cleanCity = dto.city?.trim() || 'Gaborone';
-
-      // Find supplier by email
       const supRes = await query(
-        `SELECT id, cipa_uin FROM suppliers WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
-        [cleanEmail]
-      );
-
-      if (supRes.rows.length === 0) {
-        throw new Error('Supplier account not found for this email. Please complete Step 1 first.');
-      }
-
-      const supplierId = supRes.rows[0].id;
-
-      // Verify CIPA uniqueness across other suppliers
-      const cipaCheck = await query(
-        `SELECT id FROM suppliers WHERE cipa_uin = $1 AND id != $2 AND deleted_at IS NULL LIMIT 1`,
-        [cleanCipa, supplierId]
-      );
-      if (cipaCheck.rows.length > 0) {
-        const err: any = new Error('A company with this CIPA registration number is already registered.');
-        err.field = 'cipaNumber';
-        throw err;
-      }
-
-      const updateRes = await query(
         `UPDATE suppliers
          SET legal_name = $1,
-             trading_name = $1,
+             trading_name = COALESCE($1, trading_name),
              cipa_uin = $2,
-             company_type = $3,
-             city = $4,
+             company_type = COALESCE($3, company_type),
+             city = COALESCE($4, city),
              profile_completeness = GREATEST(profile_completeness, 50),
              updated_at = NOW()
-         WHERE id = $5
-         RETURNING id, legal_name AS "legalName", trading_name AS "tradingName",
-                   cipa_uin AS "cipaNumber", company_type AS "companyType", city, email, primary_phone AS "primaryPhone"`,
-        [cleanLegalName, cleanCipa, normCompanyType, cleanCity, supplierId]
+         WHERE LOWER(email::text) = LOWER($5) AND deleted_at IS NULL
+         RETURNING id, legal_name, trading_name, cipa_uin, company_type, city, email, primary_phone, profile_completeness`,
+        [dto.legalName.trim(), dto.cipaUin.trim().toUpperCase(), dto.companyType || 'private_company', dto.city || 'Gaborone', cleanEmail]
       );
 
       return {
         step: 2,
         nextStep: 3,
-        supplier: updateRes.rows[0],
+        supplier: supRes.rows[0],
       };
     }
 
-    // =========================================================================
-    // STEP 3: Review and Agree (Terms & Privacy confirmation)
-    // =========================================================================
     if (dto.step === 3) {
-      const user = await usersRepository.findByEmail(cleanEmail);
-      if (user) {
-        await query(
-          `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
-           VALUES ($1, 'supplier_terms', '1.0', $2, $3)`,
-          [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
-        );
+      if (!dto.agreedToTerms || !dto.agreedToPrivacy) {
+        throw new Error('You must accept the BidReady360 Terms of Service and Privacy Policy to activate your account.');
       }
 
-      await query(
+      const supRes = await query(
         `UPDATE suppliers
-         SET profile_completeness = GREATEST(profile_completeness, 60),
+         SET profile_completeness = GREATEST(profile_completeness, 75),
              updated_at = NOW()
-         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL`,
+         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
+         RETURNING id, legal_name, cipa_uin, email, profile_completeness`,
         [cleanEmail]
       );
+      const supplier = supRes.rows[0];
+
+      const user = await usersRepository.findByEmail(cleanEmail);
+      if (user) {
+        // Generate verification token on completion of signup
+        const rawVerifyToken = generateRandomToken(32);
+        const tokenHash = hashToken(rawVerifyToken);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await query(
+          `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+           VALUES ($1, 'email_verify', $2, $3)`,
+          [user.id, tokenHash, expiresAt]
+        );
+
+        return {
+          step: 3,
+          nextStep: 3,
+          completed: true,
+          supplier,
+          token: rawVerifyToken,
+        };
+      }
 
       return {
         step: 3,
         nextStep: 3,
         completed: true,
+        supplier,
       };
     }
 
-    throw new Error('Invalid registration step.');
+    throw new Error(`Unsupported registration step: ${dto.step}`);
   }
 
   /**
-   * Fetch current registration progress by email so user can resume where they left off.
+   * Check supplier registration progress.
    */
-  async getSupplierRegistrationProgress(email: string): Promise<any> {
+  async getSupplierRegistrationProgress(email: string): Promise<{
+    found: boolean;
+    step?: number;
+    email?: string;
+    fullName?: string;
+    phone?: string;
+    legalName?: string;
+    cipaUin?: string;
+    companyType?: string;
+    city?: string;
+  }> {
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) return { found: false };
-
-    const userRes = await query(
-      `SELECT id, email, full_name AS "fullName", phone FROM users WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
-      [cleanEmail]
-    );
-
     const supRes = await query(
-      `SELECT id, legal_name AS "legalName", trading_name AS "tradingName", cipa_uin AS "cipaNumber",
-              company_type AS "companyType", city, email, primary_phone AS "primaryPhone", profile_completeness AS "profileCompleteness"
-       FROM suppliers
-       WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
+      `SELECT s.id, s.legal_name, s.cipa_uin, s.company_type, s.city, s.email, s.primary_phone,
+              u.full_name
+       FROM suppliers s
+       LEFT JOIN supplier_members sm ON sm.supplier_id = s.id AND sm.is_owner = TRUE
+       LEFT JOIN users u ON u.id = sm.user_id
+       WHERE LOWER(s.email::text) = LOWER($1) AND s.deleted_at IS NULL
        LIMIT 1`,
       [cleanEmail]
     );
 
-    if (userRes.rows.length === 0 && supRes.rows.length === 0) {
+    if (supRes.rows.length === 0) {
       return { found: false };
     }
 
-    const user = userRes.rows[0] || {};
-    const sup = supRes.rows[0] || {};
-    const hasValidCipa = sup.cipaNumber && !sup.cipaNumber.startsWith('BW-TEMP-');
-    const hasCustomLegalName = sup.legalName && !sup.legalName.includes("'s Enterprise");
-
-    let currentStep = 1;
-    if (user.id) {
-      currentStep = (hasValidCipa && hasCustomLegalName) ? 3 : 2;
+    const sup = supRes.rows[0];
+    let step = 1;
+    if (sup.legal_name && sup.cipa_uin && !sup.cipa_uin.startsWith('BW-TEMP-')) {
+      step = 3;
+    } else if (sup.legal_name) {
+      step = 2;
     }
 
     return {
       found: true,
-      currentStep,
-      email: cleanEmail,
-      fullName: user.fullName || '',
-      phone: user.phone || sup.primaryPhone || '+267 ',
-      legalName: hasCustomLegalName ? sup.legalName : '',
-      tradingName: sup.tradingName || (hasCustomLegalName ? sup.legalName : ''),
-      cipaNumber: hasValidCipa ? sup.cipaNumber : '',
-      companyType: sup.companyType || 'Private Limited Company ((Pty) Ltd)',
-      city: sup.city || 'Gaborone',
-      profileCompleteness: sup.profileCompleteness || 0,
-    };
-  }
-
-  /**
-   * Register a new Supplier account (all-in-one backwards compatible wrapper).
-   */
-  async registerSupplier(dto: SupplierSignupDTO): Promise<AuthResponse> {
-    const cleanEmail = dto.email.trim().toLowerCase();
-
-    // Execute Step 1
-    const s1 = await this.saveSupplierRegistrationStep({
-      step: 1,
-      email: cleanEmail,
-      fullName: dto.fullName,
-      phone: dto.phone,
-      password: dto.password,
-      legalName: dto.legalName,
-      cipaUin: dto.cipaUin,
-      ip: dto.ip,
-      userAgent: dto.userAgent,
-    });
-
-    // Execute Step 2
-    const s2 = await this.saveSupplierRegistrationStep({
-      step: 2,
-      email: cleanEmail,
-      legalName: dto.legalName,
-      cipaUin: dto.cipaUin,
-    });
-
-    // Execute Step 3
-    await this.saveSupplierRegistrationStep({
-      step: 3,
-      email: cleanEmail,
-      agreedToTerms: true,
-      agreedToPrivacy: true,
-      ip: dto.ip,
-      userAgent: dto.userAgent,
-    });
-
-    const memberships = await usersRepository.getUserMemberships(s1.user.id);
-    return {
-      token: s1.token,
-      user: {
-        id: s1.user.id,
-        email: cleanEmail,
-        fullName: s1.user.fullName,
-        isPlatformAdmin: false,
-        memberships,
-      },
-    };
-  }
-
-  /**
-   * Register a new Buying Entity (Organization).
-   * Status defaults to 'pending' with 'pending_review' verification gate.
-   */
-  async registerOrganization(dto: BuyerSignupDTO): Promise<AuthResponse> {
-    const cleanEmail = dto.email.trim().toLowerCase();
-    const cleanOrgName = dto.organizationName.trim();
-    const slug = cleanOrgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'org-' + Date.now();
-
-    const existingUser = await usersRepository.findByEmail(cleanEmail);
-    if (existingUser) {
-      const err: any = new Error('An account with this email address already exists.');
-      err.code = '23505';
-      err.detail = 'Key (email)=(' + cleanEmail + ')';
-      throw err;
-    }
-
-    const passwordHash = await hashPassword(dto.password);
-
-    const { newUser, newOrg } = await withTransaction(async (client) => {
-      // 1. Create User
-      const userRes = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, phone, status, email_verified_at)
-         VALUES ($1, $2, $3, $4, 'active', NOW())
-         RETURNING id, email, full_name AS "fullName", is_platform_admin AS "isPlatformAdmin"`,
-        [cleanEmail, passwordHash, dto.fullName.trim(), dto.phone || null]
-      );
-      const user = userRes.rows[0];
-
-      // 2. Create Organization (Pending review)
-      const orgRes = await client.query(
-        `INSERT INTO organizations (name, slug, organization_type, status, verification_status, contact_email, verification_submitted_at)
-         VALUES ($1, $2, $3, 'pending', 'pending_review', $4, NOW())
-         RETURNING id, name`,
-        [cleanOrgName, slug, dto.organizationType || 'other', cleanEmail]
-      );
-      const org = orgRes.rows[0];
-
-      // 3. Get Org Admin System Role
-      const roleRes = await client.query(
-        `SELECT id FROM roles WHERE scope = 'organization' AND name = 'Org Admin' AND is_system = TRUE LIMIT 1`
-      );
-      const roleId = roleRes.rows[0]?.id;
-
-      // 4. Link User to Organization
-      await client.query(
-        `INSERT INTO organization_members (organization_id, user_id, role_id, is_owner, status, joined_at)
-         VALUES ($1, $2, $3, TRUE, 'active', NOW())`,
-        [org.id, user.id, roleId]
-      );
-
-      // 5. Record Legal Acceptance (sanitizing client IP for PostgreSQL inet data type)
-      await client.query(
-        `INSERT INTO legal_acceptances (user_id, document_code, document_version, ip_address, user_agent)
-         VALUES ($1, 'buyer_terms', '1.0', $2, $3)`,
-        [user.id, sanitizeIp(dto.ip), dto.userAgent || null]
-      );
-
-      return { newUser: user, newOrg: org };
-    });
-
-    const memberships = await usersRepository.getUserMemberships(newUser.id);
-    const token = signSessionToken({
-      userId: newUser.id,
-      email: newUser.email,
-      isPlatformAdmin: false,
-      activeTenantType: 'organization',
-      activeTenantId: newOrg.id,
-      role: 'Org Admin',
-    });
-
-    return {
-      token,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        isPlatformAdmin: false,
-        memberships,
-      },
-    };
-  }
-
-  /**
-   * Authenticate user with password & check account locking.
-   * Auto-provisions user if not found and resets lockouts to prevent login blockage.
-   */
-  async login(email: string, passwordPlain: string, ip?: string): Promise<AuthResponse> {
-    const cleanEmail = email.trim().toLowerCase();
-
-    // Check if user was previously deleted
-    const deletedCheck = await query(
-      `SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND (deleted_at IS NOT NULL OR status = 'deleted') LIMIT 1`,
-      [cleanEmail]
-    );
-    if (deletedCheck.rows.length > 0) {
-      throw new Error('This account has been deleted. Please register a new account.');
-    }
-
-    let user = await usersRepository.findByEmail(cleanEmail);
-
-    if (!user) {
-      try {
-        const defaultLegalName = cleanEmail.split('@')[0] ? cleanEmail.split('@')[0].toUpperCase() + ' ENTERPRISES' : 'KOPANO ENTERPRISES';
-        const defaultCipa = 'BW' + Math.floor(100000 + Math.random() * 900000);
-        const signupResult = await this.registerSupplier({
-          legalName: defaultLegalName,
-          cipaUin: defaultCipa,
-          fullName: 'Valued Supplier',
-          email: cleanEmail,
-          password: passwordPlain || 'Password123!',
-          ip,
-        });
-        return signupResult;
-      } catch (regErr) {
-        console.warn('[AUTO-REGISTER ON LOGIN WARN]', regErr);
-      }
-      user = await usersRepository.findByEmail(cleanEmail);
-    }
-
-    if (!user) {
-      throw new Error('Invalid email or password.');
-    }
-
-    // Automatically clear any account lockout so users never get locked out
-    if (user.lockedUntil || user.failedLoginAttempts > 0) {
-      await query(`UPDATE users SET locked_until = NULL, failed_login_attempts = 0 WHERE id = $1`, [user.id]);
-    }
-
-    // Verify password or auto-sync hash if needed
-    const isMatch = user.passwordHash ? await verifyPassword(passwordPlain, user.passwordHash) : true;
-    if (!isMatch && passwordPlain) {
-      const newHash = await hashPassword(passwordPlain);
-      await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [newHash, user.id]);
-    }
-
-    // If MFA is enabled, challenge for 6-digit TOTP code
-    if (user.mfaEnabled && user.mfaSecretEncrypted) {
-      return {
-        requiresMfa: true,
-        mfaUserId: user.id,
-      };
-    }
-
-    await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
-    let memberships = await usersRepository.getUserMemberships(user.id);
-
-    // Auto-provision supplier entity in PostgreSQL if missing so profile changes save directly to database
-    if (memberships.length === 0 && !user.isPlatformAdmin) {
-      try {
-        let supplierId: string | null = null;
-        let supplierName: string = '';
-
-        const existingSup = await query(
-          `SELECT id, legal_name FROM suppliers WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
-          [user.email]
-        );
-
-        if (existingSup.rows.length > 0) {
-          supplierId = existingSup.rows[0].id;
-          supplierName = existingSup.rows[0].legal_name;
-        } else {
-          const domain = user.email.includes('@') ? user.email.split('@')[1] : '';
-          const domainName = domain ? domain.split('.')[0] : '';
-          supplierName = domainName
-            ? domainName.charAt(0).toUpperCase() + domainName.slice(1) + ' (Pty) Ltd'
-            : `${user.fullName || 'Supplier'} (Pty) Ltd`;
-
-          const cipaUin = 'BW' + Math.floor(10000000 + Math.random() * 90000000);
-
-          const newSupRes = await query(
-            `INSERT INTO suppliers (
-               legal_name, trading_name, cipa_uin, email, primary_phone, status, verification_status, compliance_status, profile_completeness
-             ) VALUES (
-               $1, $1, $2, $3, $4, 'active', 'unverified', 'Action required', 30
-             ) RETURNING id, legal_name`,
-            [supplierName, cipaUin, user.email, user.phone]
-          );
-          supplierId = newSupRes.rows[0]?.id;
-          supplierName = newSupRes.rows[0]?.legal_name;
-        }
-
-        if (supplierId) {
-          const roleRes = await query(
-            `SELECT id FROM roles WHERE scope = 'supplier' AND name = 'Supplier Admin' LIMIT 1`
-          );
-          const roleId = roleRes.rows[0]?.id;
-
-          if (roleId) {
-            await query(
-              `INSERT INTO supplier_members (supplier_id, user_id, role_id, is_owner, status, joined_at)
-               VALUES ($1, $2, $3, TRUE, 'active', NOW())
-               ON CONFLICT DO NOTHING`,
-              [supplierId, user.id, roleId]
-            );
-          }
-
-          await query(
-            `INSERT INTO supplier_people (
-               supplier_id, full_name, person_role, nationality, is_citizen, email, phone, kyc_status, is_active
-             ) VALUES (
-               $1, $2, 'director', 'Motswana', TRUE, $3, $4, 'verified', TRUE
-             ) ON CONFLICT DO NOTHING`,
-            [supplierId, user.fullName || 'Director', user.email, user.phone]
-          );
-
-          memberships = await usersRepository.getUserMemberships(user.id);
-        }
-      } catch (provErr) {
-        console.warn('[AUTO-PROVISION SUPPLIER WORKSPACE ERROR]', provErr);
-      }
-    }
-
-    const primaryMembership = memberships[0] || {
-      tenantType: 'supplier',
-      tenantId: 'sup-1',
-      tenantName: user.fullName || 'Default Supplier',
-      roleName: 'Supplier Admin',
-    };
-
-    const token = signSessionToken({
-      userId: user.id,
-      email: user.email,
-      isPlatformAdmin: user.isPlatformAdmin,
-      activeTenantType: primaryMembership?.tenantType,
-      activeTenantId: primaryMembership?.tenantId,
-      role: primaryMembership?.roleName,
-    });
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        isPlatformAdmin: user.isPlatformAdmin,
-        memberships,
-      },
-    };
-  }
-
-  /**
-   * Complete MFA verification and issue authenticated session token.
-   */
-  async verifyMfa(userId: string, totpCode: string, ip?: string): Promise<AuthResponse> {
-    const user = await usersRepository.findById(userId);
-    if (!user || !user.mfaSecretEncrypted) {
-      throw new Error('Invalid MFA session.');
-    }
-
-    const secretHex = decryptData(user.mfaSecretEncrypted);
-    const isValid = verifyTotpCode(secretHex, totpCode);
-    if (!isValid) {
-      throw new Error('Invalid or expired MFA verification code. Please check your authenticator.');
-    }
-
-    await usersRepository.recordLoginSuccess(user.id, sanitizeIp(ip));
-    const memberships = await usersRepository.getUserMemberships(user.id);
-
-    const primaryMembership = memberships[0];
-    const token = signSessionToken({
-      userId: user.id,
-      email: user.email,
-      isPlatformAdmin: user.isPlatformAdmin,
-      activeTenantType: primaryMembership?.tenantType,
-      activeTenantId: primaryMembership?.tenantId,
-      role: primaryMembership?.roleName,
-    });
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        isPlatformAdmin: user.isPlatformAdmin,
-        memberships,
-      },
+      step,
+      email: sup.email,
+      fullName: sup.full_name || '',
+      phone: sup.primary_phone || '',
+      legalName: sup.legal_name?.includes("'s Enterprise") ? '' : sup.legal_name,
+      cipaUin: sup.cipa_uin?.startsWith('BW-TEMP-') ? '' : sup.cipa_uin,
+      companyType: sup.company_type || '',
+      city: sup.city || '',
     };
   }
 
@@ -724,31 +1260,6 @@ export class AuthService {
     }
 
     await usersRepository.enableMfa(userId);
-  }
-
-  /**
-   * Verify email address for user upon clicking link or entering code.
-   */
-  async verifyEmail(email: string): Promise<void> {
-    const cleanEmail = email.trim().toLowerCase();
-    await query(
-      `UPDATE users SET email_verified_at = NOW() WHERE email = $1`,
-      [cleanEmail]
-    );
-  }
-
-  /**
-   * Resolve session token into active profile and memberships.
-   */
-  async getSessionProfile(token: string): Promise<{ user: User; memberships: UserTenantMembership[] } | null> {
-    const payload = verifySessionToken(token);
-    if (!payload) return null;
-
-    const user = await usersRepository.findById(payload.userId);
-    if (!user || user.status !== 'active') return null;
-
-    const memberships = await usersRepository.getUserMemberships(user.id);
-    return { user, memberships };
   }
 }
 

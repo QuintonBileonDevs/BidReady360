@@ -3,17 +3,17 @@ import { query } from '../db/client';
 
 export interface CreateAuditEventDTO {
   actorType?: 'user' | 'system' | 'api';
-  actorUserId?: string;
+  actorUserId?: string | null;
   actorName: string;
   actorRole: string;
-  organizationId?: string;
-  supplierId?: string;
-  organizationName?: string;
+  organizationId?: string | null;
+  supplierId?: string | null;
+  organizationName?: string | null;
   action: string;
   entityType: string;
-  entityId?: string;
-  ipAddress?: string;
-  userAgent?: string;
+  entityId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
   beforeJson?: any;
   afterJson?: any;
   details: string;

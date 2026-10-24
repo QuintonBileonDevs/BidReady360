@@ -288,9 +288,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('bidready_session');
       localStorage.removeItem('bidready_role');
       localStorage.removeItem('bidready_last_active');
+      localStorage.removeItem('bidready_supplier_profile');
+      localStorage.removeItem('bidready_supplier_documents');
+      localStorage.removeItem('bidready_supplier_applications');
+      localStorage.removeItem('bidready_supplier_consent_grants');
+      localStorage.removeItem('bidready_supplier_people');
     } catch {}
 
     setCurrentUser(null);
+    setSupplier(EMPTY_SUPPLIER);
+    setDocuments([]);
+    setApplications([]);
+    setRegisteredBuyerOrgName(null);
+    setRegisteredBuyerEmail(null);
+    setBuyerOrgStatus('Pending');
     setIsAuthenticated(false);
     setRoleState('public');
     setIntendedRoute(null);
@@ -388,23 +399,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [isAuthenticated]);
 
-  // Background session revalidation on startup
+  // Server-authoritative session revalidation on startup
   useEffect(() => {
     let isMounted = true;
     async function restoreSession() {
-      const token = localStorage.getItem('bidready_token');
-      const storedSession = getStoredSession();
-
-      if (!token && !storedSession) {
-        if (isMounted) {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-          setAuthLoading(false);
-        }
-        return;
-      }
-
-      // Check inactivity
+      // Check inactivity timeout first
       const lastActive = Number(localStorage.getItem('bidready_last_active') || 0);
       const now = Date.now();
       if (lastActive && (now - lastActive > INACTIVITY_TIMEOUT_MS)) {
@@ -415,45 +414,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // If we have a stored session, restore state immediately
-      if (storedSession && isMounted) {
-        setCurrentUser(storedSession.user);
-        setIsAuthenticated(true);
-        setRoleState(storedSession.role);
-        if (storedSession.activeNav && storedSession.activeNav !== 'about') {
-          setActiveNavState(storedSession.activeNav);
-        }
-      }
-
       try {
-        if (token && !token.startsWith('demo_') && token !== 'platform_admin_session_token' && !token.startsWith('org_session_')) {
-          const session = await authApi.getMe();
-          if (session && session.user && isMounted) {
-            setCurrentUser(session.user);
-            setIsAuthenticated(true);
-            let resolvedRole: UserRole = storedSession?.role || 'supplier';
-            if (session.user.isPlatformAdmin) {
-              resolvedRole = 'admin';
-            } else if (session.activeTenant?.tenantType === 'organization') {
-              resolvedRole = 'buyer';
-              setBuyerOrgStatus('Approved');
-              setRegisteredBuyerOrgName(session.activeTenant.tenantName);
-              setRegisteredBuyerEmail(session.user.email);
-            } else if (session.activeTenant?.tenantType === 'supplier') {
-              resolvedRole = 'supplier';
-            }
-            setRoleState(resolvedRole);
+        const session = await authApi.getMe();
+        if (session && session.user && isMounted) {
+          setCurrentUser(session.user);
+          setIsAuthenticated(true);
+          let resolvedRole: UserRole = 'supplier';
+          if (session.user.isPlatformAdmin) {
+            resolvedRole = 'admin';
+          } else if (session.activeTenant?.tenantType === 'organization') {
+            resolvedRole = 'buyer';
+            setBuyerOrgStatus('Approved');
+            setRegisteredBuyerOrgName(session.activeTenant.tenantName);
+            setRegisteredBuyerEmail(session.user.email);
+          } else if (session.activeTenant?.tenantType === 'supplier') {
+            resolvedRole = 'supplier';
           }
-        }
-      } catch (err: any) {
-        // Only invalidate if backend explicitly returned 401 and we don't have a valid session
-        if (err?.status === 401 && !storedSession) {
-          if (isMounted) {
+          setRoleState(resolvedRole);
+
+          const savedNav = localStorage.getItem('bidready_active_nav');
+          if (savedNav && savedNav !== 'about' && savedNav !== 'session-expired') {
+            setActiveNavState(savedNav);
+          }
+        } else if (isMounted) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setRoleState('public');
+          try {
             localStorage.removeItem('bidready_token');
-            setIsAuthenticated(false);
-            setCurrentUser(null);
-            setRoleState('public');
-          }
+            localStorage.removeItem('bidready_session');
+          } catch {}
+        }
+      } catch (err) {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setRoleState('public');
+          try {
+            localStorage.removeItem('bidready_token');
+            localStorage.removeItem('bidready_session');
+          } catch {}
         }
       } finally {
         if (isMounted) {
@@ -472,14 +472,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     session: { user: ApiUser; activeTenant?: any; token?: string },
     targetRole?: UserRole
   ) => {
-    const finalToken = session.token || (
-      session.user?.isPlatformAdmin ? 'platform_admin_session_token' :
-      targetRole === 'buyer' ? `org_session_${session.activeTenant?.tenantId || 'org-grc'}` :
-      'demo_supplier_session_token'
-    );
+    if (session.token) {
+      try {
+        localStorage.setItem('bidready_token', session.token);
+      } catch {}
+    }
+
     try {
-      localStorage.setItem('bidready_token', finalToken);
+      localStorage.removeItem('bidready_supplier_profile');
+      localStorage.removeItem('bidready_supplier_documents');
+      localStorage.removeItem('bidready_supplier_applications');
+      localStorage.removeItem('bidready_supplier_consent_grants');
+      localStorage.removeItem('bidready_supplier_people');
     } catch {}
+    setSupplier(EMPTY_SUPPLIER);
+    setDocuments([]);
+    setApplications([]);
 
     setCurrentUser(session.user);
     setIsAuthenticated(true);

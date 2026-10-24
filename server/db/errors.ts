@@ -102,6 +102,21 @@ export function translateDbError(err: any): SafeDbError {
       };
     }
 
+    case 'DATABASE_UNAVAILABLE':
+    case 'ECONNREFUSED':
+    case 'ETIMEDOUT':
+    case '08001':
+    case '08006':
+    case '57P01':
+    case '57P02':
+    case '57P03': {
+      return {
+        status: 503,
+        message: 'Database service is temporarily unreachable. Please try again shortly.',
+        code: 'SERVICE_UNAVAILABLE',
+      };
+    }
+
     default:
       if (err.message && typeof err.message === 'string' && !err.message.includes('Query execution failed')) {
         return {
