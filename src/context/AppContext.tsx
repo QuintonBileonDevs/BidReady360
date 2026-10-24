@@ -643,28 +643,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   };
 
-  // Dynamic data states with localStorage initialization
-  const [supplier, setSupplier] = useState<Supplier>(() => {
-    try {
-      const saved = localStorage.getItem('bidready_supplier_profile');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && parsed.id) return parsed;
-      }
-    } catch {}
-    return EMPTY_SUPPLIER;
-  });
+  // Dynamic data states initialized clean to prevent legacy data flash
+  const [supplier, setSupplier] = useState<Supplier>(EMPTY_SUPPLIER);
   const [allSuppliers] = useState<Supplier[]>([EMPTY_SUPPLIER]);
-  const [documents, setDocuments] = useState<SupplierDocument[]>(() => {
-    try {
-      const saved = localStorage.getItem('bidready_supplier_documents');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
-  });
+  const [documents, setDocuments] = useState<SupplierDocument[]>([]);
   const [organizations] = useState<Organization[]>([
     {
       id: 'org-grc',

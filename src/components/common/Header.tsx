@@ -14,6 +14,7 @@ import {
   LogIn,
   RotateCw,
   Lock,
+  Loader2,
 } from 'lucide-react';
 import { NotificationDrawer } from './NotificationDrawer';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
@@ -232,20 +233,28 @@ export const Header: React.FC = () => {
                   className="flex items-center gap-2.5 pl-2 pr-1.5 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer text-left"
                 >
                   <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] text-[#1F5F99] flex items-center justify-center font-semibold text-[13px] shrink-0">
-                    {supplier.legalName ? supplier.legalName.trim().substring(0, 2).toUpperCase() : 'SP'}
+                    {supplier.legalName ? (
+                      supplier.legalName.trim().substring(0, 2).toUpperCase()
+                    ) : (
+                      <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+                    )}
                   </div>
                   <div className="hidden sm:block leading-tight">
                     <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
-                      {supplier.legalName || 'Supplier Account'}
+                      {supplier.legalName || 'Loading profile...'}
                     </span>
                     <span className="text-[13px] text-[#6B7A87] block">
-                      {supplier.directors && supplier.directors.length > 0 && supplier.directors.some(d => d.role && d.role.trim().length > 0)
-                        ? Array.from(new Set(supplier.directors.map(d => d.role))).filter(Boolean).join(', ')
-                        : supplier.isDemoAccount
-                        ? 'Demo account'
-                        : !supplier.emailVerified
-                        ? 'Unverified account'
-                        : 'Incomplete Profile'}
+                      {supplier.legalName ? (
+                        supplier.directors && supplier.directors.length > 0 && supplier.directors.some(d => d.role && d.role.trim().length > 0)
+                          ? Array.from(new Set(supplier.directors.map(d => d.role))).filter(Boolean).join(', ')
+                          : supplier.isDemoAccount
+                          ? 'Demo account'
+                          : !supplier.emailVerified
+                          ? 'Unverified account'
+                          : 'Incomplete Profile'
+                      ) : (
+                        'Fetching profile...'
+                      )}
                     </span>
                   </div>
                   <ChevronDown className="w-3.5 h-3.5 text-[#6B7A87]" strokeWidth={1.5} />
