@@ -14,22 +14,46 @@ import { PublicForSuppliers } from './components/public/PublicForSuppliers';
 import { PublicForBuyers } from './components/public/PublicForBuyers';
 import { PublicHelp } from './components/public/PublicHelp';
 import { AuthScreen } from './components/auth/AuthScreen';
-import { AdminDashboard } from './components/auth/AdminDashboard';
 
-// Supplier Views
-import { SupplierDashboard } from './components/supplier/SupplierDashboard';
-import { SupplierProfile } from './components/supplier/SupplierProfile';
-import { SupplierVault } from './components/supplier/SupplierVault';
-import { SupplierConsent } from './components/supplier/SupplierConsent';
-import { SupplierApplicationStepper } from './components/supplier/SupplierApplicationStepper';
-import { SupplierApplicationsList } from './components/supplier/SupplierApplicationsList';
-import { SupplierBidSubmission } from './components/supplier/SupplierBidSubmission';
+// Lazy-loaded Authenticated Views (Keeps initial login bundle small)
+const AdminDashboard = React.lazy(() =>
+  import('./components/auth/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const BuyerLayout = React.lazy(() =>
+  import('./components/buyer/BuyerLayout').then((m) => ({ default: m.BuyerLayout }))
+);
+const SupplierDashboard = React.lazy(() =>
+  import('./components/supplier/SupplierDashboard').then((m) => ({ default: m.SupplierDashboard }))
+);
+const SupplierProfile = React.lazy(() =>
+  import('./components/supplier/SupplierProfile').then((m) => ({ default: m.SupplierProfile }))
+);
+const SupplierVault = React.lazy(() =>
+  import('./components/supplier/SupplierVault').then((m) => ({ default: m.SupplierVault }))
+);
+const SupplierConsent = React.lazy(() =>
+  import('./components/supplier/SupplierConsent').then((m) => ({ default: m.SupplierConsent }))
+);
+const SupplierApplicationStepper = React.lazy(() =>
+  import('./components/supplier/SupplierApplicationStepper').then((m) => ({ default: m.SupplierApplicationStepper }))
+);
+const SupplierApplicationsList = React.lazy(() =>
+  import('./components/supplier/SupplierApplicationsList').then((m) => ({ default: m.SupplierApplicationsList }))
+);
+const SupplierBidSubmission = React.lazy(() =>
+  import('./components/supplier/SupplierBidSubmission').then((m) => ({ default: m.SupplierBidSubmission }))
+);
+
 import { ApplicationsLockedPrompt } from './components/supplier/ApplicationsLockedPrompt';
 import { calculateSupplierCompleteness } from './utils/supplierOnboarding';
-
-// Buyer Views
-import { BuyerLayout } from './components/buyer/BuyerLayout';
 import { InactivityWarningModal } from './components/common/InactivityWarningModal';
+
+const DashboardFallback = () => (
+  <div className="flex items-center justify-center py-20 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+    <div className="w-5 h-5 border-2 border-[#1F5F99] border-t-transparent rounded-full animate-spin mr-3" />
+    <span>Loading workspace...</span>
+  </div>
+);
 
 // Recognized route categories
 const AUTH_ROUTES = [
@@ -152,7 +176,9 @@ const MainContent: React.FC = () => {
     if (!isPublicNav) {
       return (
         <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
-          <AdminDashboard />
+          <React.Suspense fallback={<DashboardFallback />}>
+            <AdminDashboard />
+          </React.Suspense>
         </div>
       );
     }
@@ -181,7 +207,9 @@ const MainContent: React.FC = () => {
       }
       return (
         <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
-          <BuyerLayout />
+          <React.Suspense fallback={<DashboardFallback />}>
+            <BuyerLayout />
+          </React.Suspense>
         </div>
       );
     }
@@ -438,7 +466,9 @@ const MainContent: React.FC = () => {
       <Header />
 
       <main className="flex-1 container-1160 w-full py-8 sm:py-12">
-        {renderContent()}
+        <React.Suspense fallback={<DashboardFallback />}>
+          {renderContent()}
+        </React.Suspense>
       </main>
 
       <Footer />

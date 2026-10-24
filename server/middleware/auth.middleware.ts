@@ -79,15 +79,39 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   try {
     const tokenHash = hashToken(rawToken);
 
-    // 1. Query sessions table for active, unexpired, unrevoked session
-    const sessionRes = await query<{
+    // 1. Single indexed query: sessions joined with users by token_hash
+    const authRes = await query<{
       sessionId: string;
-      userId: string;
       tenantType: 'supplier' | 'organization' | 'platform' | null;
       tenantId: string | null;
+      id: string;
+      email: string;
+      passwordHash: string | null;
+      fullName: string;
+      phone: string | null;
+      preferredLanguage: string;
+      status: 'pending' | 'active' | 'suspended' | 'deleted';
+      isPlatformAdmin: boolean;
+      emailVerifiedAt: string | null;
+      phoneVerifiedAt: string | null;
+      mfaEnabled: boolean;
+      mfaSecretEncrypted: Buffer | null;
+      mfaType: string | null;
+      lastLoginAt: string | null;
+      failedLoginAttempts: number;
+      lockedUntil: string | null;
+      createdAt: string;
     }>(
-      `SELECT s.id AS "sessionId", s.user_id AS "userId", s.tenant_type AS "tenantType", s.tenant_id AS "tenantId"
+      `SELECT s.id AS "sessionId", s.tenant_type AS "tenantType", s.tenant_id AS "tenantId",
+              u.id, u.email, u.password_hash AS "passwordHash", u.full_name AS "fullName",
+              u.phone, u.preferred_language AS "preferredLanguage", u.status,
+              u.is_platform_admin AS "isPlatformAdmin", u.email_verified_at AS "emailVerifiedAt",
+              u.phone_verified_at AS "phoneVerifiedAt", u.mfa_enabled AS "mfaEnabled",
+              u.mfa_secret_encrypted AS "mfaSecretEncrypted", u.mfa_type AS "mfaType",
+              u.last_login_at AS "lastLoginAt", u.failed_login_attempts AS "failedLoginAttempts",
+              u.locked_until AS "lockedUntil", u.created_at AS "createdAt"
        FROM sessions s
+       JOIN users u ON u.id = s.user_id AND u.deleted_at IS NULL AND u.status = 'active'
        WHERE s.token_hash = $1
          AND s.expires_at > NOW()
          AND s.revoked_at IS NULL
@@ -95,30 +119,30 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       [tokenHash]
     );
 
-    if (sessionRes.rows.length === 0) {
+    if (authRes.rows.length === 0) {
       return next();
     }
 
-    const sess = sessionRes.rows[0];
-
-    // 2. Load user strictly from PostgreSQL (must be active and verified)
-    const userRes = await query<User>(
-      `SELECT id, email, password_hash AS "passwordHash", full_name AS "fullName",
-              phone, preferred_language AS "preferredLanguage", status,
-              is_platform_admin AS "isPlatformAdmin", email_verified_at AS "emailVerifiedAt",
-              phone_verified_at AS "phoneVerifiedAt", mfa_enabled AS "mfaEnabled",
-              mfa_secret_encrypted AS "mfaSecretEncrypted", mfa_type AS "mfaType",
-              last_login_at AS "lastLoginAt", failed_login_attempts AS "failedLoginAttempts",
-              locked_until AS "lockedUntil", created_at AS "createdAt"
-       FROM users
-       WHERE id = $1 AND deleted_at IS NULL AND status = 'active'`,
-      [sess.userId]
-    );
-
-    const user = userRes.rows[0];
-    if (!user) {
-      return next();
-    }
+    const sess = authRes.rows[0];
+    const user: User = {
+      id: sess.id,
+      email: sess.email,
+      passwordHash: sess.passwordHash,
+      fullName: sess.fullName,
+      phone: sess.phone,
+      preferredLanguage: sess.preferredLanguage,
+      status: sess.status,
+      isPlatformAdmin: sess.isPlatformAdmin,
+      emailVerifiedAt: sess.emailVerifiedAt,
+      phoneVerifiedAt: sess.phoneVerifiedAt,
+      mfaEnabled: sess.mfaEnabled,
+      mfaSecretEncrypted: sess.mfaSecretEncrypted,
+      mfaType: sess.mfaType,
+      lastLoginAt: sess.lastLoginAt,
+      failedLoginAttempts: sess.failedLoginAttempts,
+      lockedUntil: sess.lockedUntil,
+      createdAt: sess.createdAt,
+    };
 
     // 3. Resolve tenant membership
     const memberships = await usersRepository.getUserMemberships(user.id);

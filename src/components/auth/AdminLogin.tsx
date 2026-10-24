@@ -185,10 +185,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
                 variant="primary"
                 size="lg"
                 className="w-full mt-2"
+                disabled={isLoading}
                 isLoading={isLoading}
-                rightIcon={<ArrowRight />}
+                rightIcon={!isLoading ? <ArrowRight /> : undefined}
               >
-                Continue to verification code
+                {isLoading ? 'Signing in...' : 'Continue to verification code'}
               </Button>
             </form>
           ) : (

@@ -320,10 +320,11 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
               variant="primary"
               size="lg"
               className="w-full mt-2"
+              disabled={isLoading}
               isLoading={isLoading}
-              rightIcon={<ArrowRight />}
+              rightIcon={!isLoading ? <ArrowRight /> : undefined}
             >
-              Sign in
+              {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
         )}

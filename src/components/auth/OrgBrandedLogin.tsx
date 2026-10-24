@@ -290,11 +290,12 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
                 variant="primary"
                 size="lg"
                 className="w-full mt-2"
+                disabled={isLoading}
                 isLoading={isLoading}
                 style={{ backgroundColor: activeOrg.accentColor, borderColor: activeOrg.accentColor }}
-                rightIcon={<ArrowRight />}
+                rightIcon={!isLoading ? <ArrowRight /> : undefined}
               >
-                Continue to verification code
+                {isLoading ? 'Signing in...' : 'Continue to verification code'}
               </Button>
             </form>
           </>

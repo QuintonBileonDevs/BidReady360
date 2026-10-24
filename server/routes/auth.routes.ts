@@ -156,6 +156,13 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
+    if (result.timing) {
+      res.setHeader(
+        'Server-Timing',
+        `lookup;dur=${result.timing.userLookupMs}, pass;dur=${result.timing.passwordVerifyMs}, sess;dur=${result.timing.sessionInsertMs}, total;dur=${result.timing.totalMs}`
+      );
+    }
+
     res.json(result);
   } catch (err: any) {
     if (err.status === 429) {
