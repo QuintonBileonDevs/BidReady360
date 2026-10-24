@@ -30,6 +30,8 @@ export interface SupplierProfile {
   verificationStatus: string;
   complianceStatus: string;
   profileCompleteness: number;
+  hasTradingLicence?: boolean | null;
+  tradingLicenceReason?: string | null;
 }
 
 export interface SupplierPerson {
@@ -302,14 +304,15 @@ export class SuppliersRepository {
       const sRes = await query(
         `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
                 s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked,
-                s.citizen_owned_percentage
+                s.citizen_owned_percentage, s.has_trading_licence
          FROM suppliers s WHERE s.id = $1`,
         [supplierId]
       );
       if (sRes.rows.length === 0) return 0;
       const s = sRes.rows[0];
 
-      let totalCount = 15;
+      const isTradingLicenceRequired = s.has_trading_licence === true;
+      let totalCount = isTradingLicenceRequired ? 16 : 15;
       let completedCount = 0;
 
       // 1. Legal Name
@@ -323,15 +326,30 @@ export class SuppliersRepository {
       // 5. City
       if (s.city && String(s.city).trim().length > 0) completedCount++;
       // 6. District
-      if (s.district_id) completedCount++;
+      if (s.district_id && String(s.district_id).trim().length > 0) completedCount++;
       // 7. Phone
-      if (s.primary_phone && String(s.primary_phone).trim().length >= 7) completedCount++;
+      const phoneDigits = (s.primary_phone || '').replace(/\D/g, '');
+      if (s.primary_phone && phoneDigits.length >= 7) completedCount++;
       // 8. Email
       if (s.email && String(s.email).includes('@')) completedCount++;
       // 9. Bank Details
-      if (s.bank_name && String(s.bank_name).trim().length > 0 && (s.bank_branch || s.account_number_masked)) completedCount++;
+      if (
+        s.bank_name &&
+        String(s.bank_name).trim().length > 0 &&
+        ((s.bank_branch && String(s.bank_branch).trim().length > 0) ||
+          (s.account_number_masked && String(s.account_number_masked).trim().length > 0))
+      ) {
+        completedCount++;
+      }
       // 10. Citizen Ownership %
-      if (s.citizen_owned_percentage !== null && Number(s.citizen_owned_percentage) > 0 && Number(s.citizen_owned_percentage) <= 100) completedCount++;
+      if (
+        s.citizen_owned_percentage !== null &&
+        s.citizen_owned_percentage !== undefined &&
+        Number(s.citizen_owned_percentage) > 0 &&
+        Number(s.citizen_owned_percentage) <= 100
+      ) {
+        completedCount++;
+      }
 
       // 11. Directors (100% total ownership)
       const pRes = await query(
@@ -339,19 +357,22 @@ export class SuppliersRepository {
         [supplierId]
       );
       if (pRes.rows.length > 0) {
-        const totalOwnership = pRes.rows.reduce((sum: number, r: any) => sum + (parseFloat(r.ownership_percent) || 0), 0);
+        const totalOwnership = pRes.rows.reduce(
+          (sum: number, r: any) => sum + (parseFloat(r.ownership_percent) || 0),
+          0
+        );
         if (Math.round(totalOwnership) === 100) {
           completedCount++;
         }
       }
 
-      // Documents (CIPA, Tax, Directors ID, Bank Letter)
+      // Documents (CIPA, Tax, Directors ID, Bank Letter, and conditional Trading Licence)
       const dRes = await query(
-        `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until
+        `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until, sdv.verification_status
          FROM supplier_documents sd
          JOIN document_types dt ON dt.id = sd.document_type_id
          LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
-         WHERE sd.supplier_id = $1 AND sd.status != 'rejected'`,
+         WHERE sd.supplier_id = $1 AND sd.status = 'active'`,
         [supplierId]
       );
 
@@ -360,35 +381,45 @@ export class SuppliersRepository {
           const name = ((d.code || '') + ' ' + (d.name || '')).toLowerCase();
           const matches = keywords.some((k: string) => name.includes(k.toLowerCase()));
           if (!matches) return false;
-          if (d.status === 'expired') return false;
+          if (d.status === 'expired' || d.status === 'rejected' || d.status === 'deleted') return false;
           if (d.valid_until && new Date(d.valid_until) < new Date()) return false;
           return true;
         });
       };
 
       // 12. CIPA Certificate
-      if (isValid(['cipa', 'incorporation', 'company registration'])) completedCount++;
+      if (isValid(['cipa', 'incorporation', 'company registration', 'company_registration'])) completedCount++;
       // 13. Tax Clearance
-      if (isValid(['tax clearance', 'burs', 'tax certificate'])) completedCount++;
+      if (isValid(['tax clearance', 'tax_clearance', 'burs', 'tax certificate'])) completedCount++;
       // 14. Directors ID
-      if (isValid(['director', 'shareholder', 'omang', 'passport'])) completedCount++;
+      if (isValid(['directors and shareholders id', 'director id', 'director_id', 'shareholder id', 'directors id', 'director identity', 'director', 'shareholder', 'omang', 'passport'])) completedCount++;
       // 15. Bank Letter
-      if (isValid(['bank confirmation', 'bank letter', 'bank statement'])) completedCount++;
+      if (isValid(['bank confirmation', 'bank_letter', 'bank rating', 'bank confirmation letter', 'bank letter', 'bank statement'])) completedCount++;
+      // 16. Trading Licence (conditional)
+      if (isTradingLicenceRequired) {
+        if (isValid(['trading licence', 'trading_licence', 'business licence', 'licence'])) {
+          completedCount++;
+        }
+      }
 
-      return Math.round((completedCount / Math.max(1, totalCount)) * 100);
+      const score = Math.round((completedCount / Math.max(1, totalCount)) * 100);
+      const complianceStatus = score >= 80 ? 'Fully compliant' : 'Action required';
+
+      await query(
+        `UPDATE suppliers SET profile_completeness = $1, compliance_status = $2, updated_at = NOW() WHERE id = $3`,
+        [score, complianceStatus, supplierId]
+      );
+
+      return score;
     } catch (err) {
       console.warn('[RECALCULATE COMPLETENESS ERROR]', err);
       return 0;
     }
   }
 
-  async getById(supplierId: string): Promise<SupplierProfile | null> {
-    const score = await this.calculateCompleteness(supplierId);
-    if (score > 0) {
-      await query(
-        `UPDATE suppliers SET profile_completeness = $1 WHERE id = $2`,
-        [score, supplierId]
-      );
+  async getById(supplierId: string, skipRecalculate: boolean = false): Promise<SupplierProfile | null> {
+    if (!skipRecalculate) {
+      await this.calculateCompleteness(supplierId);
     }
 
     const res = await query<SupplierProfile>(
@@ -420,6 +451,8 @@ export class SuppliersRepository {
               s.edd_certified AS "eddCertified", s.edd_certified,
               s.edd_certificate_no AS "eddCertificateNo", s.edd_certificate_no,
               s.edd_valid_until AS "eddValidUntil",
+              s.has_trading_licence AS "hasTradingLicence", s.has_trading_licence,
+              s.trading_licence_reason AS "tradingLicenceReason", s.trading_licence_reason,
               s.status,
               s.verification_status AS "verificationStatus", s.verification_status,
               s.compliance_status AS "complianceStatus", s.compliance_status,
@@ -635,6 +668,20 @@ export class SuppliersRepository {
       fields.push(`missing_items = $${params.length}`);
     }
 
+    // 26. has_trading_licence
+    const hasTradingLicence = data.has_trading_licence !== undefined ? data.has_trading_licence : data.hasTradingLicence;
+    if (hasTradingLicence !== undefined) {
+      params.push(hasTradingLicence === null ? null : Boolean(hasTradingLicence));
+      fields.push(`has_trading_licence = $${params.length}`);
+    }
+
+    // 27. trading_licence_reason
+    const tradingLicenceReason = data.trading_licence_reason !== undefined ? data.trading_licence_reason : data.tradingLicenceReason;
+    if (tradingLicenceReason !== undefined) {
+      params.push(tradingLicenceReason ? String(tradingLicenceReason).trim() : null);
+      fields.push(`trading_licence_reason = $${params.length}`);
+    }
+
     if (!fields.length) {
       const current = await this.getById(supplierId);
       if (!current) throw new Error('Supplier not found.');
@@ -648,7 +695,8 @@ export class SuppliersRepository {
       params
     );
 
-    const updated = await this.getById(supplierId);
+    const hasExplicitCompleteness = (data.profile_completeness !== undefined || data.profileCompleteness !== undefined);
+    const updated = await this.getById(supplierId, hasExplicitCompleteness);
     if (!updated) throw new Error('Supplier not found after update.');
     return updated;
   }

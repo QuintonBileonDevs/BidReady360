@@ -1434,24 +1434,34 @@ export const SupplierVault: React.FC = () => {
                 </span>
               </div>
 
-              {/* Simulated Document Page Rendering */}
-              <div className="p-8 bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner space-y-4 text-center">
-                <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
-                  PDF
-                </div>
-                <div>
-                  <h4 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
-                    {previewDoc.fileName}
-                  </h4>
-                  <p className="text-[13px] text-[#6B7A87] mt-0.5">
-                    Official Regulatory Filing / Identity Document
-                  </p>
-                </div>
-                <div className="pt-2 flex flex-wrap justify-center gap-6 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-                  <div><span className="text-[#6B7A87]">Document Number:</span> <strong>{previewDoc.documentNumber}</strong></div>
-                  <div><span className="text-[#6B7A87]">Issue Date:</span> <strong>{previewDoc.issueDate || 'N/A'}</strong></div>
-                  <div><span className="text-[#6B7A87]">Expiry Date:</span> <strong>{previewDoc.expiryDate || 'N/A'}</strong></div>
-                </div>
+              {/* Simulated Document Page Rendering / Iframe Preview */}
+              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner overflow-hidden flex flex-col items-center justify-center min-h-[380px]">
+                {previewDoc.downloadUrl ? (
+                  <iframe
+                    src={previewDoc.downloadUrl}
+                    title={previewDoc.fileName || 'Document Preview'}
+                    className="w-full h-[400px] border-0 bg-white"
+                  />
+                ) : (
+                  <div className="p-8 text-center space-y-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
+                      PDF
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
+                        {previewDoc.fileName}
+                      </h4>
+                      <p className="text-[13px] text-[#6B7A87] mt-0.5">
+                        Official Regulatory Filing / Identity Document
+                      </p>
+                    </div>
+                    <div className="pt-2 flex flex-wrap justify-center gap-6 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                      <div><span className="text-[#6B7A87]">Document Number:</span> <strong>{previewDoc.documentNumber}</strong></div>
+                      <div><span className="text-[#6B7A87]">Issue Date:</span> <strong>{previewDoc.issueDate || 'N/A'}</strong></div>
+                      <div><span className="text-[#6B7A87]">Expiry Date:</span> <strong>{previewDoc.expiryDate || 'N/A'}</strong></div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

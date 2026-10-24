@@ -177,6 +177,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
   bank_branch           VARCHAR(128),
   account_number_encrypted BYTEA,
   account_number_masked VARCHAR(32),
+  has_trading_licence   BOOLEAN DEFAULT NULL,
+  trading_licence_reason TEXT DEFAULT NULL,
   status                VARCHAR(20) NOT NULL DEFAULT 'draft'
                         CHECK (status IN ('draft', 'active', 'suspended', 'closed')),
   verification_status   VARCHAR(20) NOT NULL DEFAULT 'unverified'

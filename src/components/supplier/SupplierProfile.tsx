@@ -428,7 +428,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
   // Section status calculation (dynamic based on actual memory values)
   const sectionStatuses: Record<
     string,
-    { label: 'Complete' | 'Incomplete' | 'Needs attention'; color: string }
+    { label: 'Complete' | 'Incomplete' | 'Needs attention' | 'Selected' | 'Added' | 'Optional'; color: string }
   > = {
     details: {
       label: completeness.items
@@ -451,13 +451,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         : 'bg-[#FFFBEB] text-[#D97706]',
     },
     categories: {
-      label: selectedCategories.length > 0 ? 'Complete' : 'Incomplete',
+      label: selectedCategories.length > 0 ? 'Selected' : 'Optional',
       color: selectedCategories.length > 0
         ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-        : 'bg-[#FFFBEB] text-[#D97706]',
+        : 'bg-[#F7FAFD] text-[#6B7A87]',
     },
     projects: {
-      label: projectsList.length > 0 ? 'Complete' : 'Incomplete',
+      label: projectsList.length > 0 ? 'Added' : 'Optional',
       color: projectsList.length > 0
         ? 'bg-[#ECFDF5] text-[#2F8F5B]'
         : 'bg-[#F7FAFD] text-[#6B7A87]',
@@ -2282,7 +2282,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   Supply and service categories
                 </h2>
                 <p className="text-[14px] text-[#6B7A87]">
-                  Select the supply categories, industry disciplines, and commodity sectors registered to your company.
+                  Select the supply categories, industry disciplines, and commodity sectors for tender matching. Note: Not all companies are registered with PPRA, so categories are optional and do not affect your profile completeness score.
                 </p>
               </div>
 

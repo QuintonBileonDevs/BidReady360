@@ -74,40 +74,32 @@ export function calculateSupplierCompleteness(
   const docs = documents || supplier.documents || [];
   const directors = supplier.directors || [];
 
-  // Newly registered accounts start at 0% completeness until company details are confirmed & saved.
-  // Demo account or profiles with detailsSaved or full address & TIN are counted.
-  const hasSavedDetails = Boolean(
-    supplier.isDemoAccount ||
-    supplier.detailsSaved === true ||
-    (supplier.physicalAddress && supplier.tinNumber && supplier.bankName)
-  );
-
   // 1. Legal Name
-  const hasLegalName = Boolean(hasSavedDetails && supplier.legalName && supplier.legalName.trim().length > 0);
+  const hasLegalName = Boolean(supplier.legalName && supplier.legalName.trim().length > 0);
 
   // 2. Trading Name
-  const hasTradingName = Boolean(hasSavedDetails && supplier.tradingName && supplier.tradingName.trim().length > 0);
+  const hasTradingName = Boolean(supplier.tradingName && supplier.tradingName.trim().length > 0);
 
   // 3. Tax Number (BURS TIN)
-  const hasTaxNumber = Boolean(hasSavedDetails && supplier.tinNumber && supplier.tinNumber.trim().length > 0);
+  const tinVal = supplier.tinNumber || (supplier as any).bursTin || (supplier as any).burs_tin;
+  const hasTaxNumber = Boolean(tinVal && String(tinVal).trim().length > 0);
 
   // 4. Physical Address
-  const hasPhysicalAddress = Boolean(hasSavedDetails && supplier.physicalAddress && supplier.physicalAddress.trim().length > 0);
+  const hasPhysicalAddress = Boolean(supplier.physicalAddress && supplier.physicalAddress.trim().length > 0);
 
   // 5. City
-  const hasCity = Boolean(hasSavedDetails && supplier.city && supplier.city.trim().length > 0);
+  const hasCity = Boolean(supplier.city && supplier.city.trim().length > 0);
 
   // 6. District
   const districtVal = supplier.district || (supplier as any).districtName || (supplier as any).district_id || (supplier as any).districtId;
-  const hasDistrict = Boolean(hasSavedDetails && districtVal && String(districtVal).trim().length > 0);
+  const hasDistrict = Boolean(districtVal && String(districtVal).trim().length > 0);
 
   // 7. Phone
   const rawPhone = (supplier.primaryPhone || '').replace(/\D/g, '');
-  const hasPhone = Boolean(hasSavedDetails && supplier.primaryPhone && rawPhone.length >= 7);
+  const hasPhone = Boolean(supplier.primaryPhone && rawPhone.length >= 7);
 
   // 8. Email
   const hasEmail = Boolean(
-    hasSavedDetails &&
     supplier.email &&
     supplier.email.trim().length > 0 &&
     supplier.email.includes('@')
@@ -115,7 +107,6 @@ export function calculateSupplierCompleteness(
 
   // 9. Bank Details (must have bank name and either branch or account number)
   const hasBankDetails = Boolean(
-    hasSavedDetails &&
     supplier.bankName &&
     supplier.bankName.trim().length > 0 &&
     ((supplier.bankBranch && supplier.bankBranch.trim().length > 0) ||
@@ -123,14 +114,8 @@ export function calculateSupplierCompleteness(
   );
 
   // 10. Citizen Ownership %
-  // Must be explicitly confirmed or set
-  const hasCitizenOwnership = Boolean(
-    hasSavedDetails &&
-    (supplier.citizenOwnershipSet === true ||
-      (typeof supplier.citizenOwnedPercentage === 'number' &&
-        supplier.citizenOwnedPercentage > 0 &&
-        supplier.citizenOwnedPercentage <= 100))
-  );
+  const citizenNum = Number(supplier.citizenOwnedPercentage ?? (supplier as any).citizen_owned_percentage);
+  const hasCitizenOwnership = Boolean(!isNaN(citizenNum) && citizenNum > 0 && citizenNum <= 100);
 
   // 11. People (1 item): at least one director, with ownership totalling 100%
   const totalOwnership = directors.reduce(

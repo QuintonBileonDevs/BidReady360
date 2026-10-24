@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Supplier,
   SupplierDocument,
@@ -441,17 +441,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setRegisteredBuyerEmail(session.user.email);
             } else if (session.activeTenant?.tenantType === 'supplier') {
               resolvedRole = 'supplier';
-              try {
-                const remoteProfile = await supplierApi.getProfile();
-                if (remoteProfile) {
-                  updateSupplierProfile({
-                    id: session.activeTenant.tenantId,
-                    legalName: remoteProfile.legalName || session.activeTenant.tenantName,
-                    tradingName: remoteProfile.tradingName || session.activeTenant.tenantName,
-                    email: remoteProfile.email || session.user.email,
-                  });
-                }
-              } catch {}
             }
             setRoleState(resolvedRole);
           }
@@ -505,12 +494,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setRegisteredBuyerEmail(session.user.email);
     } else if (session.activeTenant?.tenantType === 'supplier') {
       resolvedRole = 'supplier';
-      updateSupplierProfile({
-        id: session.activeTenant.tenantId,
-        legalName: session.activeTenant.tenantName,
-        tradingName: session.activeTenant.tenantName,
-        email: session.user.email,
-      });
     }
 
     setRoleState(resolvedRole);
@@ -949,6 +932,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 bankName: profile.bankName || '',
                 bankBranch: profile.bankBranch || '',
                 accountNumberMasked: profile.accountNumberMasked || profile.bankAccountNumber || '',
+                hasTradingLicence: profile.hasTradingLicence ?? false,
+                tradingLicenceReason: profile.tradingLicenceReason || '',
+                detailsSaved: true,
                 companyType: profile.companyType || 'private_company',
                 description: profile.description || '',
                 districtId: profile.districtId || null,
@@ -966,6 +952,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const completeness = calculateSupplierCompleteness(builtSupplier, mappedDocs);
               builtSupplier.profileCompleteness = completeness.score;
               builtSupplier.missingItems = completeness.missingItems.map((m) => m.label);
+              builtSupplier.complianceStatus = (builtSupplier.profileCompleteness >= 80 ? 'Fully compliant' : 'Action required');
+
+              // If database completeness does not match what is calculated in the app, update database immediately
+              if (profile.profileCompleteness !== completeness.score) {
+                supplierApi.updateProfile({
+                  profileCompleteness: completeness.score,
+                  profile_completeness: completeness.score,
+                  complianceStatus: builtSupplier.complianceStatus,
+                  compliance_status: builtSupplier.complianceStatus,
+                  missingItems: builtSupplier.missingItems,
+                  missing_items: builtSupplier.missingItems,
+                }).catch(() => {});
+              }
 
               setSupplier(builtSupplier);
             }
@@ -981,6 +980,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isMounted = false;
     };
   }, [isAuthenticated, role]);
+
+  // Whenever profile completeness changes in the application, update the database immediately
+  const prevCompletenessRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'supplier') return;
+    const token = localStorage.getItem('bidready_token');
+    if (!token || token.startsWith('demo_') || token === 'platform_admin_session_token') return;
+
+    const completeness = calculateSupplierCompleteness(supplier, documents);
+    const score = completeness.score;
+    const missing = completeness.missingItems.map((m) => m.label);
+    const compliance = score >= 80 ? 'Fully compliant' : 'Action required';
+
+    if (score !== prevCompletenessRef.current) {
+      prevCompletenessRef.current = score;
+      supplierApi.updateProfile({
+        profileCompleteness: score,
+        profile_completeness: score,
+        complianceStatus: compliance,
+        compliance_status: compliance,
+        missingItems: missing,
+        missing_items: missing,
+      }).catch((err) => {
+        console.warn('[DB COMPLETENESS AUTO-SYNC NOTICE]', err);
+      });
+    }
+  }, [
+    supplier.legalName,
+    supplier.tradingName,
+    supplier.tinNumber,
+    supplier.physicalAddress,
+    supplier.city,
+    supplier.district,
+    supplier.primaryPhone,
+    supplier.email,
+    supplier.bankName,
+    supplier.bankBranch,
+    supplier.accountNumberMasked,
+    supplier.citizenOwnedPercentage,
+    supplier.hasTradingLicence,
+    supplier.directors,
+    documents,
+    isAuthenticated,
+    role,
+  ]);
 
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>(() => {
@@ -1202,6 +1246,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         disability_owned: nextMerged.disabilityOwned,
         eddCertified: nextMerged.eddCertified,
         edd_certified: nextMerged.eddCertified,
+        hasTradingLicence: nextMerged.hasTradingLicence,
+        has_trading_licence: nextMerged.hasTradingLicence,
+        tradingLicenceReason: nextMerged.tradingLicenceReason,
+        trading_licence_reason: nextMerged.tradingLicenceReason,
         profileCompleteness: computedCompleteness,
         profile_completeness: computedCompleteness,
         complianceStatus: nextMerged.complianceStatus || 'Action required',
@@ -1221,6 +1269,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               districtId: saved.districtId || saved.district_id || curr.districtId,
               profileCompleteness: saved.profileCompleteness ?? curr.profileCompleteness,
               complianceStatus: saved.complianceStatus || curr.complianceStatus,
+              hasTradingLicence: saved.hasTradingLicence ?? curr.hasTradingLicence,
+              tradingLicenceReason: saved.tradingLicenceReason ?? curr.tradingLicenceReason,
             };
             saveSupplierToStorage(reMerged);
             return reMerged;
@@ -1322,17 +1372,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setDocuments(nextDocs);
     saveDocumentsToStorage(nextDocs);
+    let nextCompleteness = 0;
     setSupplier((prev) => {
       const completeness = calculateSupplierCompleteness(prev, nextDocs);
+      nextCompleteness = completeness.score;
       const nextSup = {
         ...prev,
         documents: nextDocs,
         profileCompleteness: completeness.score,
         missingItems: completeness.missingItems.map((m) => m.label),
+        complianceStatus: (completeness.score >= 80 ? 'Fully compliant' : 'Action required') as 'Fully compliant' | 'Action required',
       };
       saveSupplierToStorage(nextSup);
       return nextSup;
     });
+
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      supplierApi.updateProfile({
+        profileCompleteness: nextCompleteness,
+        profile_completeness: nextCompleteness,
+        complianceStatus: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
+        compliance_status: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
+      }).catch(() => {});
+    }
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
@@ -1349,17 +1412,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextDocs = documents.filter((d) => d.id !== docId);
     setDocuments(nextDocs);
     saveDocumentsToStorage(nextDocs);
+    let nextCompleteness = 0;
     setSupplier((prev) => {
       const completeness = calculateSupplierCompleteness(prev, nextDocs);
+      nextCompleteness = completeness.score;
       const nextSup = {
         ...prev,
         documents: nextDocs,
         profileCompleteness: completeness.score,
         missingItems: completeness.missingItems.map((m) => m.label),
+        complianceStatus: (completeness.score >= 80 ? 'Fully compliant' : 'Action required') as 'Fully compliant' | 'Action required',
       };
       saveSupplierToStorage(nextSup);
       return nextSup;
     });
+
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      supplierApi.deleteDocument(docId).catch(() => {});
+      supplierApi.updateProfile({
+        profileCompleteness: nextCompleteness,
+        profile_completeness: nextCompleteness,
+        complianceStatus: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
+        compliance_status: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
+      }).catch(() => {});
+    }
   };
 
   const grantConsent = (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => {

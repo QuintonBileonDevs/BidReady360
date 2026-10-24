@@ -294,6 +294,12 @@ export const supplierApi = {
     return data;
   },
 
+  async deleteDocument(id: string) {
+    return apiRequest(`/api/supplier/documents/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   async listPeople() {
     return apiRequest<any[]>('/api/supplier/people');
   },

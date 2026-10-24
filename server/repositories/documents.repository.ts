@@ -239,6 +239,18 @@ export class DocumentsRepository {
     if (!res.rows.length) return null;
     return res.rows[0];
   }
+
+  /**
+   * Delete or soft-delete a document for a supplier.
+   */
+  async deleteDocument(id: string, supplierId: string): Promise<boolean> {
+    const res = await query(
+      `UPDATE supplier_documents SET status = 'deleted', updated_at = NOW()
+       WHERE (id = $1 OR current_version_id = $1) AND supplier_id = $2`,
+      [id, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
 }
 
 export const documentsRepository = new DocumentsRepository();
