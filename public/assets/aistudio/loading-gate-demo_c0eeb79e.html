@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Loading gate demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F7FAFD;--card:#fff;--text:#10212E;--muted:#43525F;--line:#D5E0EA;--mist:#EAF2FA;--deep:#1F5F99;--blue:#6FAEE0;--amber:#E8A33D;--green:#2F8F5B;--red:#C2412D;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0D1A25;--card:#132635;--text:#fff;--muted:#B2C3D2;--line:#1E364A;--mist:#162C3E;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0D1A25;--card:#132635;--text:#fff;--muted:#B2C3D2;--line:#1E364A;--mist:#162C3E;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 'Source Sans 3','Segoe UI',system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 18px 40px}
+h1,h2{font-family:Sora,'Segoe UI',system-ui,sans-serif;letter-spacing:-.02em;margin:0}
+h1{font-size:1.5rem}
+p{margin:.3rem 0 1rem;color:var(--muted);max-width:62ch}
+.ctl{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;margin:0 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg label{padding:8px 14px;cursor:pointer;font-weight:600}
+.seg input{position:absolute;opacity:0}
+.seg label:has(input:checked){background:var(--deep);color:#fff}
+.seg label:has(input:focus-visible),.btn:focus-visible,.hic input:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.hic{display:flex;gap:8px;align-items:center}
+.btn{font:inherit;font-weight:600;padding:9px 16px;border-radius:6px;border:1px solid var(--deep);background:var(--deep);color:#fff;cursor:pointer;min-height:44px}
+.btn.alt{background:transparent;color:var(--deep);border-color:var(--line)}
+.btn:disabled{opacity:.55;cursor:default}
+.wrap{display:grid;grid-template-columns:1fr 250px;gap:16px}
+@media (max-width:760px){.wrap{grid-template-columns:1fr}}
+.frame{position:relative;min-height:430px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--bg)}
+.out{padding:56px 24px;text-align:center}
+.out h2{font-size:1.15rem}
+.out p{margin:.5rem auto}
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 18px;background:var(--card);border-bottom:1px solid var(--line)}
+.bar strong{font-family:Sora,'Segoe UI',sans-serif;font-size:1.05rem}
+.tag{font-size:.9rem;font-weight:600;padding:2px 10px;border-radius:99px;background:#FCEBCB;color:#7A4B00}
+#dash{padding-bottom:20px}
+.cards{padding:18px;display:grid;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.card b{font-family:Sora,'Segoe UI',sans-serif;font-size:1.6rem;display:block}
+.meter{height:8px;background:var(--mist);border-radius:4px;margin-top:8px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--deep);width:0;transition:width .4s}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.gate{position:absolute;inset:0;background:#10212E;display:grid;place-items:center;opacity:1;transition:opacity .4s;z-index:5}
+.gate[hidden]{display:none}
+.gate.fade{opacity:0}
+.modal{width:min(340px,88%);background:#132635;border:1px solid #1E364A;border-radius:14px;padding:26px 24px;color:#fff;text-align:center}
+.modal h2{font-size:1.2rem;margin-top:10px}
+.modal p{color:#B2C3D2;margin:.4rem auto 1rem;min-height:1.5em}
+.spin{transform-origin:60px 60px;animation:sp 2.4s linear infinite}
+.dot{transform-box:fill-box;transform-origin:center;animation:pl 1.6s ease-in-out infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@keyframes pl{50%{transform:scale(1.25)}}
+ol{list-style:none;margin:0 0 16px;padding:0;text-align:left}
+ol li{display:flex;gap:12px;align-items:center;padding:6px 0;color:#7D92A4}
+ol li::before{content:'';flex:none;width:18px;height:18px;border-radius:50%;border:2px solid #3A5870;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
+ol li.active{color:#fff}
+ol li.active::before{border-color:var(--blue);border-top-color:transparent;animation:sp .8s linear infinite}
+ol li.done{color:#DDE7F0}
+ol li.done::before{content:'\2713';background:var(--green);border-color:var(--green)}
+.prog{height:4px;background:#1E364A;border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--blue);transition:width .4s}
+.side{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--card)}
+.side h2{font-size:1rem;margin-bottom:6px}
+#log{list-style:none;margin:0;padding:0;font-size:.92rem;color:var(--muted)}
+#log li{padding:5px 0;border-top:1px solid var(--line)}
+#log li:first-child{border-top:0;color:var(--text);font-weight:600}
+@media (prefers-reduced-motion:reduce){.spin,.dot,ol li.active::before{animation:none}.gate,.meter i,.prog i{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Sign-in loading gate</h1>
+  <p>Press Sign in as Okavango Stationers in each mode. Before shows the current behaviour; After holds the whole app behind a cover until the real profile has loaded.</p>
+  <div class="ctl">
+    <div class="seg" role="radiogroup" aria-label="Mode">
+      <label><input type="radio" name="mode" value="before">Before</label>
+      <label><input type="radio" name="mode" value="after" checked>After</label>
+    </div>
+    <label class="hic"><input type="checkbox" id="hic">Simulate a failed request</label>
+    <button class="btn" id="go">Sign in as Okavango Stationers</button>
+    <button class="btn alt" id="rs">Reset</button>
+  </div>
+  <div class="wrap">
+    <div class="frame" id="frame">
+      <section class="out" id="out">
+        <h2>You are signed out</h2>
+        <p>Choose a mode, then sign in to see what the screen does first.</p>
+      </section>
+      <section id="dash" hidden>
+        <div class="bar">
+          <svg width="26" height="26" viewBox="0 0 120 120" aria-hidden="true"><path d="M 97.59 46.32 A 40 40 0 1 1 73.68 22.41" fill="none" stroke="#1F5F99" stroke-width="12" stroke-linecap="round"/><circle cx="60" cy="60" r="12" fill="#E8A33D"/></svg>
+          <strong id="name"></strong><span class="tag" id="tag" hidden></span>
+        </div>
+        <div class="cards">
+          <div class="card">Profile completeness<b id="pct"></b><div class="meter"><i id="bar"></i></div></div>
+          <div class="two">
+            <div class="card">Verified documents<b id="docs"></b></div>
+            <div class="card">Active applications<b id="apps"></b></div>
+          </div>
+        </div>
+      </section>
+      <div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gt" hidden>
+        <div class="modal">
+          <svg width="84" height="84" viewBox="0 0 120 120" aria-hidden="true"><g class="spin"><path d="M 97.59 46.32 A 40 40 0 1 1 73.68 22.41" fill="none" stroke="#6FAEE0" stroke-width="12" stroke-linecap="round"/></g><circle class="dot" cx="60" cy="60" r="12" fill="#E8A33D"/></svg>
+          <h2 id="gt">Preparing your workspace</h2>
+          <p id="msg" aria-live="polite">Getting everything ready</p>
+          <ol id="steps"><li>Signing you in</li><li>Loading your company</li><li>Checking your documents</li><li>Setting up your dashboard</li></ol>
+          <div class="prog"><i id="pbar"></i></div>
+        </div>
+      </div>
+    </div>
+    <aside class="side">
+      <h2>Behind the scenes</h2>
+      <ul id="log" aria-live="polite"></ul>
+    </aside>
+  </div>
+</main>
+<script>
+var REAL={name:'Okavango Stationers (Pty) Ltd',pct:34,docs:3,apps:1};
+var STALE={name:'Kopano Building Supplies (Pty) Ltd',pct:86,docs:7,apps:5};
+var run=0,longT=null;
+function $(i){return document.getElementById(i);}
+function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function mode(){return document.querySelector('input[name=mode]:checked').value;}
+function note(t){var li=document.createElement('li');li.textContent=t;var l=$('log');l.insertBefore(li,l.firstChild);while(l.children.length>8){l.removeChild(l.lastChild);}}
+function show(d,tag){$('name').textContent=d.name;$('pct').textContent=d.pct+'%';$('bar').style.width=d.pct+'%';$('docs').textContent=d.docs;$('apps').textContent=d.apps;var t=$('tag');t.hidden=!tag;t.textContent=tag||'';}
+function reset(){run++;clearTimeout(longT);$('dash').hidden=true;$('gate').hidden=true;$('gate').classList.remove('fade');$('out').hidden=false;
+  var s=$('steps').children;for(var i=0;i<s.length;i++){s[i].className='';}
+  $('msg').textContent='Getting everything ready';$('pbar').style.width='0';$('log').innerHTML='';$('go').disabled=false;}
+async function signIn(){
+  reset();var id=run;$('go').disabled=true;$('out').hidden=true;
+  if(mode()==='before'){
+    note('Signed in. The dashboard is drawn straight away');
+    $('dash').hidden=false;show(STALE,'Showing someone else\u2019s data');
+    await wait(1900);if(id!==run)return;
+    show(REAL,'Changed after loading');
+    note('The real profile arrives and the name and numbers change');
+    $('go').disabled=false;return;
+  }
+  var g=$('gate'),li=$('steps').children,hic=$('hic').checked,t0=Date.now();
+  g.hidden=false;note('Cover is up. No part of the app is drawn');
+  longT=setTimeout(function(){if(id===run){$('msg').textContent='Still working. Your data is safe.';}},5000);
+  for(var i=0;i<li.length;i++){
+    li[i].className='active';$('pbar').style.width=(i/li.length*100)+'%';
+    if(i===1){
+      note('Asking for your profile in one request');
+      var tries=0;
+      while(true){
+        tries++;await wait(800);if(id!==run)return;
+        if(hic&&tries<3){var d=tries*1500;$('msg').textContent='Reconnecting\u2026';note('Request did not finish. Trying again quietly in '+(d/1000)+' s');await wait(d);if(id!==run)return;continue;}
+        break;
+      }
+      $('msg').textContent='Getting everything ready';
+      note('Profile received. Its user id matches your session');
+    } else {await wait(700);}
+    if(id!==run)return;
+    li[i].className='done';
+  }
+  $('pbar').style.width='100%';show(REAL,'');$('dash').hidden=false;
+  await wait(Math.max(200,700-(Date.now()-t0)));if(id!==run)return;
+  g.classList.add('fade');await wait(450);if(id!==run)return;
+  g.hidden=true;clearTimeout(longT);
+  note('Cover removed. The first thing drawn was the correct data');
+  $('go').disabled=false;
+}
+$('go').addEventListener('click',signIn);
+$('rs').addEventListener('click',reset);
+</script>
+</body>
+</html>

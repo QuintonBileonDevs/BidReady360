@@ -210,6 +210,10 @@ export const authApi = {
     }
   },
 
+  async bootstrap(signal?: AbortSignal) {
+    return await apiRequest<any>('/api/bootstrap', { signal });
+  },
+
   async logout() {
     localStorage.removeItem('bidready_token');
     localStorage.removeItem('bidready_session');

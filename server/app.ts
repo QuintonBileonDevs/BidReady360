@@ -9,6 +9,7 @@ import { supplierRouter } from './routes/supplier.routes';
 import { callsRouter } from './routes/calls.routes';
 import { buyerRouter } from './routes/buyer.routes';
 import { auditRouter } from './routes/audit.routes';
+import { bootstrapRouter } from './routes/bootstrap.routes';
 
 // Run startup database verification guard
 verifyDatabaseGuard().catch((err) => {
@@ -42,6 +43,7 @@ app.use('/api/supplier', supplierRouter);
 app.use('/api/calls', callsRouter);
 app.use('/api/buyer', buyerRouter);
 app.use('/api/audit', auditRouter);
+app.use('/api/bootstrap', bootstrapRouter);
 
 // Same routes without the prefix, in case a rewrite strips '/api'
 app.use('/reference', referenceRouter);
@@ -50,6 +52,7 @@ app.use('/supplier', supplierRouter);
 app.use('/calls', callsRouter);
 app.use('/buyer', buyerRouter);
 app.use('/audit', auditRouter);
+app.use('/bootstrap', bootstrapRouter);
 
 // Health check
 app.get(['/api/health', '/health'], (_req: Request, res: Response) => {

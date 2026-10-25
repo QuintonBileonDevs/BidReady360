@@ -160,6 +160,12 @@ interface AppContextType {
   setGatePurpose: (purpose: 'loading_profile' | 'setting_up' | 'switching' | 'logging_out', targetName?: string) => void;
   switchOrganizationOrSupplier: (tenantId: string, tenantType: 'supplier' | 'organization', targetName?: string) => Promise<void>;
   
+  // Loading Gate
+  isBootstrapping: boolean;
+  bootstrapStep: number;
+  bootstrapMessage: string;
+  runBootstrap: (options?: { force?: boolean }) => Promise<any>;
+  
   // Buyer Verification State
   buyerOrgStatus: 'Pending' | 'Approved' | 'Rejected';
   registeredBuyerOrgName: string | null;
@@ -344,7 +350,265 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Inactivity Warning & Timeout State
   const [isInactiveWarningOpen, setIsInactiveWarningOpen] = useState<boolean>(false);
   const [inactivitySecondsLeft, setInactivitySecondsLeft] = useState<number>(Math.floor(INACTIVITY_WARNING_MS / 1000));
+  // Loading Gate & Robust Bootstrap State
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
+  const [bootstrapStep, setBootstrapStep] = useState(0);
+  const [bootstrapMessage, setBootstrapMessage] = useState('');
 
+  const runIdRef = useRef(0);
+  const inFlightRef = useRef<Promise<boolean> | null>(null);
+  const watchdogTimerRef = useRef<any>(null);
+
+  const runBootstrap = async (options?: { force?: boolean }): Promise<boolean> => {
+    if (inFlightRef.current && !options?.force) {
+      return inFlightRef.current;
+    }
+
+    const runId = ++runIdRef.current;
+    console.log('[bootstrap:start] Starting bootstrap run #', runId);
+
+    setIsBootstrapping(true);
+    setBootstrapStep(0);
+    setBootstrapMessage('Signing you in...');
+
+    const bootstrapPromise = (async () => {
+      let attempt = 0;
+      let hasSelfHealed = false;
+      const startTime = Date.now();
+
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+      }
+
+      // 15s Watchdog: auto-recover if gate stays up longer than 15 seconds
+      watchdogTimerRef.current = setTimeout(async () => {
+        if (runIdRef.current === runId) {
+          console.warn('[bootstrap:watchdog] Gate up > 15s. Running self-healing path...');
+          try {
+            const meRes = await authApi.getMe();
+            if (meRes && meRes.activeTenant) {
+              await authApi.switchTenant(meRes.activeTenant.tenantId, meRes.activeTenant.tenantType);
+            }
+          } catch (e) {
+            console.warn('[bootstrap:watchdog] Self-heal error:', e);
+          }
+        }
+      }, 15000);
+
+      while (runIdRef.current === runId) {
+        attempt++;
+        try {
+          if (attempt === 1) {
+            setBootstrapStep(0);
+            setBootstrapMessage('Signing you in...');
+            await new Promise((r) => setTimeout(r, 180));
+          }
+
+          if (runIdRef.current !== runId) return false;
+
+          setBootstrapStep(1);
+          setBootstrapMessage('Loading your company...');
+
+          // Timeout per request: 10 seconds
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          let data: any;
+          try {
+            data = await authApi.bootstrap(controller.signal);
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          console.log('[bootstrap:response] Received bootstrap data for run #', runId);
+
+          if (runIdRef.current !== runId) return false;
+
+          if (!data || typeof data !== 'object') {
+            throw new Error('INVALID_BOOTSTRAP_PAYLOAD');
+          }
+
+          setBootstrapStep(2);
+          setBootstrapMessage('Checking your documents...');
+          await new Promise((r) => setTimeout(r, 180));
+
+          if (runIdRef.current !== runId) return false;
+
+          setBootstrapStep(3);
+          setBootstrapMessage('Setting up your dashboard...');
+
+          // Validate against authoritative session
+          const meController = new AbortController();
+          const meTimeoutId = setTimeout(() => meController.abort(), 8000);
+          let currentSession: any;
+          try {
+            currentSession = await authApi.getMe();
+          } finally {
+            clearTimeout(meTimeoutId);
+          }
+
+          if (runIdRef.current !== runId) return false;
+
+          if (!currentSession || !currentSession.user) {
+            console.warn('[validate:mismatch] No active session found. Redirecting to login.');
+            setIsBootstrapping(false);
+            logout('user_initiated');
+            window.location.href = `/supplier-login?redirect=${encodeURIComponent(window.location.pathname)}`;
+            return false;
+          }
+
+          // ID validation
+          const sessionUserId = currentSession.user.id;
+          const bootstrapUserId = data.user?.id;
+
+          if (bootstrapUserId && sessionUserId && String(sessionUserId) !== String(bootstrapUserId)) {
+            console.warn('[validate:mismatch] User ID mismatch between session and bootstrap.');
+            if (!hasSelfHealed) {
+              hasSelfHealed = true;
+              continue;
+            } else {
+              setIsBootstrapping(false);
+              logout('user_initiated');
+              window.location.href = '/supplier-login?error=session_mismatch';
+              return false;
+            }
+          }
+
+          console.log('[validate:ok] Session and workspace validated for run #', runId);
+
+          // Normalize data safely with defaults
+          const normDocs = Array.isArray(data.documents) ? data.documents : [];
+          const normApps = Array.isArray(data.applications) ? data.applications : [];
+          const normProfile = data.profile || {
+            id: currentSession.activeTenant?.tenantId || 'anon',
+            legalName: currentSession.activeTenant?.tenantName || currentSession.user.fullName,
+            tradingName: currentSession.activeTenant?.tenantName || currentSession.user.fullName,
+            cipaNumber: '',
+            tinNumber: '',
+            profileCompleteness: 0,
+            status: 'active',
+            verificationStatus: 'verified',
+          };
+
+          // Synchronously commit to React state behind opaque gate
+          setCurrentUser(currentSession.user);
+          setIsAuthenticated(true);
+          setSupplier(normProfile);
+          setDocuments(normDocs);
+          setApplications(normApps);
+
+          let resolvedRole: UserRole = 'supplier';
+          if (currentSession.user.isPlatformAdmin) {
+            resolvedRole = 'admin';
+          } else if (currentSession.activeTenant?.tenantType === 'organization') {
+            resolvedRole = 'buyer';
+            setBuyerOrgStatus('Approved');
+            setRegisteredBuyerOrgName(currentSession.activeTenant.tenantName);
+            setRegisteredBuyerEmail(currentSession.user.email);
+          } else if (currentSession.activeTenant?.tenantType === 'supplier') {
+            resolvedRole = 'supplier';
+          }
+          setRoleState(resolvedRole);
+
+          // Minimum display time of 700ms so gate does not flicker
+          const elapsed = Date.now() - startTime;
+          if (elapsed < 700) {
+            await new Promise((r) => setTimeout(r, 700 - elapsed));
+          }
+
+          if (runIdRef.current !== runId) return false;
+
+          // Step 4 done
+          setBootstrapStep(4);
+          await new Promise((r) => setTimeout(r, 200));
+
+          if (runIdRef.current !== runId) return false;
+
+          setIsBootstrapping(false);
+          console.log('[gate:lift] Loading gate lifted for run #', runId);
+          return true;
+
+        } catch (err: any) {
+          console.warn(`[bootstrap:attempt ${attempt}] Error:`, err);
+
+          // 1. Permanent: 401 Unauthorized -> redirect cleanly
+          if (err?.status === 401) {
+            console.warn('[bootstrap:unauthorized] Received 401 -> redirecting to login.');
+            setIsBootstrapping(false);
+            logout('user_initiated');
+            window.location.href = `/supplier-login?redirect=${encodeURIComponent(window.location.pathname)}`;
+            return false;
+          }
+
+          // 2. Tenant error: 403 / 404 / NO_ACTIVE_TENANT -> self-heal once
+          const isTenantError =
+            err?.status === 403 ||
+            err?.status === 404 ||
+            err?.message?.includes('NO_ACTIVE_TENANT');
+
+          if (isTenantError && !hasSelfHealed) {
+            hasSelfHealed = true;
+            console.warn('[bootstrap:self-heal] Attempting deterministic workspace recovery...');
+            try {
+              const session = await authApi.getMe();
+              if (session && session.user) {
+                const memberships = (session as any).memberships || [];
+                if (memberships.length > 0) {
+                  const sorted = [...memberships].sort((a: any, b: any) => {
+                    if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+                    return (a.tenantName || '').localeCompare(b.tenantName || '');
+                  });
+                  await authApi.switchTenant(sorted[0].tenantId, sorted[0].tenantType);
+                }
+              }
+            } catch (switchErr) {
+              console.warn('[bootstrap:self-heal] Tenant switch notice:', switchErr);
+            }
+            continue;
+          }
+
+          // 3. Transient error check: network failure, timeout, 502/503/504, or DATABASE_UNAVAILABLE
+          const isTransient =
+            !err?.status ||
+            err?.name === 'AbortError' ||
+            [502, 503, 504].includes(err.status) ||
+            err?.code === 'DATABASE_UNAVAILABLE';
+
+          if (isTransient) {
+            const delay = [1500, 3000, 4500, 5000][Math.min(attempt - 1, 3)];
+            const totalElapsed = Date.now() - startTime;
+            setBootstrapMessage(
+              totalElapsed > 5000
+                ? 'Still working. Your data is safe.'
+                : 'Reconnecting…'
+            );
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+
+          // 4. Unrecoverable permanent failure after retry/self-heal: clean signout
+          console.error('[bootstrap:permanent-failure] Could not recover workspace:', err);
+          setIsBootstrapping(false);
+          logout('user_initiated');
+          window.location.href = '/supplier-login?notice=workspace_unavailable';
+          return false;
+        }
+      }
+
+      return false;
+    })();
+
+    inFlightRef.current = bootstrapPromise;
+    try {
+      return await bootstrapPromise;
+    } finally {
+      inFlightRef.current = null;
+      if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+      }
+    }
+  };
   const resetInactivity = () => {
     const now = Date.now();
     try {
@@ -493,25 +757,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const session = await authApi.getMe();
         if (session && session.user && isMounted) {
-          setCurrentUser(session.user);
-          setIsAuthenticated(true);
-          let resolvedRole: UserRole = 'supplier';
-          if (session.user.isPlatformAdmin) {
-            resolvedRole = 'admin';
-          } else if (session.activeTenant?.tenantType === 'organization') {
-            resolvedRole = 'buyer';
-            setBuyerOrgStatus('Approved');
-            setRegisteredBuyerOrgName(session.activeTenant.tenantName);
-            setRegisteredBuyerEmail(session.user.email);
-          } else if (session.activeTenant?.tenantType === 'supplier') {
-            resolvedRole = 'supplier';
-          }
-          setRoleState(resolvedRole);
-
           const savedNav = localStorage.getItem('bidready_active_nav');
           if (savedNav && savedNav !== 'about' && savedNav !== 'session-expired') {
             setActiveNavState(savedNav);
           }
+          await runBootstrap();
         } else if (isMounted) {
           setIsAuthenticated(false);
           setCurrentUser(null);
@@ -554,19 +804,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch {}
     }
 
-    try {
-      localStorage.removeItem('bidready_supplier_profile');
-      localStorage.removeItem('bidready_supplier_documents');
-      localStorage.removeItem('bidready_supplier_applications');
-      localStorage.removeItem('bidready_supplier_consent_grants');
-      localStorage.removeItem('bidready_supplier_people');
-    } catch {}
-    setSupplier(EMPTY_SUPPLIER);
-    setDocuments([]);
-    setApplications([]);
-
-    setCurrentUser(session.user);
-    setIsAuthenticated(true);
+    runBootstrap();
 
     let resolvedRole: UserRole = targetRole || 'supplier';
     if (session.user.isPlatformAdmin) {
@@ -2171,6 +2409,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         registerBuyerOrganization,
         approveBuyerOrg,
         rejectBuyerOrg,
+        isBootstrapping,
+        bootstrapStep,
+        bootstrapMessage,
+        runBootstrap,
         supplier,
         allSuppliers,
         documents,
