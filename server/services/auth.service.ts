@@ -1,6 +1,7 @@
 import { query } from '../db/client';
 import { usersRepository, User, UserTenantMembership } from '../repositories/users.repository';
 import { auditRepository } from '../repositories/audit.repository';
+import { resolveDeterministicTenant } from './tenant.resolver';
 import { sanitizeIp } from '../utils/ip';
 import {
   hashPassword,
@@ -224,6 +225,8 @@ export class AuthService {
           r.name AS role_name,
           om.is_owner,
           om.status,
+          om.last_active_at,
+          om.created_at,
           COALESCE(
             (SELECT json_agg(p.code)
              FROM role_permissions rp
@@ -254,6 +257,8 @@ export class AuthService {
           r.name AS role_name,
           sm.is_owner,
           sm.status,
+          sm.last_active_at,
+          sm.created_at,
           COALESCE(
             (SELECT json_agg(p.code)
              FROM role_permissions rp
@@ -294,6 +299,8 @@ export class AuthService {
             'roleName', m.role_name,
             'isOwner', m.is_owner,
             'status', m.status,
+            'lastActiveAt', m.last_active_at,
+            'createdAt', m.created_at,
             'permissions', m.permissions,
             'profile', m.org_profile
           )) FROM org_mems m),
@@ -308,6 +315,8 @@ export class AuthService {
             'roleName', m.role_name,
             'isOwner', m.is_owner,
             'status', m.status,
+            'lastActiveAt', m.last_active_at,
+            'createdAt', m.created_at,
             'permissions', m.permissions,
             'profile', m.supplier_profile
           )) FROM sup_mems m),
@@ -450,10 +459,12 @@ export class AuthService {
         permissions: ['*'],
       };
     } else if (memberships.length > 0) {
-      activeTenant = memberships[0];
-      tenantType = activeTenant.tenantType;
-      tenantId = activeTenant.tenantId;
-      profileSummary = (activeTenant as any).profile || null;
+      activeTenant = resolveDeterministicTenant(memberships as any, null);
+      if (activeTenant) {
+        tenantType = activeTenant.tenantType;
+        tenantId = activeTenant.tenantId;
+        profileSummary = (activeTenant as any).profile || null;
+      }
     }
 
     // 9. Generate cryptographically secure 32-byte session token

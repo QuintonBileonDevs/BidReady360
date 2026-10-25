@@ -1,4 +1,5 @@
 import { query, withTransaction } from '../db/client';
+import { computeSupplierCompleteness, CompletenessResult } from '../services/completeness.service';
 
 export interface SupplierProfile {
   id: string;
@@ -299,128 +300,63 @@ export function normalizeComplianceStatus(input?: string | null): string {
 }
 
 export class SuppliersRepository {
+  /**
+   * Recalculates and persists completeness only when called on data mutation events.
+   * Never called on read operations.
+   */
   async calculateCompleteness(supplierId: string): Promise<number> {
     try {
-      const sRes = await query(
-        `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
-                s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked,
-                s.citizen_owned_percentage, s.has_trading_licence
-         FROM suppliers s WHERE s.id = $1`,
-        [supplierId]
-      );
+      const [sRes, pRes, dRes] = await Promise.all([
+        query(
+          `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
+                  s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked,
+                  s.citizen_owned_percentage, s.has_trading_licence
+           FROM suppliers s WHERE s.id = $1`,
+          [supplierId]
+        ),
+        query(
+          `SELECT ownership_percent, is_active FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
+          [supplierId]
+        ),
+        query(
+          `SELECT dt.code, dt.name, sd.status, sdv.expiry_date, sdv.verification_status, sdv.file_name
+           FROM supplier_documents sd
+           JOIN document_types dt ON dt.id = sd.document_type_id
+           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
+           WHERE sd.supplier_id = $1 AND sd.status = 'active'`,
+          [supplierId]
+        ),
+      ]);
+
       if (sRes.rows.length === 0) return 0;
       const s = sRes.rows[0];
+      const people = pRes.rows;
+      const docs = dRes.rows;
 
-      const isTradingLicenceRequired = s.has_trading_licence === true;
-      let totalCount = isTradingLicenceRequired ? 16 : 15;
-      let completedCount = 0;
-
-      // 1. Legal Name
-      if (s.legal_name && String(s.legal_name).trim().length > 0) completedCount++;
-      // 2. Trading Name
-      if (s.trading_name && String(s.trading_name).trim().length > 0) completedCount++;
-      // 3. Tax Number
-      if (s.burs_tin && String(s.burs_tin).trim().length > 0) completedCount++;
-      // 4. Physical Address
-      if (s.physical_address && String(s.physical_address).trim().length > 0) completedCount++;
-      // 5. City
-      if (s.city && String(s.city).trim().length > 0) completedCount++;
-      // 6. District
-      if (s.district_id && String(s.district_id).trim().length > 0) completedCount++;
-      // 7. Phone
-      const phoneDigits = (s.primary_phone || '').replace(/\D/g, '');
-      if (s.primary_phone && phoneDigits.length >= 7) completedCount++;
-      // 8. Email
-      if (s.email && String(s.email).includes('@')) completedCount++;
-      // 9. Bank Details
-      if (
-        s.bank_name &&
-        String(s.bank_name).trim().length > 0 &&
-        ((s.bank_branch && String(s.bank_branch).trim().length > 0) ||
-          (s.account_number_masked && String(s.account_number_masked).trim().length > 0))
-      ) {
-        completedCount++;
-      }
-      // 10. Citizen Ownership %
-      if (
-        s.citizen_owned_percentage !== null &&
-        s.citizen_owned_percentage !== undefined &&
-        Number(s.citizen_owned_percentage) > 0 &&
-        Number(s.citizen_owned_percentage) <= 100
-      ) {
-        completedCount++;
-      }
-
-      // 11. Directors (100% total ownership)
-      const pRes = await query(
-        `SELECT ownership_percent FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
-        [supplierId]
-      );
-      if (pRes.rows.length > 0) {
-        const totalOwnership = pRes.rows.reduce(
-          (sum: number, r: any) => sum + (parseFloat(r.ownership_percent) || 0),
-          0
-        );
-        if (Math.round(totalOwnership) === 100) {
-          completedCount++;
-        }
-      }
-
-      // Documents (CIPA, Tax, Directors ID, Bank Letter, and conditional Trading Licence)
-      const dRes = await query(
-        `SELECT dt.code, dt.name, sd.status, sdv.expiry_date AS valid_until, sdv.verification_status
-         FROM supplier_documents sd
-         JOIN document_types dt ON dt.id = sd.document_type_id
-         LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
-         WHERE sd.supplier_id = $1 AND sd.status = 'active'`,
-        [supplierId]
-      );
-
-      const isValid = (keywords: string[]) => {
-        return dRes.rows.some((d: any) => {
-          const name = ((d.code || '') + ' ' + (d.name || '')).toLowerCase();
-          const matches = keywords.some((k: string) => name.includes(k.toLowerCase()));
-          if (!matches) return false;
-          if (d.status === 'expired' || d.status === 'rejected' || d.status === 'deleted') return false;
-          if (d.valid_until && new Date(d.valid_until) < new Date()) return false;
-          return true;
-        });
-      };
-
-      // 12. CIPA Certificate
-      if (isValid(['cipa', 'incorporation', 'company registration', 'company_registration'])) completedCount++;
-      // 13. Tax Clearance
-      if (isValid(['tax clearance', 'tax_clearance', 'burs', 'tax certificate'])) completedCount++;
-      // 14. Directors ID
-      if (isValid(['directors and shareholders id', 'director id', 'director_id', 'shareholder id', 'directors id', 'director identity', 'director', 'shareholder', 'omang', 'passport'])) completedCount++;
-      // 15. Bank Letter
-      if (isValid(['bank confirmation', 'bank_letter', 'bank rating', 'bank confirmation letter', 'bank letter', 'bank statement'])) completedCount++;
-      // 16. Trading Licence (conditional)
-      if (isTradingLicenceRequired) {
-        if (isValid(['trading licence', 'trading_licence', 'business licence', 'licence'])) {
-          completedCount++;
-        }
-      }
-
-      const score = Math.round((completedCount / Math.max(1, totalCount)) * 100);
-      const complianceStatus = score >= 80 ? 'Fully compliant' : 'Action required';
+      const result = computeSupplierCompleteness(s, people, docs);
+      const missingLabels = result.missingItems.map((m) => m.label);
 
       await query(
-        `UPDATE suppliers SET profile_completeness = $1, compliance_status = $2, updated_at = NOW() WHERE id = $3`,
-        [score, complianceStatus, supplierId]
+        `UPDATE suppliers
+         SET profile_completeness = $1,
+             compliance_status = $2,
+             missing_items = $3,
+             profile_completeness_updated_at = NOW()
+         WHERE id = $4`,
+        [result.score, result.complianceStatus, missingLabels, supplierId]
       );
 
-      return score;
+      return result.score;
     } catch (err) {
       console.warn('[RECALCULATE COMPLETENESS ERROR]', err);
       return 0;
     }
   }
 
-  async getById(supplierId: string, skipRecalculate: boolean = true): Promise<SupplierProfile | null> {
-    if (!skipRecalculate) {
-      await this.calculateCompleteness(supplierId);
-    }
+  /**
+   * PURE READ: Returns the supplier profile row without mutating the database or updating completeness.
+   */
+  async getById(supplierId: string): Promise<SupplierProfile | null> {
 
     const res = await query<SupplierProfile>(
       `SELECT s.id, 
@@ -696,7 +632,10 @@ export class SuppliersRepository {
     );
 
     const hasExplicitCompleteness = (data.profile_completeness !== undefined || data.profileCompleteness !== undefined);
-    const updated = await this.getById(supplierId, hasExplicitCompleteness);
+    if (!hasExplicitCompleteness) {
+      await this.calculateCompleteness(supplierId);
+    }
+    const updated = await this.getById(supplierId);
     if (!updated) throw new Error('Supplier not found after update.');
     return updated;
   }
@@ -706,7 +645,8 @@ export class SuppliersRepository {
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", ownership_percent AS "ownershipPercent",
               identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, kyc_status AS "kycStatus"
+              email, phone, national_identity_hash AS "nationalIdOrPassport",
+              national_identity_hash AS "idNumber", kyc_status AS "kycStatus"
        FROM supplier_people
        WHERE supplier_id = $1 AND is_active = TRUE
        ORDER BY created_at ASC`,
@@ -715,15 +655,29 @@ export class SuppliersRepository {
     return res.rows;
   }
 
-  async addPerson(supplierId: string, person: { fullName: string; personRole: string; email?: string; phone?: string; ownershipPercent?: number }): Promise<SupplierPerson> {
+  async addPerson(supplierId: string, person: { fullName: string; personRole: string; email?: string; phone?: string; ownershipPercent?: number; nationality?: string; isCitizen?: boolean; identityType?: string; idNumber?: string; nationalIdOrPassport?: string }): Promise<SupplierPerson> {
+    const ownership = person.ownershipPercent !== undefined && !isNaN(Number(person.ownershipPercent)) ? Number(person.ownershipPercent) : 0;
+    const nationalId = person.idNumber || person.nationalIdOrPassport || null;
     const res = await query<SupplierPerson>(
-      `INSERT INTO supplier_people (supplier_id, full_name, person_role, email, phone, ownership_percent, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+      `INSERT INTO supplier_people (supplier_id, full_name, person_role, email, phone, ownership_percent, nationality, is_citizen, identity_type, national_identity_hash, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
        RETURNING id, supplier_id AS "supplierId", full_name AS "fullName",
                  person_role AS "personRole", ownership_percent AS "ownershipPercent",
                  identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-                 email, phone, kyc_status AS "kycStatus"`,
-      [supplierId, person.fullName.trim(), person.personRole, person.email || null, person.phone || null, person.ownershipPercent || null]
+                 email, phone, national_identity_hash AS "nationalIdOrPassport",
+                 national_identity_hash AS "idNumber", kyc_status AS "kycStatus"`,
+      [
+        supplierId,
+        person.fullName.trim(),
+        person.personRole,
+        person.email || null,
+        person.phone || null,
+        ownership,
+        person.nationality || 'Motswana',
+        person.isCitizen ?? true,
+        person.identityType || 'OMANG',
+        nationalId,
+      ]
     );
     return res.rows[0];
   }
@@ -740,8 +694,11 @@ export class SuppliersRepository {
       nationality?: string;
       isCitizen?: boolean;
       identityType?: string;
+      idNumber?: string;
+      nationalIdOrPassport?: string;
     }
   ): Promise<SupplierPerson | null> {
+    const nationalId = person.idNumber !== undefined ? person.idNumber : person.nationalIdOrPassport;
     const res = await query<SupplierPerson>(
       `UPDATE supplier_people
        SET full_name = COALESCE($3, full_name),
@@ -752,12 +709,14 @@ export class SuppliersRepository {
            nationality = COALESCE($8, nationality),
            is_citizen = COALESCE($9, is_citizen),
            identity_type = COALESCE($10, identity_type),
+           national_identity_hash = COALESCE($11, national_identity_hash),
            updated_at = NOW()
        WHERE id = $2 AND supplier_id = $1
        RETURNING id, supplier_id AS "supplierId", full_name AS "fullName",
                  person_role AS "personRole", ownership_percent AS "ownershipPercent",
                  identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-                 email, phone, kyc_status AS "kycStatus"`,
+                 email, phone, national_identity_hash AS "nationalIdOrPassport",
+                 national_identity_hash AS "idNumber", kyc_status AS "kycStatus"`,
       [
         supplierId,
         personId,
@@ -765,10 +724,11 @@ export class SuppliersRepository {
         person.personRole || null,
         person.email || null,
         person.phone || null,
-        person.ownershipPercent !== undefined ? person.ownershipPercent : null,
+        person.ownershipPercent !== undefined && !isNaN(Number(person.ownershipPercent)) ? Number(person.ownershipPercent) : null,
         person.nationality || null,
         person.isCitizen !== undefined ? person.isCitizen : null,
         person.identityType || null,
+        nationalId !== undefined ? nationalId : null,
       ]
     );
     return res.rows[0] || null;
@@ -779,7 +739,11 @@ export class SuppliersRepository {
       `DELETE FROM supplier_people WHERE id = $1 AND supplier_id = $2`,
       [personId, supplierId]
     );
-    return (res.rowCount || 0) > 0;
+    if ((res.rowCount || 0) > 0) {
+      await this.calculateCompleteness(supplierId);
+      return true;
+    }
+    return false;
   }
 
   async listProjects(supplierId: string): Promise<SupplierProject[]> {

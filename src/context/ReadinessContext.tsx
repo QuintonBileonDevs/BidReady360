@@ -15,6 +15,8 @@ export interface DomVerifyTarget {
   applicationsCount?: number;
   userId?: string;
   tenantId?: string;
+  resolvedSupplierId?: string;
+  serverFingerprint?: string;
 }
 
 export interface DomVerificationResult {
@@ -166,6 +168,17 @@ export const ReadinessProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             );
           }
         }
+
+        if (bindKey === 'tenant.id' || bindKey === 'supplier.id') {
+          const expected = target.resolvedSupplierId || target.tenantId || '';
+          const match = !expected || actualText === expected || actualText.includes(expected);
+          details['tenant.id'] = { expected, actual: actualText, match };
+          if (!match) {
+            errors.push(
+              `[data-bind="tenant.id"] mismatch: expected "${expected}", rendered "${actualText}"`
+            );
+          }
+        }
       });
 
       return {
@@ -187,6 +200,13 @@ export const ReadinessProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const maxWait = 3500;
       const startTime = Date.now();
       let quietStart: number | null = null;
+
+      if (target.serverFingerprint && process.env.NODE_ENV !== 'production') {
+        console.log('[GATE DATABASE TRUTH FINGERPRINT]', target.serverFingerprint, {
+          resolvedSupplierId: target.resolvedSupplierId,
+          completenessScore: target.completenessScore,
+        });
+      }
 
       while (Date.now() - startTime < maxWait) {
         // Wait for two consecutive requestAnimationFrame callbacks to guarantee paint

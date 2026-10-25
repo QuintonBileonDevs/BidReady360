@@ -24,30 +24,41 @@ export interface SupplierCompletenessResult {
 /**
  * Validates whether a document in the vault fulfills a compliance requirement:
  * Must be present, not expired, and not rejected.
+ * Supports both real document type codes and descriptive names.
  */
 function isDocumentValid(
   documents: SupplierDocument[],
-  typeKeywords: string[]
+  typeKeywordsOrCodes: string[]
 ): boolean {
-  return documents.some((doc) => {
+  return (documents || []).some((doc) => {
+    const code = ((doc as any).documentTypeCode || (doc as any).doc_type_code || (doc as any).code || '').toUpperCase();
     const typeLower = (doc.documentType || '').toLowerCase();
     const titleLower = (doc.title || '').toLowerCase();
-    const matchesType = typeKeywords.some(
-      (kw) => typeLower.includes(kw.toLowerCase()) || titleLower.includes(kw.toLowerCase())
-    );
 
-    if (!matchesType) return false;
+    const matches = typeKeywordsOrCodes.some((kw) => {
+      const kwUpper = kw.toUpperCase();
+      const kwLower = kw.toLowerCase();
+      return (
+        (code && code === kwUpper) ||
+        (code && code.includes(kwUpper)) ||
+        typeLower.includes(kwLower) ||
+        titleLower.includes(kwLower)
+      );
+    });
+
+    if (!matches) return false;
 
     // Must not be expired or rejected
-    const isExpired = doc.status === 'Expired';
-    const isRejected = doc.status === 'Rejected';
+    const isExpired = doc.status === 'Expired' || (doc as any).status === 'expired';
+    const isRejected = doc.status === 'Rejected' || (doc as any).status === 'rejected';
 
     // Also check date if expiryDate is set and in the past
     let dateExpired = false;
-    if (doc.expiryDate) {
+    const expVal = doc.expiryDate || (doc as any).expiry_date || (doc as any).valid_until;
+    if (expVal) {
       try {
-        const exp = new Date(doc.expiryDate);
-        if (!isNaN(exp.getTime()) && exp < new Date()) {
+        const exp = new Date(expVal);
+        if (!isNaN(exp.getTime()) && exp.getTime() < Date.now()) {
           dateExpired = true;
         }
       } catch {
@@ -311,7 +322,7 @@ export function calculateSupplierCompleteness(
       label: "Directors' and shareholders' ID",
       shortLabel: "Directors' ID",
       category: 'Documents',
-      isComplete: hasDirectorsIdDoc || (Boolean(supplier.isDemoAccount) && hasDirectors100Percent),
+      isComplete: hasDirectorsIdDoc,
       targetSection: 'vault',
       fieldId: 'field-doc-directors-id',
       description: 'Certified national identity documents or passports for registered directors and shareholders.',
@@ -321,7 +332,7 @@ export function calculateSupplierCompleteness(
       label: 'Bank confirmation letter',
       shortLabel: 'Bank letter',
       category: 'Documents',
-      isComplete: hasBankConfirmationDoc || (Boolean(supplier.isDemoAccount) && hasBankDetails),
+      isComplete: hasBankConfirmationDoc,
       targetSection: 'vault',
       fieldId: 'field-doc-bank-letter',
       description: 'Active commercial bank account confirmation letter issued within past 3 months.',

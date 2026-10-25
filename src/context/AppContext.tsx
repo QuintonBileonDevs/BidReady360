@@ -3,6 +3,7 @@ import { useReadinessContext } from './ReadinessContext';
 import {
   Supplier,
   SupplierDocument,
+  Director,
   Organization,
   Call,
   Application,
@@ -481,25 +482,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           console.log('[validate:ok] Session and workspace validated for run #', runId);
 
-          // Normalize data safely with defaults
-          const normDocs = Array.isArray(data.documents) ? data.documents : [];
+          // 1. Map directors/people from bootstrap payload into authoritative supplier state
+          const mappedDirectors: Director[] = (data.people || []).map((p: any) => ({
+            id: p.id,
+            fullName: p.full_name || p.fullName || '',
+            nationalIdOrPassport: p.national_identity_hash || p.nationalIdOrPassport || '',
+            idType: p.identity_type === 'OMANG' ? 'National ID (Omang)' : (p.identity_type === 'PASSPORT' ? 'Passport' : 'National ID (Omang)'),
+            nationality: p.nationality || 'Motswana',
+            isCitizen: p.is_citizen ?? true,
+            shareholdingPercentage: parseFloat(p.ownership_percent ?? p.shareholdingPercentage ?? '0') || 0,
+            role: p.person_role === 'shareholder' ? 'Shareholder' : (p.person_role === 'director' ? 'Director' : (p.person_role || 'Director')),
+          }));
+
+          // 2. Map documents from bootstrap payload with authoritative codes and statuses
+          const mappedDocs: SupplierDocument[] = (data.documents || []).map((d: any) => {
+            const isVerified = (d.verificationStatus || '').toUpperCase() === 'VERIFIED';
+            const isExpired = (d.status || '').toLowerCase() === 'expired';
+            const isRejected = (d.status || '').toLowerCase() === 'rejected';
+            const statusLabel = isVerified ? 'Verified' : (isExpired ? 'Expired' : (isRejected ? 'Rejected' : 'Pending'));
+
+            return {
+              id: d.documentId || d.id,
+              supplierId: d.supplierId || data.resolvedSupplierId,
+              documentType: d.documentTypeName || d.documentTypeCode || d.title || 'Document',
+              documentTypeCode: d.documentTypeCode,
+              title: d.title || d.documentTypeName,
+              fileName: d.fileName || 'document.pdf',
+              fileSize: d.fileSizeBytes ? `${Math.round(parseInt(d.fileSizeBytes) / 1024)} KB` : '100 KB',
+              issueDate: d.issueDate || d.uploadedAt || new Date().toISOString(),
+              expiryDate: d.expiryDate || undefined,
+              status: statusLabel as any,
+              verificationStatus: d.verificationStatus,
+              downloadUrl: `/api/supplier/documents/${d.documentId || d.id}/file`,
+            };
+          });
+
           const normApps = Array.isArray(data.applications) ? data.applications : [];
-          const normProfile = data.profile || {
-            id: currentSession.activeTenant?.tenantId || 'anon',
-            legalName: currentSession.activeTenant?.tenantName || currentSession.user.fullName,
-            tradingName: currentSession.activeTenant?.tenantName || currentSession.user.fullName,
-            cipaNumber: '',
-            tinNumber: '',
-            profileCompleteness: 0,
-            status: 'active',
-            verificationStatus: 'verified',
+          const rawProfile = data.profile || {};
+          const completenessScore = data.completeness?.score ?? rawProfile.profileCompleteness ?? rawProfile.profile_completeness ?? 0;
+          const complianceStatus = data.completeness?.complianceStatus ?? rawProfile.complianceStatus ?? rawProfile.compliance_status ?? (completenessScore >= 80 ? 'Fully compliant' : 'Action required');
+
+          const normProfile: Supplier = {
+            id: rawProfile.id || currentSession.activeTenant?.tenantId || data.resolvedSupplierId || '',
+            legalName: rawProfile.legalName || rawProfile.legal_name || currentSession.activeTenant?.tenantName || currentSession.user.fullName || '',
+            tradingName: rawProfile.tradingName || rawProfile.trading_name || rawProfile.legalName || rawProfile.legal_name || '',
+            cipaNumber: rawProfile.cipaNumber || rawProfile.cipaUin || rawProfile.cipa_uin || '',
+            tinNumber: rawProfile.tinNumber || rawProfile.bursTin || rawProfile.burs_tin || '',
+            ppraCode: rawProfile.ppraCode || rawProfile.ppraRegistrationNo || rawProfile.ppra_registration_no || '',
+            ppraSubcodes: rawProfile.ppraSubcodes || [],
+            ppraGrade: rawProfile.ppraGrade || '',
+            category: rawProfile.category || '',
+            secondaryCategories: rawProfile.secondaryCategories || [],
+            categories: rawProfile.categories || [],
+            physicalAddress: rawProfile.physicalAddress || rawProfile.physical_address || '',
+            city: rawProfile.city || '',
+            district: rawProfile.district || rawProfile.districtName || '',
+            districtId: rawProfile.districtId || rawProfile.district_id || null,
+            postalAddress: rawProfile.postalAddress || rawProfile.postal_address || '',
+            primaryPhone: rawProfile.primaryPhone || rawProfile.primary_phone || '',
+            email: rawProfile.email || '',
+            website: rawProfile.website || '',
+            yearEstablished: rawProfile.yearEstablished || rawProfile.year_established || new Date().getFullYear(),
+            companyType: rawProfile.companyType || rawProfile.company_type || 'Private Company (Pty) Ltd',
+            description: rawProfile.description || '',
+            citizenOwnedPercentage: Number(rawProfile.citizenOwnedPercentage ?? rawProfile.citizen_owned_percentage ?? 0),
+            citizenOwnershipSet: Boolean(rawProfile.citizenOwnedPercentage ?? rawProfile.citizen_owned_percentage),
+            youthOwned: Boolean(rawProfile.youthOwned ?? rawProfile.youth_owned),
+            womenOwned: Boolean(rawProfile.womenOwned ?? rawProfile.women_owned),
+            disabilityOwned: Boolean(rawProfile.disabilityOwned ?? rawProfile.disability_owned),
+            eddCertified: Boolean(rawProfile.eddCertified ?? rawProfile.edd_certified),
+            bankName: rawProfile.bankName || rawProfile.bank_name || '',
+            bankBranch: rawProfile.bankBranch || rawProfile.bank_branch || '',
+            accountNumberMasked: rawProfile.accountNumberMasked || rawProfile.account_number_masked || '',
+            hasTradingLicence: rawProfile.hasTradingLicence ?? rawProfile.has_trading_licence ?? null,
+            tradingLicenceReason: rawProfile.tradingLicenceReason || rawProfile.trading_licence_reason || '',
+            directors: mappedDirectors,
+            documents: mappedDocs,
+            profileCompleteness: completenessScore,
+            complianceStatus: complianceStatus,
+            missingItems: data.completeness?.missingItems ? data.completeness.missingItems.map((m: any) => m.label) : (rawProfile.missingItems || rawProfile.missing_items || []),
+            pastProjects: rawProfile.pastProjects || [],
+            teamMembers: rawProfile.teamMembers || [],
+            isDemoAccount: false,
+            emailVerified: Boolean(currentSession.user.emailVerifiedAt || currentSession.profileSummary?.emailVerified),
           };
 
           // Synchronously commit to React state behind opaque gate
           setCurrentUser(currentSession.user);
           setIsAuthenticated(true);
           setSupplier(normProfile);
-          setDocuments(normDocs);
+          setDocuments(mappedDocs);
           setApplications(normApps);
 
           let resolvedRole: UserRole = 'supplier';
@@ -522,10 +594,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const domTarget = {
             supplierName: normProfile.legalName,
             completenessScore: normProfile.profileCompleteness,
-            documentsCount: normDocs.length,
+            documentsCount: mappedDocs.length,
             applicationsCount: normApps.length,
             userId: currentSession.user.id,
             tenantId: currentSession.activeTenant?.tenantId,
+            resolvedSupplierId: data.resolvedSupplierId || currentSession.activeTenant?.tenantId,
+            serverFingerprint: data.serverFingerprint,
           };
 
           const settleResult = await waitForPaintAndSettle(domTarget, 250);
@@ -1128,50 +1202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Single source of truth: Profile snapshot is loaded atomically via runBootstrap (/api/bootstrap)
   // Page-level and context-level duplicate fetches have been removed to prevent post-gate data shifts.
 
-  // Whenever profile completeness changes in the application, update the database immediately
-  const prevCompletenessRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!isAuthenticated || role !== 'supplier') return;
-    const token = localStorage.getItem('bidready_token');
-    if (!token || token.startsWith('demo_') || token === 'platform_admin_session_token') return;
-
-    const completeness = calculateSupplierCompleteness(supplier, documents);
-    const score = completeness.score;
-    const missing = completeness.missingItems.map((m) => m.label);
-    const compliance = score >= 80 ? 'Fully compliant' : 'Action required';
-
-    if (score !== prevCompletenessRef.current) {
-      prevCompletenessRef.current = score;
-      supplierApi.updateProfile({
-        profileCompleteness: score,
-        profile_completeness: score,
-        complianceStatus: compliance,
-        compliance_status: compliance,
-        missingItems: missing,
-        missing_items: missing,
-      }).catch((err) => {
-        console.warn('[DB COMPLETENESS AUTO-SYNC NOTICE]', err);
-      });
-    }
-  }, [
-    supplier.legalName,
-    supplier.tradingName,
-    supplier.tinNumber,
-    supplier.physicalAddress,
-    supplier.city,
-    supplier.district,
-    supplier.primaryPhone,
-    supplier.email,
-    supplier.bankName,
-    supplier.bankBranch,
-    supplier.accountNumberMasked,
-    supplier.citizenOwnedPercentage,
-    supplier.hasTradingLicence,
-    supplier.directors,
-    documents,
-    isAuthenticated,
-    role,
-  ]);
+  // Completeness is computed from pure database snapshots and recalculated only on mutation events.
 
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
   const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>(() => {

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { hashToken } from '../utils/crypto';
 import { usersRepository, User, UserTenantMembership } from '../repositories/users.repository';
 import { query } from '../db/client';
+import { resolveDeterministicTenant, persistActiveTenantToSession } from '../services/tenant.resolver';
 
 export interface UserSessionContext {
   id: string;
@@ -129,6 +130,8 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
                r.name AS "roleName",
                om.is_owner AS "isOwner",
                om.status,
+               om.last_active_at AS "lastActiveAt",
+               om.created_at AS "createdAt",
                COALESCE(
                  (SELECT json_agg(p.code)
                   FROM role_permissions rp
@@ -158,6 +161,8 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
                r.name AS "roleName",
                sm.is_owner AS "isOwner",
                sm.status,
+               sm.last_active_at AS "lastActiveAt",
+               sm.created_at AS "createdAt",
                COALESCE(
                  (SELECT json_agg(p.code)
                   FROM role_permissions rp
@@ -251,11 +256,17 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
         emailVerified: true,
       };
     } else if (sess.tenantId) {
-      activeTenant = memberships.find((m) => m.tenantId === sess.tenantId);
+      activeTenant = memberships.find((m) => m.tenantId === sess.tenantId && m.status === 'active');
     }
 
     if (!activeTenant && memberships.length > 0) {
-      activeTenant = memberships[0];
+      activeTenant = resolveDeterministicTenant(memberships as any, sess.tenantId);
+      if (activeTenant && sess.sessionId) {
+        // Persist the deterministic fallback to the session so subsequent requests use the same tenant
+        persistActiveTenantToSession(sess.sessionId, activeTenant.tenantType, activeTenant.tenantId);
+        sess.tenantType = activeTenant.tenantType;
+        sess.tenantId = activeTenant.tenantId;
+      }
     }
 
     if (!profileSummary && activeTenant) {

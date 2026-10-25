@@ -658,6 +658,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
             nationality: newDirectorForm.nationality,
             isCitizen: newDirectorForm.isCitizen,
             identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+            idNumber: newDirectorForm.idNumber.trim(),
+            nationalIdOrPassport: newDirectorForm.idNumber.trim(),
           });
           if (res && res.id) dbId = res.id;
         } else {
@@ -668,6 +670,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
             nationality: newDirectorForm.nationality,
             isCitizen: newDirectorForm.isCitizen,
             identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+            idNumber: newDirectorForm.idNumber.trim(),
+            nationalIdOrPassport: newDirectorForm.idNumber.trim(),
           });
         }
 
@@ -715,6 +719,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           nationality: newDirectorForm.nationality,
           isCitizen: newDirectorForm.isCitizen,
           identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
+          idNumber: newDirectorForm.idNumber.trim(),
+          nationalIdOrPassport: newDirectorForm.idNumber.trim(),
         });
 
         const newDir = {
@@ -3253,11 +3259,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     min="0"
                     max="100"
                     required
-                    value={newDirectorForm.shareholdingPercentage}
+                    value={newDirectorForm.shareholdingPercentage === 0 ? '' : newDirectorForm.shareholdingPercentage}
                     onChange={(e) =>
                       setNewDirectorForm({
                         ...newDirectorForm,
-                        shareholdingPercentage: Number(e.target.value),
+                        shareholdingPercentage: e.target.value === '' ? 0 : Number(e.target.value),
                       })
                     }
                     className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
