@@ -303,7 +303,7 @@ export const SupplierConsent: React.FC = () => {
                 Email verification mandatory to share documents
               </span>
               <p className="text-amber-800 dark:text-amber-300 text-[13px]">
-                Your supplier account is currently unverified. You cannot share company credentials or vault documents until you verify your email address.
+                Your supplier profile is currently unverified. You cannot share company credentials or vault documents until you verify your email address.
               </p>
             </div>
           </div>

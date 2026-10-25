@@ -795,7 +795,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 Email verification mandatory to submit tender bids
               </span>
               <p className="text-amber-800 dark:text-amber-300 text-[13px]">
-                Your supplier account is unverified. Submitting sealed proposals is locked until you verify your email address.
+                Your supplier profile is unverified. Submitting sealed proposals is locked until you verify your email address.
               </p>
             </div>
           </div>

@@ -241,7 +241,7 @@ export const Header: React.FC = () => {
                   </div>
                   <div className="hidden sm:block leading-tight">
                     <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
-                      {supplier.legalName || 'Loading profile...'}
+                      {supplier.legalName || ''}
                     </span>
                     <span className="text-[13px] text-[#6B7A87] block">
                       {supplier.legalName ? (
@@ -251,9 +251,9 @@ export const Header: React.FC = () => {
                           ? 'Demo account'
                           : !supplier.emailVerified
                           ? 'Unverified account'
-                          : 'Incomplete Profile'
+                          : ''
                       ) : (
-                        'Fetching profile...'
+                        ''
                       )}
                     </span>
                   </div>
@@ -264,7 +264,7 @@ export const Header: React.FC = () => {
                   <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-2 z-50 text-[13px] space-y-1">
                     <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
                       <div className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
-                        {supplier.legalName || 'Supplier Account'}
+                        {supplier.legalName || 'Supplier'}
                       </div>
                       <div className="text-[13px] text-[#6B7A87]">
                         {supplier.cipaNumber ? `CIPA: ${supplier.cipaNumber}` : 'Account active'}

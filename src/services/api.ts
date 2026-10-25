@@ -22,9 +22,24 @@ export interface ApiTenantMembership {
   permissions: string[];
 }
 
+export interface ProfileSummary {
+  userId: string;
+  displayName: string;
+  tenantType: 'supplier' | 'organization' | 'platform';
+  tenantId: string | null;
+  role: string;
+  supplierOrOrgName: string;
+  verificationStatus: string;
+  cipaNumber?: string;
+  emailVerified?: boolean;
+  complianceStatus?: string;
+  profileCompleteness?: number;
+}
+
 export interface AuthSession {
   user: ApiUser;
   activeTenant?: ApiTenantMembership;
+  profileSummary?: ProfileSummary;
   permissions: string[];
 }
 
@@ -190,6 +205,9 @@ export const authApi = {
 
   async getMe(): Promise<AuthSession | null> {
     try {
+      if (typeof window !== 'undefined' && window.location.search.includes('slowgate=1')) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
       return await apiRequest<AuthSession>('/api/auth/me');
     } catch {
       return null;

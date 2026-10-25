@@ -5,6 +5,7 @@ import { Footer } from './components/common/Footer';
 import { Logo } from './components/common/Logo';
 import { RouteGuard } from './components/auth/RouteGuard';
 import { PWAInstallPrompt } from './components/common/PWAInstallPrompt';
+import AppGate, { GateSkeleton } from './components/AppGate';
 
 // Public Views
 import { PublicAbout } from './components/public/PublicAbout';
@@ -46,7 +47,6 @@ const SupplierBidSubmission = React.lazy(() =>
 
 import { ApplicationsLockedPrompt } from './components/supplier/ApplicationsLockedPrompt';
 import { calculateSupplierCompleteness } from './utils/supplierOnboarding';
-import { InactivityWarningModal } from './components/common/InactivityWarningModal';
 
 const DashboardFallback = () => (
   <div className="flex items-center justify-center py-20 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
@@ -144,21 +144,8 @@ const MainContent: React.FC = () => {
   const isProfileComplete = supplierCompleteness.score >= 100;
 
   // ----------------------------------------------------
-  // SESSION RESTORATION LOADING INDICATOR
+  // SESSION RESTORATION LOADING INDICATOR (handled by AppGate)
   // ----------------------------------------------------
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
-        <div className="flex flex-col items-center gap-4">
-          <Logo theme="light" size="lg" />
-          <div className="flex items-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-            <div className="w-4 h-4 border-2 border-[#1F5F99] border-t-transparent rounded-full animate-spin" />
-            <span>Verifying security session...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ----------------------------------------------------
   // PLATFORM ADMIN FULL EXPERIENCE (when authenticated)
@@ -477,10 +464,55 @@ const MainContent: React.FC = () => {
   );
 };
 
+function MainAppWrapper() {
+  const {
+    isAuthenticated,
+    currentUser,
+    profileSummary,
+    authLoading,
+    gateError,
+    gatePurpose,
+    retryProfileLoad,
+    logout,
+    activeNav,
+  } = useApp();
+
+  const isAuthRoute = AUTH_ROUTES.includes(activeNav);
+  const isPublicRoute = ['opportunities', 'help', 'guidelines', 'about', 'suppliers', 'buyers'].includes(activeNav);
+  const isPublicOrAuth = isAuthRoute || (isPublicRoute && !isAuthenticated);
+
+  const ready = Boolean(
+    isAuthenticated &&
+    profileSummary !== null &&
+    currentUser !== null &&
+    profileSummary.userId === currentUser.id &&
+    !authLoading
+  );
+  const failed = Boolean(gateError);
+  const title = gatePurpose === 'setting_up' ? 'Setting up your profile' : 'Loading your profile';
+
+  if (isPublicOrAuth) {
+    return <MainContent />;
+  }
+
+  return (
+    <AppGate
+      ready={ready}
+      failed={failed}
+      title={title}
+      skeleton={<GateSkeleton />}
+      onRetry={retryProfileLoad}
+      onSignOut={() => logout('user_initiated')}
+    >
+      <MainContent />
+    </AppGate>
+  );
+}
+
 export default function App() {
   return (
     <AppProvider>
-      <MainContent />
+      <MainAppWrapper />
     </AppProvider>
   );
 }

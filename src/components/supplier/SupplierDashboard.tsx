@@ -135,7 +135,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 Action required: Verify your email address ({supplier.email || 'your email'})
               </span>
               <p className="text-amber-800 dark:text-amber-300 text-[13px] leading-relaxed">
-                Your supplier account remains unverified. To safeguard Botswana procurement integrity, you cannot apply to open tenders or share documents until your email address is verified.
+                Your supplier profile remains unverified. To safeguard Botswana procurement integrity, you cannot apply to open tenders or share documents until your email address is verified.
               </p>
             </div>
           </div>

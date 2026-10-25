@@ -78,7 +78,7 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
           <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-[8px] text-[12px] text-amber-900 dark:text-amber-200 text-left flex items-start gap-2">
             <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
             <span>
-              <strong>Mandatory safeguard:</strong> Your supplier account stays unverified and cannot apply to calls or share documents until you verify your email address.
+              <strong>Mandatory safeguard:</strong> Your supplier profile stays unverified and cannot apply to calls or share documents until you verify your email address.
             </span>
           </div>
         </div>

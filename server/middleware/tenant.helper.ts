@@ -55,7 +55,7 @@ export function getOrganizationContext(req: Request): TenantContext {
 export function getSupplierContext(req: Request): TenantContext {
   const ctx = getTenantContext(req);
   if (ctx.tenantType !== 'supplier' && !ctx.isPlatformAdmin) {
-    throw new Error('Access denied: active workspace is not a supplier account.');
+    throw new Error('Access denied: active workspace is not a supplier profile.');
   }
   return ctx;
 }

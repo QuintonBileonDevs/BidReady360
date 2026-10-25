@@ -33,7 +33,7 @@ export const SupplierWelcome: React.FC<SupplierWelcomeProps> = ({ onNavigate }) 
             Welcome to BidReady360
           </h2>
           <p className="text-[14px] text-[#6B7A87] leading-relaxed">
-            Your supplier account for <strong>{supplier.legalName}</strong> has been initialized. Here is what you need to complete next:
+            Your supplier profile for <strong>{supplier.legalName}</strong> has been initialized. Here is what you need to complete next:
           </p>
         </div>
 

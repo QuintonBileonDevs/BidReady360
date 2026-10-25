@@ -130,7 +130,7 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
   return (
     <AuthLayout
       leftMessage="Register once. Bid anywhere."
-      tagline="Create your supplier account once to manage documents and bid for tenders across all participating organizations in Botswana."
+      tagline="Create your supplier profile once to manage documents and bid for tenders across all participating organizations in Botswana."
     >
       <div className="space-y-6">
         {toastNotice && (
@@ -232,7 +232,7 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
             isLoading={isLoading}
             rightIcon={<CheckCircle2 />}
           >
-            Create supplier account
+            Create supplier profile
           </Button>
         </form>
 

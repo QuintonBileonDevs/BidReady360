@@ -156,6 +156,10 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     if (result.timing) {
       res.setHeader(
         'Server-Timing',
@@ -348,6 +352,9 @@ router.post('/switch-tenant', requireAuth, async (req: Request, res: Response) =
 
 // GET /api/auth/me
 router.get('/me', requireAuth, (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.json({
     user: {
       id: req.user!.id,
@@ -357,6 +364,7 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
       isPlatformAdmin: req.user!.isPlatformAdmin,
     },
     activeTenant: req.activeTenant,
+    profileSummary: req.profileSummary || null,
     permissions: Array.from(req.permissions || []),
   });
 });

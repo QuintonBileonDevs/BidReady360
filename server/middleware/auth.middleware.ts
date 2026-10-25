@@ -18,6 +18,7 @@ declare global {
       user?: User;
       session?: UserSessionContext;
       activeTenant?: UserTenantMembership;
+      profileSummary?: any;
       permissions?: Set<string>;
     }
   }
@@ -79,7 +80,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   try {
     const tokenHash = hashToken(rawToken);
 
-    // 1. Single indexed query: sessions joined with users by token_hash
+    // 1. Single indexed query: session, user, and joined tenant memberships with profile summaries
     const authRes = await query<{
       sessionId: string;
       tenantType: 'supplier' | 'organization' | 'platform' | null;
@@ -101,21 +102,97 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       failedLoginAttempts: number;
       lockedUntil: string | null;
       createdAt: string;
+      orgMemberships: any[];
+      supMemberships: any[];
     }>(
-      `SELECT s.id AS "sessionId", s.tenant_type AS "tenantType", s.tenant_id AS "tenantId",
-              u.id, u.email, u.password_hash AS "passwordHash", u.full_name AS "fullName",
-              u.phone, u.preferred_language AS "preferredLanguage", u.status,
-              u.is_platform_admin AS "isPlatformAdmin", u.email_verified_at AS "emailVerifiedAt",
-              u.phone_verified_at AS "phoneVerifiedAt", u.mfa_enabled AS "mfaEnabled",
-              u.mfa_secret_encrypted AS "mfaSecretEncrypted", u.mfa_type AS "mfaType",
-              u.last_login_at AS "lastLoginAt", u.failed_login_attempts AS "failedLoginAttempts",
-              u.locked_until AS "lockedUntil", u.created_at AS "createdAt"
-       FROM sessions s
-       JOIN users u ON u.id = s.user_id AND u.deleted_at IS NULL AND u.status = 'active'
-       WHERE s.token_hash = $1
-         AND s.expires_at > NOW()
-         AND s.revoked_at IS NULL
-       LIMIT 1`,
+      `WITH user_session AS (
+        SELECT s.id AS "sessionId", s.tenant_type AS "tenantType", s.tenant_id AS "tenantId",
+               u.id, u.email, u.password_hash AS "passwordHash", u.full_name AS "fullName",
+               u.phone, u.preferred_language AS "preferredLanguage", u.status,
+               u.is_platform_admin AS "isPlatformAdmin", u.email_verified_at AS "emailVerifiedAt",
+               u.phone_verified_at AS "phoneVerifiedAt", u.mfa_enabled AS "mfaEnabled",
+               u.mfa_secret_encrypted AS "mfaSecretEncrypted", u.mfa_type AS "mfaType",
+               u.last_login_at AS "lastLoginAt", u.failed_login_attempts AS "failedLoginAttempts",
+               u.locked_until AS "lockedUntil", u.created_at AS "createdAt"
+        FROM sessions s
+        JOIN users u ON u.id = s.user_id AND u.deleted_at IS NULL AND u.status = 'active'
+        WHERE s.token_hash = $1
+          AND s.expires_at > NOW()
+          AND s.revoked_at IS NULL
+        LIMIT 1
+      ),
+      org_mems AS (
+        SELECT 'organization' AS "tenantType",
+               o.id AS "tenantId",
+               o.name AS "tenantName",
+               r.id AS "roleId",
+               r.name AS "roleName",
+               om.is_owner AS "isOwner",
+               om.status,
+               COALESCE(
+                 (SELECT json_agg(p.code)
+                  FROM role_permissions rp
+                  JOIN permissions p ON p.id = rp.permission_id
+                  WHERE rp.role_id = r.id),
+                 '[]'::json
+               ) AS permissions,
+               json_build_object(
+                 'displayName', (SELECT "fullName" FROM user_session),
+                 'tenantType', 'organization',
+                 'tenantId', o.id,
+                 'role', r.name,
+                 'supplierOrOrgName', o.name,
+                 'verificationStatus', 'verified',
+                 'emailVerified', ((SELECT "emailVerifiedAt" FROM user_session) IS NOT NULL)
+               ) AS profile_summary
+        FROM organization_members om
+        JOIN organizations o ON o.id = om.organization_id AND o.deleted_at IS NULL
+        JOIN roles r ON r.id = om.role_id
+        WHERE om.user_id = (SELECT id FROM user_session) AND om.status = 'active'
+      ),
+      sup_mems AS (
+        SELECT 'supplier' AS "tenantType",
+               s.id AS "tenantId",
+               s.legal_name AS "tenantName",
+               r.id AS "roleId",
+               r.name AS "roleName",
+               sm.is_owner AS "isOwner",
+               sm.status,
+               COALESCE(
+                 (SELECT json_agg(p.code)
+                  FROM role_permissions rp
+                  JOIN permissions p ON p.id = rp.permission_id
+                  WHERE rp.role_id = r.id),
+                 '[]'::json
+               ) AS permissions,
+               json_build_object(
+                 'displayName', (SELECT "fullName" FROM user_session),
+                 'tenantType', 'supplier',
+                 'tenantId', s.id,
+                 'role', r.name,
+                 'supplierOrOrgName', s.legal_name,
+                 'verificationStatus', s.verification_status,
+                 'cipaNumber', s.cipa_uin,
+                 'complianceStatus', s.compliance_status,
+                 'profileCompleteness', s.profile_completeness,
+                 'emailVerified', ((SELECT "emailVerifiedAt" FROM user_session) IS NOT NULL)
+               ) AS profile_summary
+        FROM supplier_members sm
+        JOIN suppliers s ON s.id = sm.supplier_id AND s.deleted_at IS NULL
+        JOIN roles r ON r.id = sm.role_id
+        WHERE sm.user_id = (SELECT id FROM user_session) AND sm.status = 'active'
+      )
+      SELECT 
+        us.*,
+        COALESCE(
+          (SELECT json_agg(m.*) FROM org_mems m),
+          '[]'::json
+        ) AS "orgMemberships",
+        COALESCE(
+          (SELECT json_agg(m.*) FROM sup_mems m),
+          '[]'::json
+        ) AS "supMemberships"
+      FROM user_session us`,
       [tokenHash]
     );
 
@@ -144,13 +221,18 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       createdAt: sess.createdAt,
     };
 
-    // 3. Resolve tenant membership
-    const memberships = await usersRepository.getUserMemberships(user.id);
+    // 2. Resolve active tenant and profile summary from joined memberships
+    const memberships: UserTenantMembership[] = [
+      ...(sess.orgMemberships || []),
+      ...(sess.supMemberships || []),
+    ];
+
     let activeTenant: UserTenantMembership | undefined;
+    let profileSummary: any = null;
 
     if (sess.tenantType === 'platform' && user.isPlatformAdmin) {
       activeTenant = {
-        tenantType: 'organization', // administrative umbrella
+        tenantType: 'organization',
         tenantId: 'platform',
         tenantName: 'Platform Administration',
         roleId: 'role-platform-admin',
@@ -159,12 +241,33 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
         status: 'active',
         permissions: ['*'],
       };
+      profileSummary = {
+        displayName: user.fullName || user.email,
+        tenantType: 'platform',
+        tenantId: 'platform',
+        role: 'Super Admin',
+        supplierOrOrgName: 'Platform Administration',
+        verificationStatus: 'verified',
+        emailVerified: true,
+      };
     } else if (sess.tenantId) {
       activeTenant = memberships.find((m) => m.tenantId === sess.tenantId);
     }
 
     if (!activeTenant && memberships.length > 0) {
       activeTenant = memberships[0];
+    }
+
+    if (!profileSummary && activeTenant) {
+      profileSummary = (activeTenant as any).profile_summary || {
+        displayName: user.fullName || user.email,
+        tenantType: activeTenant.tenantType,
+        tenantId: activeTenant.tenantId,
+        role: activeTenant.roleName,
+        supplierOrOrgName: activeTenant.tenantName,
+        verificationStatus: 'verified',
+        emailVerified: Boolean(user.emailVerifiedAt),
+      };
     }
 
     req.user = user;
@@ -176,6 +279,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       tenantId: sess.tenantId,
     };
     req.activeTenant = activeTenant;
+    req.profileSummary = profileSummary;
     req.permissions = new Set<string>(
       user.isPlatformAdmin ? ['*'] : activeTenant?.permissions || []
     );
