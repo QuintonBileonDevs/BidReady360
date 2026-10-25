@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { ReadinessProvider } from './context/ReadinessContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { Logo } from './components/common/Logo';
@@ -115,18 +116,26 @@ const MainContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA] transition-colors duration-150">
       <LoadingGate isVisible={isBootstrapping} step={bootstrapStep} statusMessage={bootstrapMessage} />
-      <Header />
-      <main className="flex-1 container-1160 w-full py-8 sm:py-12">{renderContent()}</main>
-      <Footer />
-      <PWAInstallPrompt />
+      <div
+        className="flex-1 flex flex-col"
+        inert={isBootstrapping ? true : undefined}
+        aria-hidden={isBootstrapping}
+      >
+        <Header />
+        <main className="flex-1 container-1160 w-full py-8 sm:py-12">{renderContent()}</main>
+        <Footer />
+        <PWAInstallPrompt />
+      </div>
     </div>
   );
 };
 
 export default function App() {
   return (
-    <AppProvider>
-      <MainContent />
-    </AppProvider>
+    <ReadinessProvider>
+      <AppProvider>
+        <MainContent />
+      </AppProvider>
+    </ReadinessProvider>
   );
 }

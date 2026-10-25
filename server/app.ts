@@ -17,6 +17,7 @@ verifyDatabaseGuard().catch((err) => {
 });
 
 const app = express();
+app.set('etag', false);
 
 // CORS & preflight handling
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -24,6 +25,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Origin, Accept');
+  
+  // Enforce no-store on all API endpoints to prevent stale cached authenticated data
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/supplier') || req.path.startsWith('/bootstrap') || req.path.startsWith('/buyer')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+  }
+
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;

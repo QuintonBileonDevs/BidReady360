@@ -42,36 +42,73 @@ export interface AuthSession {
   permissions: string[];
 }
 
+type InFlightListener = (count: number) => void;
+class InFlightTracker {
+  private count = 0;
+  private listeners: Set<InFlightListener> = new Set();
+
+  increment() {
+    this.count++;
+    this.notify();
+  }
+
+  decrement() {
+    this.count = Math.max(0, this.count - 1);
+    this.notify();
+  }
+
+  getCount() {
+    return this.count;
+  }
+
+  subscribe(listener: InFlightListener) {
+    this.listeners.add(listener);
+    listener(this.count);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify() {
+    this.listeners.forEach((l) => l(this.count));
+  }
+}
+
+export const inFlightTracker = new InFlightTracker();
+
 export async function apiRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('bidready_token');
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
+  inFlightTracker.increment();
+  try {
+    const token = localStorage.getItem('bidready_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(endpoint, {
+      credentials: 'include',
+      ...options,
+      headers,
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const errorMsg = data.message || `Request failed with status ${res.status}`;
+      const err = new Error(errorMsg) as any;
+      err.status = res.status;
+      err.code = data.code || 'API_ERROR';
+      err.field = data.field;
+      err.email = data.email;
+      throw err;
+    }
+
+    return data as T;
+  } finally {
+    inFlightTracker.decrement();
   }
-
-  const res = await fetch(endpoint, {
-    credentials: 'include',
-    ...options,
-    headers,
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const errorMsg = data.message || `Request failed with status ${res.status}`;
-    const err = new Error(errorMsg) as any;
-    err.status = res.status;
-    err.code = data.code || 'API_ERROR';
-    err.field = data.field;
-    err.email = data.email;
-    throw err;
-  }
-
-  return data as T;
 }
 
 // ---------------------------------------------------------------------

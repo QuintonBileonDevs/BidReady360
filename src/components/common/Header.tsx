@@ -18,8 +18,10 @@ import {
 } from 'lucide-react';
 import { NotificationDrawer } from './NotificationDrawer';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
+import { useReadiness } from '../../context/ReadinessContext';
 
 export const Header: React.FC = () => {
+  const { setReady: setHeaderReady } = useReadiness('header.user');
   const {
     role,
     setRole,
@@ -43,6 +45,21 @@ export const Header: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSignInDropdownOpen, setIsSignInDropdownOpen] = useState(false);
+
+  React.useEffect(() => {
+    if (role === 'supplier') {
+      const isReady = Boolean(
+        supplier &&
+        supplier.legalName &&
+        supplier.legalName !== 'Registered Supplier' &&
+        supplier.legalName !== 'Supplier Account' &&
+        supplier.legalName !== 'Loading profile...'
+      );
+      setHeaderReady(isReady);
+    } else {
+      setHeaderReady(true);
+    }
+  }, [role, supplier, setHeaderReady]);
 
   const unreadNotifs = notifications.filter(
     (n) =>
@@ -240,7 +257,7 @@ export const Header: React.FC = () => {
                     )}
                   </div>
                   <div className="hidden sm:block leading-tight">
-                    <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
+                    <span data-bind="supplier.name" className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
                       {supplier.legalName || 'Supplier'}
                     </span>
                     <span className="text-[13px] text-[#6B7A87] block">

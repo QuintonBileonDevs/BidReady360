@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { query } from '../db/client';
 import { requireAuth } from '../middleware/auth.middleware';
 import { suppliersRepository } from '../repositories/suppliers.repository';
+import { documentsRepository } from '../repositories/documents.repository';
+import { applicationsRepository } from '../repositories/applications.repository';
+import { consentRepository } from '../repositories/consent.repository';
 import { usersRepository } from '../repositories/users.repository';
 
 const router = Router();
@@ -58,8 +61,20 @@ router.get(['/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Request, 
         role: 'Super Admin',
       };
     } else if (activeTenant.tenantType === 'supplier') {
-      // Use suppliersRepository for full camelCase normalization & safe completeness calculation
-      profile = await suppliersRepository.getById(activeTenant.tenantId, true).catch(() => null);
+      // Parallel coordinated fetch of all 5 domain datasets with pure read-only snapshot
+      const [profData, docsData, appsData, peopleData, consentData] = await Promise.all([
+        suppliersRepository.getById(activeTenant.tenantId, true).catch(() => null),
+        documentsRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
+        applicationsRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
+        suppliersRepository.listPeople(activeTenant.tenantId).catch(() => []),
+        consentRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
+      ]);
+
+      profile = profData;
+      docs = docsData || [];
+      apps = appsData || [];
+      people = peopleData || [];
+      consent = consentData || [];
 
       if (!profile) {
         // Fallback to raw query if repository had any error
@@ -78,19 +93,6 @@ router.get(['/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Request, 
           };
         }
       }
-
-      // Concurrently fetch supplier subsidiary collections with graceful catch defaults
-      const [docsRes, appsRes, peopleRes, consentRes] = await Promise.all([
-        query('SELECT * FROM supplier_documents WHERE supplier_id = $1 ORDER BY created_at DESC', [activeTenant.tenantId]).catch(() => ({ rows: [] })),
-        query('SELECT * FROM supplier_applications WHERE supplier_id = $1 ORDER BY submitted_at DESC', [activeTenant.tenantId]).catch(() => ({ rows: [] })),
-        query('SELECT * FROM supplier_people WHERE supplier_id = $1 ORDER BY is_active DESC', [activeTenant.tenantId]).catch(() => ({ rows: [] })),
-        query('SELECT * FROM supplier_consent_grants WHERE supplier_id = $1', [activeTenant.tenantId]).catch(() => ({ rows: [] })),
-      ]);
-
-      docs = docsRes.rows || [];
-      apps = appsRes.rows || [];
-      people = peopleRes.rows || [];
-      consent = consentRes.rows || [];
     } else if (activeTenant.tenantType === 'organization') {
       // Buyer organization
       const orgRes = await query(

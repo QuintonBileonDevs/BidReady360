@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { useReadinessContext } from './ReadinessContext';
 import {
   Supplier,
   SupplierDocument,
@@ -240,6 +241,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { waitForPaintAndSettle } = useReadinessContext();
+
   // 1. Initialize authentication and navigation from stored session
   const initialSession = getStoredSession();
 
@@ -510,6 +513,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           setRoleState(resolvedRole);
 
+          // Layer 3, 4, 5: Settle quiet window & verify DOM bindings
+          setBootstrapStep(3);
+          setBootstrapMessage('Verifying display readiness...');
+
+          const domTarget = {
+            supplierName: normProfile.legalName,
+            completenessScore: normProfile.profileCompleteness,
+            documentsCount: normDocs.length,
+            applicationsCount: normApps.length,
+            userId: currentSession.user.id,
+            tenantId: currentSession.activeTenant?.tenantId,
+          };
+
+          const settleResult = await waitForPaintAndSettle(domTarget, 250);
+          console.log('[gate:settle-result]', settleResult);
+
           // Minimum display time of 700ms so gate does not flicker
           const elapsed = Date.now() - startTime;
           if (elapsed < 700) {
@@ -520,12 +539,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Step 4 done
           setBootstrapStep(4);
+          setBootstrapMessage('Ready');
           await new Promise((r) => setTimeout(r, 200));
 
           if (runIdRef.current !== runId) return false;
 
           setIsBootstrapping(false);
-          console.log('[gate:lift] Loading gate lifted for run #', runId);
+          console.log('[gate:lift] Render-verified loading gate lifted for run #', runId);
           return true;
 
         } catch (err: any) {
@@ -1103,187 +1123,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Dual-mode Supplier Passport Loader (Authenticated profile or clean empty state)
-  useEffect(() => {
-    let isMounted = true;
-    async function loadSupplierProfile() {
-      if (isAuthenticated && role === 'supplier') {
-        try {
-          const profile = await supplierApi.getProfile();
-          const docsList = await supplierApi.listDocuments().catch(() => []);
-          const appsList = await supplierApi.listApplications().catch(() => []);
-          const peopleList = await supplierApi.listPeople().catch(() => []);
-          const consentList = await supplierApi.listConsent().catch(() => []);
-
-          if (isMounted) {
-            const mappedDocs: SupplierDocument[] = Array.isArray(docsList)
-              ? docsList.map((d: any) => ({
-                  id: d.id,
-                  supplierId: d.supplierId || profile?.id || '',
-                  documentType: d.documentTypeName || d.documentTypeCode || d.documentType || 'Document',
-                  documentNumber: d.documentNumber || '',
-                  fileName: d.fileName || 'document.pdf',
-                  fileSize: d.fileSize || '1.2 MB',
-                  issueDate: d.issueDate || '',
-                  expiryDate: d.expiryDate || '',
-                  status:
-                    d.status === 'active' || d.status === 'Verified'
-                      ? 'Verified'
-                      : d.status === 'expired'
-                      ? 'Expired'
-                      : d.status === 'rejected'
-                      ? 'Rejected'
-                      : 'Pending',
-                  statusMessage: d.statusMessage || '',
-                  downloadUrl: d.downloadUrl || '#',
-                }))
-              : [];
-
-            setDocuments(mappedDocs);
-
-            if (Array.isArray(appsList) && appsList.length > 0) {
-              setApplications(
-                appsList.map((a: any) => ({
-                  id: a.id,
-                  callId: a.callId,
-                  callNumber: a.callNumber || `TDR-${a.id.substring(0, 6)}`,
-                  callTitle: a.callTitle || 'Tender Call',
-                  callType: 'RFP',
-                  organizationId: a.organizationId,
-                  organizationName: a.organizationName || 'Procuring Entity',
-                  supplierId: a.supplierId,
-                  supplierName: a.supplierLegalName || profile?.legalName || '',
-                  submittedAt: a.submittedAt || '',
-                  status:
-                    a.status === 'Approved'
-                      ? 'Approved'
-                      : a.status === 'Rejected'
-                      ? 'Rejected'
-                      : 'Submitted',
-                  sharedDocumentIds: [],
-                  responses: a.answers || {},
-                  timeline: a.timeline || [],
-                }))
-              );
-            }
-
-            if (Array.isArray(consentList) && consentList.length > 0) {
-              setConsentGrants(
-                consentList.map((c: any) => ({
-                  id: c.id,
-                  supplierId: c.supplierId || profile?.id || '',
-                  organizationId: c.organizationId,
-                  organizationName: c.organizationName || 'Buying Entity',
-                  grantedAt: c.grantedAt || '',
-                  validUntil: c.validUntil || '',
-                  status: c.status === 'revoked' ? 'Revoked' : 'Active',
-                  scope: c.scope || {
-                    profile: true,
-                    directors: true,
-                    financials: true,
-                    taxClearance: true,
-                    certifications: true,
-                  },
-                  accessedCount: c.accessedCount || 0,
-                  lastAccessedAt: c.lastAccessedAt,
-                }))
-              );
-            }
-
-            const mappedDirectors = Array.isArray(peopleList)
-              ? peopleList.map((p: any) => ({
-                  id: p.id,
-                  fullName: p.fullName,
-                  nationalIdOrPassport: p.nationalIdOrPassport || p.identityNumber || '',
-                  nationality: p.nationality || 'Motswana',
-                  isCitizen: p.isCitizen !== false,
-                  shareholdingPercentage: Number(p.ownershipPercent || p.shareholdingPercentage || 0),
-                  role: p.personRole || p.role || 'Director',
-                }))
-              : [];
-
-            if (profile) {
-              const builtSupplier: Supplier = {
-                id: profile.id,
-                legalName: profile.legalName,
-                tradingName: profile.tradingName || profile.legalName,
-                cipaNumber: profile.cipaUin || '',
-                tinNumber: profile.bursTin || '',
-                ppraCode: profile.ppraRegistrationNo || '',
-                ppraSubcodes: [],
-                ppraGrade: '',
-                category: profile.category || '',
-                secondaryCategories: [],
-                categories: profile.categories || [],
-                physicalAddress: profile.physicalAddress || '',
-                city: profile.city || '',
-                district: profile.districtName || profile.districtId || '',
-                postalAddress: profile.postalAddress || '',
-                primaryPhone: profile.primaryPhone || '',
-                email: profile.email || '',
-                website: profile.website || '',
-                yearEstablished: profile.yearEstablished || new Date().getFullYear(),
-                citizenOwnedPercentage: profile.citizenOwnedPercentage
-                  ? Number(profile.citizenOwnedPercentage)
-                  : 0,
-                citizenOwnershipSet:
-                  profile.citizenOwnedPercentage !== null &&
-                  profile.citizenOwnedPercentage !== undefined,
-                youthOwned: profile.youthOwned || false,
-                womenOwned: profile.womenOwned || false,
-                disabilityOwned: profile.disabilityOwned || false,
-                eddCertified: profile.eddCertified || false,
-                bankName: profile.bankName || '',
-                bankBranch: profile.bankBranch || '',
-                accountNumberMasked: profile.accountNumberMasked || profile.bankAccountNumber || '',
-                hasTradingLicence: profile.hasTradingLicence ?? false,
-                tradingLicenceReason: profile.tradingLicenceReason || '',
-                detailsSaved: true,
-                companyType: profile.companyType || 'private_company',
-                description: profile.description || '',
-                districtId: profile.districtId || null,
-                directors: mappedDirectors,
-                profileCompleteness: profile.profileCompleteness !== undefined ? Number(profile.profileCompleteness) : 0,
-                missingItems: [],
-                complianceStatus: profile.complianceStatus || 'Action required',
-                documents: mappedDocs,
-                hasCipa: mappedDocs.some((d) => d.documentType.toLowerCase().includes('cipa')),
-                hasBurs: mappedDocs.some((d) => d.documentType.toLowerCase().includes('tax')),
-                hasPpra: mappedDocs.some((d) => d.documentType.toLowerCase().includes('ppra')),
-                isDemoAccount: false,
-              };
-
-              const completeness = calculateSupplierCompleteness(builtSupplier, mappedDocs);
-              builtSupplier.profileCompleteness = completeness.score;
-              builtSupplier.missingItems = completeness.missingItems.map((m) => m.label);
-              builtSupplier.complianceStatus = (builtSupplier.profileCompleteness >= 80 ? 'Fully compliant' : 'Action required');
-
-              // If database completeness does not match what is calculated in the app, update database immediately
-              if (profile.profileCompleteness !== completeness.score) {
-                supplierApi.updateProfile({
-                  profileCompleteness: completeness.score,
-                  profile_completeness: completeness.score,
-                  complianceStatus: builtSupplier.complianceStatus,
-                  compliance_status: builtSupplier.complianceStatus,
-                  missingItems: builtSupplier.missingItems,
-                  missing_items: builtSupplier.missingItems,
-                }).catch(() => {});
-              }
-
-              setSupplier(builtSupplier);
-            }
-          }
-        } catch (err) {
-          console.warn('[APP CONTEXT] Failed to load live supplier profile:', err);
-        }
-      }
-    }
-
-    loadSupplierProfile();
-    return () => {
-      isMounted = false;
-    };
-  }, [isAuthenticated, role]);
+  // Single source of truth: Profile snapshot is loaded atomically via runBootstrap (/api/bootstrap)
+  // Page-level and context-level duplicate fetches have been removed to prevent post-gate data shifts.
 
   // Whenever profile completeness changes in the application, update the database immediately
   const prevCompletenessRef = useRef<number | null>(null);

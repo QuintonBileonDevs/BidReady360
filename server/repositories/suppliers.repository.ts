@@ -417,7 +417,7 @@ export class SuppliersRepository {
     }
   }
 
-  async getById(supplierId: string, skipRecalculate: boolean = false): Promise<SupplierProfile | null> {
+  async getById(supplierId: string, skipRecalculate: boolean = true): Promise<SupplierProfile | null> {
     if (!skipRecalculate) {
       await this.calculateCompleteness(supplierId);
     }

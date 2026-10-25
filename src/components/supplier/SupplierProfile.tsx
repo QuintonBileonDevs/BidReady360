@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useReadiness } from '../../context/ReadinessContext';
 import { supplierApi, referenceApi, CategoryTreeNode } from '../../services/api';
 import { Director } from '../../types';
 import { DB_CATEGORIES } from '../../data/dbCategories';
@@ -158,35 +159,43 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     description: supplier.description || '',
   });
 
+  const { setReady } = useReadiness('profile.details');
+
+  useEffect(() => {
+    const isReady = Boolean(supplier && supplier.legalName);
+    setReady(isReady);
+  }, [supplier?.legalName, setReady]);
+
   // Keep detailsForm and directorsList automatically pre-filled when supplier loads from database
   useEffect(() => {
-    if (supplier) {
-      setDetailsForm((prev) => ({
-        ...prev,
-        legalName: supplier.legalName || prev.legalName || '',
-        tradingName: supplier.tradingName || prev.tradingName || supplier.legalName || '',
-        cipaNumber: supplier.cipaNumber || (supplier as any).cipaUin || prev.cipaNumber || '',
-        tinNumber: supplier.tinNumber || (supplier as any).bursTin || prev.tinNumber || '',
-        ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || prev.ppraCode || '',
-        companyType: supplier.companyType || prev.companyType || 'Private Company (Pty) Ltd',
-        yearEstablished: supplier.yearEstablished || prev.yearEstablished || new Date().getFullYear(),
-        physicalAddress: supplier.physicalAddress || prev.physicalAddress || '',
-        city: supplier.city || prev.city || '',
-        district: supplier.district || (supplier as any).districtName || prev.district || '',
-        postalAddress: supplier.postalAddress || prev.postalAddress || '',
-        primaryPhone: supplier.primaryPhone || prev.primaryPhone || '',
-        email: supplier.email || prev.email || '',
-        website: supplier.website || prev.website || '',
-        bankName: supplier.bankName || prev.bankName || '',
-        bankBranch: supplier.bankBranch || prev.bankBranch || '',
-        accountNumberMasked: supplier.accountNumberMasked || prev.accountNumberMasked || '',
-        citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? prev.citizenOwnedPercentage ?? 0,
-        youthOwned: supplier.youthOwned ?? prev.youthOwned ?? false,
-        womenOwned: supplier.womenOwned ?? prev.womenOwned ?? false,
-        disabilityOwned: supplier.disabilityOwned ?? prev.disabilityOwned ?? false,
-        eddCertified: supplier.eddCertified ?? prev.eddCertified ?? false,
-        description: supplier.description || prev.description || '',
-      }));
+    if (supplier && !isEditingDetails) {
+      setDetailsForm({
+        legalName: supplier.legalName || '',
+        tradingName: supplier.tradingName || supplier.legalName || '',
+        cipaNumber: supplier.cipaNumber || (supplier as any).cipaUin || '',
+        tinNumber: supplier.tinNumber || (supplier as any).bursTin || '',
+        ppraCode: supplier.ppraCode || (supplier as any).ppraRegistrationNo || '',
+        companyType: supplier.companyType || 'Private Company (Pty) Ltd',
+        yearEstablished: supplier.yearEstablished || new Date().getFullYear(),
+        physicalAddress: supplier.physicalAddress || '',
+        city: supplier.city || '',
+        district: supplier.district || (supplier as any).districtName || '',
+        postalAddress: supplier.postalAddress || '',
+        primaryPhone: supplier.primaryPhone || '',
+        email: supplier.email || '',
+        website: supplier.website || '',
+        bankName: supplier.bankName || '',
+        bankBranch: supplier.bankBranch || '',
+        accountNumberMasked: supplier.accountNumberMasked || '',
+        citizenOwnedPercentage: supplier.citizenOwnedPercentage ?? 0,
+        youthOwned: supplier.youthOwned ?? false,
+        womenOwned: supplier.womenOwned ?? false,
+        disabilityOwned: supplier.disabilityOwned ?? false,
+        eddCertified: supplier.eddCertified ?? false,
+        hasTradingLicence: supplier.hasTradingLicence ?? null,
+        tradingLicenceReason: supplier.tradingLicenceReason || '',
+        description: supplier.description || '',
+      });
 
       if (Array.isArray(supplier.directors) && supplier.directors.length > 0) {
         setDirectorsList(
@@ -199,7 +208,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         );
       }
     }
-  }, [supplier]);
+  }, [supplier, isEditingDetails]);
 
   // Directors State & ID Masking
   const [directorsList, setDirectorsList] = useState<
@@ -921,7 +930,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[13px]">
               <span className="text-[#6B7A87]">Completeness: {completeness.completedCount}/15 items</span>
-              <span className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
+              <span data-bind="completeness.score" className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
                 {completeness.score}%
               </span>
             </div>
@@ -1022,7 +1031,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
           <div className="space-y-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
+              <h1 data-bind="supplier.name" className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
                 {supplier.legalName || 'Company Profile'}
               </h1>
               {completeness.isComplete ? (
@@ -1051,7 +1060,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
               <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
                 Profile completeness
               </span>
-              <span className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white tabular-nums">
+              <span data-bind="completeness.score" className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white tabular-nums">
                 {completeness.score}% complete
               </span>
             </div>

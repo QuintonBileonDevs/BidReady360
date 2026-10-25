@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useReadiness } from '../../context/ReadinessContext';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
 import {
   AlertTriangle,
@@ -51,6 +52,8 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
     updateSupplierProfile,
   } = useApp();
 
+  const { setReady } = useReadiness('dashboard.summary');
+
   const handleApplyClick = (callId?: string) => {
     if (!supplier.emailVerified) {
       setActiveNav('supplier-verify-email');
@@ -64,6 +67,11 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
   // Compute 15-item completeness dynamically from real memory state
   const completeness = calculateSupplierCompleteness(supplier, documents);
+
+  useEffect(() => {
+    const isReady = Boolean(supplier && supplier.legalName && completeness && completeness.score !== undefined);
+    setReady(isReady);
+  }, [supplier?.legalName, completeness?.score, setReady]);
 
   // Real compliance status checks
   const expiredDocs = documents.filter((d) => d.status === 'Expired');
@@ -208,7 +216,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[13px]">
               <span className="text-[#6B7A87]">Completeness progress</span>
-              <span className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
+              <span data-bind="completeness.score" className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
                 {completeness.score}%
               </span>
             </div>
@@ -343,7 +351,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
         <div className="space-y-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
+            <h1 data-bind="supplier.name" className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
               {supplier.legalName || 'Supplier Passport'}
             </h1>
             {completeness.isComplete ? (
@@ -439,7 +447,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             </div>
 
             <div className="space-y-2">
-              <div className="font-heading font-semibold text-[32px] text-[#10212E] dark:text-white leading-none tabular-nums">
+              <div data-bind="completeness.score" className="font-heading font-semibold text-[32px] text-[#10212E] dark:text-white leading-none tabular-nums">
                 {completeness.score}%
               </div>
               <div className="h-1.5 w-full bg-[#EAF2FA] dark:bg-[#162C3E] rounded-full overflow-hidden">
@@ -502,7 +510,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
                 Applications
               </h2>
-              <span className="text-[13px] text-[#6B7A87]">
+              <span data-bind="applications.count" className="text-[13px] text-[#6B7A87]">
                 Total: {applications.length}
               </span>
             </div>
@@ -589,7 +597,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
                 Document vault
               </h2>
-              <span className="text-[13px] text-[#6B7A87]">
+              <span data-bind="documents.count" className="text-[13px] text-[#6B7A87]">
                 {documents.length === 0 ? 'No documents uploaded' : `${documents.length} doc${documents.length === 1 ? '' : 's'}`}
               </span>
             </div>
