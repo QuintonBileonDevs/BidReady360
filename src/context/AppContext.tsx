@@ -242,33 +242,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [intendedRoute, setIntendedRoute] = useState<string | null>(null);
 
-  const [profileStatus, setProfileStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>(() => initialSession?.user ? 'loading' : 'idle');
-  const [profile, setProfile] = useState<ProfileSummary | null>(null);
-  const profileSummary = profile;
-  const setProfileSummary = setProfile;
+  const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(() => {
+    if (initialSession && initialSession.user) {
+      return {
+        displayName: initialSession.user.fullName,
+        tenantType: initialSession.activeTenant?.tenantType || 'supplier',
+        tenantId: initialSession.activeTenant?.tenantId || null,
+        role: initialSession.activeTenant?.roleName || 'Member',
+        supplierOrOrgName: initialSession.activeTenant?.tenantName || initialSession.user.fullName,
+        verificationStatus: 'Verified',
+      };
+    }
+    return null;
+  });
 
   const [gatePurpose, setGatePurposeState] = useState<'loading_profile' | 'setting_up' | 'switching' | 'logging_out'>('loading_profile');
   const [switchingTargetName, setSwitchingTargetName] = useState<string | null>(null);
   const [gateError, setGateError] = useState<string | null>(null);
 
-  const ready = Boolean(
-    isAuthenticated &&
-    currentUser !== null &&
-    profileStatus === 'loaded' &&
-    profile !== null &&
-    profile.userId === currentUser.id &&
-    Boolean(profile.displayName)
-  );
-
-  useEffect(() => {
-    console.log("[gate]", {
-      authStatus: isAuthenticated ? "signed-in" : "signed-out",
-      profileStatus,
-      ready,
-    });
-  }, [isAuthenticated, profileStatus, ready]);
-
-  const isGateReady = ready;
+  const isGateReady = !isAuthenticated || (currentUser !== null && profileSummary !== null && !authLoading);
 
   const setGatePurpose = (purpose: 'loading_profile' | 'setting_up' | 'switching' | 'logging_out', targetName?: string) => {
     setGatePurposeState(purpose);
@@ -276,39 +268,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const retryProfileLoad = async () => {
-    setProfile(null);
-    setProfileStatus('loading');
     setGateError(null);
     setAuthLoading(true);
     try {
       const session = await authApi.getMe();
       if (session && session.user) {
-        const u = session.user;
-        const p = session.profileSummary ? { ...session.profileSummary, userId: u.id } : {
-          userId: u.id,
-          displayName: u.fullName,
+        setCurrentUser(session.user);
+        setProfileSummary(session.profileSummary || {
+          displayName: session.user.fullName,
           tenantType: session.activeTenant?.tenantType || 'supplier',
           tenantId: session.activeTenant?.tenantId || null,
           role: session.activeTenant?.roleName || 'Member',
-          supplierOrOrgName: session.activeTenant?.tenantName || u.fullName,
+          supplierOrOrgName: session.activeTenant?.tenantName || session.user.fullName,
           verificationStatus: 'Verified',
-        };
-        if (p.userId === u.id && Boolean(p.displayName)) {
-          setCurrentUser(u);
-          setProfile(p);
-          setProfileStatus('loaded');
-          setIsAuthenticated(true);
-        } else {
-          setProfileStatus('error');
-        }
-      } else {
-        setProfileStatus('error');
+        });
+        setIsAuthenticated(true);
       }
     } catch (err: any) {
       if (err.status === 401) {
         logout('user_initiated');
       } else {
-        setProfileStatus('error');
         setGateError(err.message || 'Failed to load profile');
       }
     } finally {
@@ -317,18 +296,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const switchOrganizationOrSupplier = async (tenantId: string, tenantType: 'supplier' | 'organization', targetName?: string) => {
-    setProfile(null);
-    setProfileStatus('loading');
     setGatePurpose('switching', targetName);
+    setProfileSummary(null);
     try {
       const res = await authApi.switchTenant(tenantId, tenantType);
       if (res && res.success) {
         await retryProfileLoad();
-      } else {
-        setProfileStatus('error');
       }
     } catch (err: any) {
-      setProfileStatus('error');
       setGateError(err.message || 'Failed to switch organization');
     }
   };
@@ -515,51 +490,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      setProfile(null);
-      setProfileStatus('loading');
-
       try {
         const session = await authApi.getMe();
         if (session && session.user && isMounted) {
-          const u = session.user;
-          const p = session.profileSummary || {
-            userId: u.id,
-            displayName: u.fullName,
-            tenantType: session.activeTenant?.tenantType || 'supplier',
-            tenantId: session.activeTenant?.tenantId || null,
-            role: session.activeTenant?.roleName || 'Member',
-            supplierOrOrgName: session.activeTenant?.tenantName || u.fullName,
-            verificationStatus: 'Verified',
-          };
-          if (p.userId === u.id && Boolean(p.displayName)) {
-            setCurrentUser(u);
-            setProfile({ ...p, userId: u.id });
-            setProfileStatus('loaded');
-            setIsAuthenticated(true);
-            let resolvedRole: UserRole = 'supplier';
-            if (u.isPlatformAdmin) {
-              resolvedRole = 'admin';
-            } else if (session.activeTenant?.tenantType === 'organization') {
-              resolvedRole = 'buyer';
-              setBuyerOrgStatus('Approved');
-              setRegisteredBuyerOrgName(session.activeTenant.tenantName);
-              setRegisteredBuyerEmail(u.email);
-            } else if (session.activeTenant?.tenantType === 'supplier') {
-              resolvedRole = 'supplier';
-            }
-            setRoleState(resolvedRole);
+          setCurrentUser(session.user);
+          setIsAuthenticated(true);
+          let resolvedRole: UserRole = 'supplier';
+          if (session.user.isPlatformAdmin) {
+            resolvedRole = 'admin';
+          } else if (session.activeTenant?.tenantType === 'organization') {
+            resolvedRole = 'buyer';
+            setBuyerOrgStatus('Approved');
+            setRegisteredBuyerOrgName(session.activeTenant.tenantName);
+            setRegisteredBuyerEmail(session.user.email);
+          } else if (session.activeTenant?.tenantType === 'supplier') {
+            resolvedRole = 'supplier';
+          }
+          setRoleState(resolvedRole);
 
-            const savedNav = localStorage.getItem('bidready_active_nav');
-            if (savedNav && savedNav !== 'about' && savedNav !== 'session-expired') {
-              setActiveNavState(savedNav);
-            }
-          } else {
-            setProfileStatus('error');
-            setIsAuthenticated(false);
-            setCurrentUser(null);
+          const savedNav = localStorage.getItem('bidready_active_nav');
+          if (savedNav && savedNav !== 'about' && savedNav !== 'session-expired') {
+            setActiveNavState(savedNav);
           }
         } else if (isMounted) {
-          setProfileStatus('error');
           setIsAuthenticated(false);
           setCurrentUser(null);
           setRoleState('public');
@@ -570,7 +523,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (err) {
         if (isMounted) {
-          setProfileStatus('error');
           setIsAuthenticated(false);
           setCurrentUser(null);
           setRoleState('public');
@@ -615,15 +567,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setCurrentUser(session.user);
     setIsAuthenticated(true);
-    setProfileSummary({
-      userId: session.user.id,
-      displayName: session.user.fullName,
-      tenantType: session.activeTenant?.tenantType || 'supplier',
-      tenantId: session.activeTenant?.tenantId || null,
-      role: session.activeTenant?.roleName || 'Member',
-      supplierOrOrgName: session.activeTenant?.tenantName || session.user.fullName,
-      verificationStatus: 'Verified',
-    });
 
     let resolvedRole: UserRole = targetRole || 'supplier';
     if (session.user.isPlatformAdmin) {

@@ -241,7 +241,7 @@ export const Header: React.FC = () => {
                   </div>
                   <div className="hidden sm:block leading-tight">
                     <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
-                      {supplier.legalName || ''}
+                      {supplier.legalName || 'Supplier'}
                     </span>
                     <span className="text-[13px] text-[#6B7A87] block">
                       {supplier.legalName ? (
@@ -251,9 +251,9 @@ export const Header: React.FC = () => {
                           ? 'Demo account'
                           : !supplier.emailVerified
                           ? 'Unverified account'
-                          : ''
+                          : 'Profile'
                       ) : (
-                        ''
+                        'Profile'
                       )}
                     </span>
                   </div>
