@@ -11,7 +11,7 @@ const router = Router();
 
 // GET /api/bootstrap (and /api/auth/bootstrap)
 // Fetches all essential data for the dashboard in a single coordinated request
-router.get(['/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Request, res: Response) => {
+router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Request, res: Response) => {
   try {
     const user = req.user!;
     let activeTenant = req.activeTenant;
