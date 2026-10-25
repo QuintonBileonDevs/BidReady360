@@ -15,8 +15,6 @@ import {
   ArrowLeft,
   AlertCircle,
   ShieldCheck,
-  CheckCircle2,
-  Sparkles,
 } from 'lucide-react';
 
 interface SupplierLoginProps {
@@ -24,7 +22,7 @@ interface SupplierLoginProps {
 }
 
 export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
-  const { loginSuccess, loadDemoSupplier } = useApp();
+  const { loginSuccess } = useApp();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,7 +33,6 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
   // MFA Challenge State
   const [isMfaRequired, setIsMfaRequired] = useState(false);
   const [mfaUserId, setMfaUserId] = useState('');
-  const [mfaCountdown, setMfaCountdown] = useState(60);
 
   // Validation & Lockout State
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
@@ -45,14 +42,14 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     const newErrors = { ...errors };
     if (field === 'email') {
       if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-        newErrors.email = 'Enter a valid email address (e.g. name@company.co.bw)';
+        newErrors.email = 'Enter a valid email address.';
       } else {
         delete newErrors.email;
       }
     }
     if (field === 'password') {
       if (!password) {
-        newErrors.password = 'Enter your account password.';
+        newErrors.password = 'Enter your password.';
       } else {
         delete newErrors.password;
       }
@@ -89,19 +86,28 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
         return;
       }
 
-      const supplierMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'supplier');
+      const memberships = res.user?.memberships || [];
+      const orgMembership = memberships.find((m: any) => m.tenantType === 'organization');
+      const supplierMembership = memberships.find((m: any) => m.tenantType === 'supplier');
+      const activeTenant = orgMembership || supplierMembership || memberships[0] || {
+        tenantType: 'supplier',
+        tenantId: 'sup-1',
+        tenantName: res.user?.fullName || 'User Account',
+      };
+      const determinedRole = res.user?.isPlatformAdmin
+        ? 'admin'
+        : activeTenant?.tenantType === 'organization'
+        ? 'buyer'
+        : 'supplier';
+
       loginSuccess(
         {
           user: res.user,
-          activeTenant: supplierMembership || {
-            tenantType: 'supplier',
-            tenantId: 'sup-1',
-            tenantName: res.user?.fullName || 'Registered Supplier',
-          },
+          activeTenant,
           token: res.token,
           profileSummary: (res as any).profileSummary,
         },
-        'supplier'
+        determinedRole
       );
     } catch (err: any) {
       const msg = err.message || '';
@@ -122,19 +128,28 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
 
     try {
       const res = await authApi.verifyMfa(mfaUserId, code.trim());
-      const supplierMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'supplier');
+      const memberships = res.user?.memberships || [];
+      const orgMembership = memberships.find((m: any) => m.tenantType === 'organization');
+      const supplierMembership = memberships.find((m: any) => m.tenantType === 'supplier');
+      const activeTenant = orgMembership || supplierMembership || memberships[0] || {
+        tenantType: 'supplier',
+        tenantId: 'sup-1',
+        tenantName: res.user?.fullName || 'User Account',
+      };
+      const determinedRole = res.user?.isPlatformAdmin
+        ? 'admin'
+        : activeTenant?.tenantType === 'organization'
+        ? 'buyer'
+        : 'supplier';
+
       loginSuccess(
         {
           user: res.user,
-          activeTenant: supplierMembership || {
-            tenantType: 'supplier',
-            tenantId: 'sup-1',
-            tenantName: res.user?.fullName || 'Registered Supplier',
-          },
+          activeTenant,
           token: res.token,
           profileSummary: (res as any).profileSummary,
         },
-        'supplier'
+        determinedRole
       );
     } catch (err: any) {
       setErrors({ general: err.message || 'Invalid or expired verification code.' });
@@ -143,51 +158,10 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleFillDemo = () => {
-    setEmail('kagiso@phiricontracting.co.bw');
-    setPassword('Password123!');
-    setErrors({});
-    setIsUnverified(false);
-  };
-
-  const handleInstantDemo = () => {
-    loadDemoSupplier();
-    loginSuccess(
-      {
-        user: {
-          id: 'demo-user-1',
-          email: 'kagiso@phiricontracting.co.bw',
-          fullName: 'Kagiso Phiri',
-          isPlatformAdmin: false,
-        },
-        activeTenant: {
-          tenantType: 'supplier',
-          tenantId: 'demo-sup-1',
-          tenantName: 'Phiri Contracting (Pty) Ltd',
-          roleName: 'Supplier Admin',
-        },
-        token: 'demo-supplier-token',
-        profileSummary: {
-          userId: 'demo-user-1',
-          displayName: 'Kagiso Phiri',
-          role: 'Supplier Admin',
-          supplierOrOrgName: 'Phiri Contracting (Pty) Ltd',
-          tenantType: 'supplier',
-          tenantId: 'demo-sup-1',
-          verificationStatus: 'verified',
-          cipaNumber: 'BW00001234567',
-          complianceStatus: 'Fully compliant',
-          profileCompleteness: 100,
-        },
-      },
-      'supplier'
-    );
-  };
-
   return (
     <AuthLayout
       leftMessage="Register once. Bid anywhere."
-      tagline="Create your supplier profile once to manage documents and bid for tenders across all participating organizations in Botswana."
+      tagline="Access your profile, manage documents, and participate in procurement across Botswana."
       onBack={() => onNavigate('about')}
     >
       <div className="space-y-6">
@@ -195,46 +169,12 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
           <>
             {/* Header Block */}
             <div className="space-y-1.5">
-              <span className="inline-block px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] text-[12px] font-semibold tracking-wide uppercase">
-                Supplier Portal
-              </span>
               <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
-                Supplier sign in
+                Sign in
               </h2>
               <p className="text-[14px] text-[#6B7A87]">
-                Access your compliance vault, submit bids, and manage tenders.
+                Enter your credentials to access your account.
               </p>
-            </div>
-
-            {/* Quick Demo Credentials Card */}
-            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs">
-              <div className="space-y-0.5">
-                <span className="font-semibold text-[#10212E] dark:text-white flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#2F8F5B]" />
-                  Demo Supplier Account
-                </span>
-                <p className="text-[#6B7A87]">kagiso@phiricontracting.co.bw</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleFillDemo}
-                >
-                  Fill Form
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleInstantDemo}
-                  className="text-[#1F5F99] dark:text-[#6FAEE0] hover:text-[#184b7a]"
-                  leftIcon={<Sparkles className="w-3 h-3 text-[#E8A33D]" />}
-                >
-                  Quick Demo
-                </Button>
-              </div>
             </div>
 
             {/* General Error Notice */}
@@ -253,7 +193,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
                   <span>Email verification pending</span>
                 </div>
                 <p className="text-[13px] text-[#78350F] dark:text-[#FDE68A] leading-snug">
-                  Please verify your email address to activate your company account.
+                  Please verify your email address to activate your account.
                 </p>
                 <button
                   type="button"
@@ -270,7 +210,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
               <Input
                 label="Email address *"
                 type="email"
-                placeholder="e.g. kagiso@phiricontracting.co.bw"
+                placeholder="name@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onBlur={() => handleBlur('email')}
@@ -341,7 +281,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
                 onClick={() => onNavigate('supplier-signup')}
                 className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] hover:underline cursor-pointer"
               >
-                Create supplier profile
+                Sign up
               </button>
             </div>
           </>
@@ -398,3 +338,6 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
     </AuthLayout>
   );
 };
+
+export const Login = SupplierLogin;
+

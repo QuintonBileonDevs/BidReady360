@@ -20,7 +20,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         : 'buyer-login'
       : initialMode === 'signup'
       ? 'supplier-signup'
-      : 'supplier-login');
+      : 'signin');
 
   return <AuthScreenRouter initialRoute={defaultRoute} />;
 };

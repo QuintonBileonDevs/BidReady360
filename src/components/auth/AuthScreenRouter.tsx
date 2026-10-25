@@ -17,6 +17,8 @@ import { SessionExpired } from './SessionExpired';
 import { AccountLocked } from './AccountLocked';
 
 export type AuthSubRoute =
+  | 'signin'
+  | 'login'
   | 'supplier-login'
   | 'supplier-signup'
   | 'supplier-verify-email'
@@ -39,7 +41,7 @@ interface AuthScreenRouterProps {
 }
 
 export const AuthScreenRouter: React.FC<AuthScreenRouterProps> = ({
-  initialRoute = 'supplier-login',
+  initialRoute = 'signin',
 }) => {
   const [currentSubRoute, setCurrentSubRoute] = useState<AuthSubRoute>(initialRoute);
 
@@ -50,10 +52,12 @@ export const AuthScreenRouter: React.FC<AuthScreenRouterProps> = ({
 
   const renderActiveScreen = () => {
     switch (currentSubRoute) {
-      case 'supplier-signup':
-        return <SupplierSignup onNavigate={handleNavigate} />;
+      case 'signin':
+      case 'login':
       case 'supplier-login':
         return <SupplierLogin onNavigate={handleNavigate} />;
+      case 'supplier-signup':
+        return <SupplierSignup onNavigate={handleNavigate} />;
       case 'supplier-verify-email':
         return <SupplierVerifyEmail onNavigate={handleNavigate} />;
       case 'supplier-welcome':
