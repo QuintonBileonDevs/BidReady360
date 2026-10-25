@@ -156,7 +156,7 @@ export const Header: React.FC = () => {
               className="text-left focus:outline-none cursor-pointer"
               aria-label="BidReady360 home"
             >
-              <Logo theme="light" size="md" />
+              <Logo size="md" />
             </button>
           </div>
 

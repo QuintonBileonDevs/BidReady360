@@ -17,7 +17,7 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-8 border-b border-[#D5E0EA] dark:border-[#1E364A]">
           {/* Brand & Purpose Column */}
           <div className="md:col-span-5 space-y-3">
-            <Logo theme="light" size="md" />
+            <Logo size="md" />
             <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed max-w-sm">
               A 360° picture of procurement. The unified platform for discovering opportunities, managing document vaults, and submitting sealed price bids.
             </p>

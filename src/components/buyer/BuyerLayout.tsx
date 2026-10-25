@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useApp, BuyerSubRole } from '../../context/AppContext';
-import { Logo } from '../common/Logo';
 import {
   LayoutDashboard,
   FileText,

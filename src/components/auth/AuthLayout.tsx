@@ -28,6 +28,9 @@ export interface AuthLayoutProps {
   customLogo?: React.ReactNode;
   organizationName?: string;
   showPoweredBy?: boolean;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
 }
 
 export const AuthLayout: React.FC<AuthLayoutProps> = ({
@@ -155,7 +158,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
 
         {/* Mobile Header with Logo on top */}
         <div className="lg:hidden max-w-[440px] w-full mx-auto pb-4">
-          {customLogo || <Logo theme="light" size="md" />}
+          {customLogo || <Logo size="md" />}
         </div>
 
         {/* Form Card Area: White bordered card, 12px radius, no shadow, max 440px */}

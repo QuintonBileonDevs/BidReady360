@@ -23,6 +23,7 @@ export interface ApiTenantMembership {
 }
 
 export interface ProfileSummary {
+  userId: string;
   displayName: string;
   tenantType: 'supplier' | 'organization' | 'platform';
   tenantId: string | null;
@@ -241,6 +242,9 @@ export const authApi = {
 
   async getMe(): Promise<AuthSession | null> {
     try {
+      if (typeof window !== 'undefined' && window.location.search.includes('slowgate=1')) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
       return await apiRequest<AuthSession>('/api/auth/me');
     } catch {
       return null;

@@ -133,7 +133,7 @@ export const AdminLayout: React.FC = () => {
           >
             {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <Logo theme="light" size="md" />
+          <Logo size="md" />
           <span className="hidden sm:inline-block px-2 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] font-medium text-[12px]">
             Platform operations
           </span>

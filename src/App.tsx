@@ -59,7 +59,7 @@ const MainContent: React.FC = () => {
   if (authLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
       <div className="flex flex-col items-center gap-4">
-        <Logo theme="light" size="lg" />
+        <Logo size="lg" />
         <div className="flex items-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
           <div className="w-4 h-4 border-2 border-[#1F5F99] border-t-transparent rounded-full animate-spin" />
           <span>Verifying security session...</span>

@@ -254,6 +254,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(() => {
     if (initialSession && initialSession.user) {
       return {
+        userId: initialSession.user.id,
         displayName: initialSession.user.fullName,
         tenantType: initialSession.activeTenant?.tenantType || 'supplier',
         tenantId: initialSession.activeTenant?.tenantId || null,
@@ -284,6 +285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (session && session.user) {
         setCurrentUser(session.user);
         setProfileSummary(session.profileSummary || {
+          userId: session.user.id,
           displayName: session.user.fullName,
           tenantType: session.activeTenant?.tenantType || 'supplier',
           tenantId: session.activeTenant?.tenantId || null,
