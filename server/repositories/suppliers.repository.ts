@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import { query, withTransaction } from '../db/client';
 import { computeSupplierCompleteness, CompletenessResult } from '../services/completeness.service';
+import { auditRepository } from './audit.repository';
 
 export interface SupplierProfile {
   id: string;
@@ -640,110 +642,329 @@ export class SuppliersRepository {
     return updated;
   }
 
-  async listPeople(supplierId: string): Promise<SupplierPerson[]> {
-    const res = await query<SupplierPerson>(
+  async listPeople(supplierId: string): Promise<any[]> {
+    const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
+    const res = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", ownership_percent AS "ownershipPercent",
               identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, national_identity_hash AS "nationalIdOrPassport",
-              national_identity_hash AS "idNumber", kyc_status AS "kycStatus"
+              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
+                   ELSE NULL END AS "idNumber",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+                   THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
+                   ELSE NULL END AS "idLast4",
+              national_identity_number_encrypted IS NOT NULL AS "hasId"
        FROM supplier_people
        WHERE supplier_id = $1 AND is_active = TRUE
        ORDER BY created_at ASC`,
-      [supplierId]
+      [supplierId, encryptionKey]
     );
     return res.rows;
   }
 
-  async addPerson(supplierId: string, person: { fullName: string; personRole: string; email?: string; phone?: string; ownershipPercent?: number; nationality?: string; isCitizen?: boolean; identityType?: string; idNumber?: string; nationalIdOrPassport?: string }): Promise<SupplierPerson> {
-    const ownership = person.ownershipPercent !== undefined && !isNaN(Number(person.ownershipPercent)) ? Number(person.ownershipPercent) : 0;
-    const nationalId = person.idNumber || person.nationalIdOrPassport || null;
-    const res = await query<SupplierPerson>(
-      `INSERT INTO supplier_people (supplier_id, full_name, person_role, email, phone, ownership_percent, nationality, is_citizen, identity_type, national_identity_hash, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
-       RETURNING id, supplier_id AS "supplierId", full_name AS "fullName",
-                 person_role AS "personRole", ownership_percent AS "ownershipPercent",
-                 identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-                 email, phone, national_identity_hash AS "nationalIdOrPassport",
-                 national_identity_hash AS "idNumber", kyc_status AS "kycStatus"`,
-      [
-        supplierId,
-        person.fullName.trim(),
-        person.personRole,
-        person.email || null,
-        person.phone || null,
-        ownership,
-        person.nationality || 'Motswana',
-        person.isCitizen ?? true,
-        person.identityType || 'OMANG',
-        nationalId,
-      ]
-    );
-    return res.rows[0];
-  }
-
-  async updatePerson(
-    supplierId: string,
-    personId: string,
-    person: {
-      fullName?: string;
-      personRole?: string;
-      email?: string;
-      phone?: string;
-      ownershipPercent?: number;
-      nationality?: string;
-      isCitizen?: boolean;
-      identityType?: string;
-      idNumber?: string;
-      nationalIdOrPassport?: string;
+  async addPerson(supplierId: string, person: any, user?: any): Promise<any> {
+    const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
+    const fullName = person.fullName ? String(person.fullName).trim() : '';
+    if (!fullName || fullName.length < 2 || fullName.length > 200) {
+      const err = new Error('Full name is required and must be between 2 and 200 characters.') as any;
+      err.status = 400;
+      err.code = 'INVALID_FULL_NAME';
+      err.field = 'fullName';
+      throw err;
     }
-  ): Promise<SupplierPerson | null> {
-    const nationalId = person.idNumber !== undefined ? person.idNumber : person.nationalIdOrPassport;
-    const res = await query<SupplierPerson>(
-      `UPDATE supplier_people
-       SET full_name = COALESCE($3, full_name),
-           person_role = COALESCE($4, person_role),
-           email = COALESCE($5, email),
-           phone = COALESCE($6, phone),
-           ownership_percent = COALESCE($7, ownership_percent),
-           nationality = COALESCE($8, nationality),
-           is_citizen = COALESCE($9, is_citizen),
-           identity_type = COALESCE($10, identity_type),
-           national_identity_hash = COALESCE($11, national_identity_hash),
-           updated_at = NOW()
-       WHERE id = $2 AND supplier_id = $1
-       RETURNING id, supplier_id AS "supplierId", full_name AS "fullName",
-                 person_role AS "personRole", ownership_percent AS "ownershipPercent",
-                 identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-                 email, phone, national_identity_hash AS "nationalIdOrPassport",
-                 national_identity_hash AS "idNumber", kyc_status AS "kycStatus"`,
-      [
-        supplierId,
-        personId,
-        person.fullName ? person.fullName.trim() : null,
-        person.personRole || null,
-        person.email || null,
-        person.phone || null,
-        person.ownershipPercent !== undefined && !isNaN(Number(person.ownershipPercent)) ? Number(person.ownershipPercent) : null,
-        person.nationality || null,
-        person.isCitizen !== undefined ? person.isCitizen : null,
-        person.identityType || null,
-        nationalId !== undefined ? nationalId : null,
-      ]
-    );
-    return res.rows[0] || null;
-  }
 
-  async deletePerson(supplierId: string, personId: string): Promise<boolean> {
-    const res = await query(
-      `DELETE FROM supplier_people WHERE id = $1 AND supplier_id = $2`,
-      [personId, supplierId]
-    );
-    if ((res.rowCount || 0) > 0) {
+    const role = ['director', 'owner', 'shareholder', 'authorised_signatory', 'other'].includes(person.personRole)
+      ? person.personRole
+      : 'director';
+
+    const ownership = person.ownershipPercent !== undefined && !isNaN(Number(person.ownershipPercent))
+      ? Number(person.ownershipPercent)
+      : 0;
+
+    if (ownership < 0 || ownership > 100) {
+      const err = new Error('Ownership percentage must be between 0 and 100.') as any;
+      err.status = 400;
+      err.code = 'INVALID_OWNERSHIP';
+      err.field = 'ownershipPercent';
+      throw err;
+    }
+
+    if (['director', 'shareholder', 'owner'].includes(role)) {
+      const currentActive = await query(
+        `SELECT SUM(ownership_percent) AS total FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE AND LOWER(person_role) IN ('director', 'shareholder', 'owner')`,
+        [supplierId]
+      );
+      const currentSum = Number(currentActive.rows[0]?.total || 0);
+      const newTotal = currentSum + ownership;
+      if (newTotal > 100) {
+        const err = new Error(`Ownership would total ${newTotal}%. It cannot be more than 100%.`) as any;
+        err.status = 400;
+        err.code = 'OWNERSHIP_EXCEEDED';
+        err.field = 'ownershipPercent';
+        throw err;
+      }
+    }
+
+    const identityType = person.identityType === 'PASSPORT' ? 'PASSPORT' : 'OMANG';
+    const isCitizen = identityType === 'OMANG';
+    const nationality = person.nationality || (isCitizen ? 'Motswana' : 'Foreign');
+    const idNumber = person.idNumber ? String(person.idNumber).trim() : null;
+
+    let identityHash: string | null = null;
+    if (idNumber) {
+      const normalizedId = idNumber.toUpperCase();
+      identityHash = crypto.createHmac('sha256', encryptionKey).update(normalizedId).digest('hex');
+
+      const dupCheck = await query(
+        `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND is_active = TRUE LIMIT 1`,
+        [supplierId, identityHash]
+      );
+      if (dupCheck.rows.length > 0) {
+        const err = new Error('A director or person with this identification number already exists for this supplier.') as any;
+        err.status = 400;
+        err.code = 'DUPLICATE_IDENTITY';
+        err.field = 'idNumber';
+        throw err;
+      }
+    }
+
+    const newPersonId = await withTransaction(async (client) => {
+      const insertRes = await client.query(
+        `INSERT INTO supplier_people (
+           supplier_id, full_name, person_role, ownership_percent, identity_type,
+           nationality, is_citizen, email, phone, date_of_birth,
+           national_identity_number_encrypted, national_identity_hash, is_active
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+           CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE NULL END,
+           $13, TRUE
+         ) RETURNING id`,
+        [
+          supplierId,
+          fullName,
+          role,
+          ownership,
+          identityType,
+          nationality,
+          isCitizen,
+          person.email || null,
+          person.phone || null,
+          person.dateOfBirth || null,
+          idNumber,
+          encryptionKey,
+          identityHash,
+        ]
+      );
+
+      return insertRes.rows[0].id;
+    });
+
+    try {
+      await auditRepository.logEvent({
+        actorName: user?.fullName || 'Supplier Administrator',
+        actorRole: user?.role || 'Supplier',
+        supplierId,
+        action: 'CREATED_SUPPLIER_PERSON',
+        entityType: 'supplier_person',
+        entityId: newPersonId,
+        details: `Added person ${fullName} (${role})`,
+      });
       await this.calculateCompleteness(supplierId);
-      return true;
+    } catch (e: any) {
+      console.warn('[ADD PERSON AUDIT/COMPLETENESS WARNING]:', e.message);
     }
-    return false;
+
+    const fetched = await query(
+      `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
+              person_role AS "personRole", ownership_percent AS "ownershipPercent",
+              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
+                   ELSE NULL END AS "idNumber",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+                   THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
+                   ELSE NULL END AS "idLast4",
+              national_identity_number_encrypted IS NOT NULL AS "hasId"
+       FROM supplier_people WHERE id = $1`,
+      [newPersonId, encryptionKey]
+    );
+    return fetched.rows[0];
+  }
+
+  async updatePerson(supplierId: string, personId: string, person: any, user?: any): Promise<any> {
+    const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
+    
+    const existing = await query(`SELECT id, ownership_percent, person_role FROM supplier_people WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`, [personId, supplierId]);
+    if (existing.rows.length === 0) {
+      const err = new Error('Person not found or unauthorized.') as any;
+      err.status = 404;
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const fullName = person.fullName !== undefined ? String(person.fullName).trim() : undefined;
+    const role = person.personRole !== undefined ? person.personRole : undefined;
+    const ownership = person.ownershipPercent !== undefined ? Number(person.ownershipPercent) : undefined;
+    const identityType = person.identityType !== undefined ? person.identityType : undefined;
+    const idNumber = person.idNumber !== undefined && person.idNumber !== '' ? String(person.idNumber).trim() : undefined;
+
+    if (ownership !== undefined && (ownership < 0 || ownership > 100)) {
+      const err = new Error('Ownership percentage must be between 0 and 100.') as any;
+      err.status = 400;
+      err.code = 'INVALID_OWNERSHIP';
+      err.field = 'ownershipPercent';
+      throw err;
+    }
+
+    if (ownership !== undefined) {
+      const currentActive = await query(
+        `SELECT SUM(ownership_percent) AS total FROM supplier_people WHERE supplier_id = $1 AND id != $2 AND is_active = TRUE AND LOWER(person_role) IN ('director', 'shareholder', 'owner')`,
+        [supplierId, personId]
+      );
+      const currentSum = Number(currentActive.rows[0]?.total || 0);
+      const newTotal = currentSum + ownership;
+      if (newTotal > 100) {
+        const err = new Error(`Ownership would total ${newTotal}%. It cannot be more than 100%.`) as any;
+        err.status = 400;
+        err.code = 'OWNERSHIP_EXCEEDED';
+        err.field = 'ownershipPercent';
+        throw err;
+      }
+    }
+
+    let identityHash: string | null = null;
+    if (idNumber) {
+      const normalizedId = idNumber.toUpperCase();
+      identityHash = crypto.createHmac('sha256', encryptionKey).update(normalizedId).digest('hex');
+
+      const dupCheck = await query(
+        `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND id != $3 AND is_active = TRUE LIMIT 1`,
+        [supplierId, identityHash, personId]
+      );
+      if (dupCheck.rows.length > 0) {
+        const err = new Error('A director or person with this identification number already exists for this supplier.') as any;
+        err.status = 400;
+        err.code = 'DUPLICATE_IDENTITY';
+        err.field = 'idNumber';
+        throw err;
+      }
+    }
+
+    return await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE supplier_people
+         SET full_name = COALESCE($3, full_name),
+             person_role = COALESCE($4, person_role),
+             ownership_percent = COALESCE($5, ownership_percent),
+             identity_type = COALESCE($6, identity_type),
+             nationality = COALESCE($7, nationality),
+             email = COALESCE($8, email),
+             phone = COALESCE($9, phone),
+             date_of_birth = COALESCE($10, date_of_birth),
+             national_identity_number_encrypted = CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE national_identity_number_encrypted END,
+             national_identity_hash = COALESCE($13, national_identity_hash),
+             updated_at = NOW()
+         WHERE id = $2 AND supplier_id = $1`,
+        [
+          supplierId,
+          personId,
+          fullName || null,
+          role || null,
+          ownership !== undefined ? ownership : null,
+          identityType || null,
+          person.nationality || null,
+          person.email || null,
+          person.phone || null,
+          person.dateOfBirth || null,
+          idNumber || null,
+          encryptionKey,
+          identityHash !== undefined ? identityHash : null,
+        ]
+      );
+
+      return personId;
+    });
+
+    try {
+      await auditRepository.logEvent({
+        actorName: user?.fullName || 'Supplier Administrator',
+        actorRole: user?.role || 'Supplier',
+        supplierId,
+        action: 'UPDATED_SUPPLIER_PERSON',
+        entityType: 'supplier_person',
+        entityId: personId,
+        details: `Updated person record ${personId}`,
+      });
+      await this.calculateCompleteness(supplierId);
+    } catch (e: any) {
+      console.warn('[UPDATE PERSON AUDIT/COMPLETENESS WARNING]:', e.message);
+    }
+
+    const fetched = await query(
+      `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
+              person_role AS "personRole", ownership_percent AS "ownershipPercent",
+              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
+                   ELSE NULL END AS "idNumber",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+                   THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
+                   ELSE NULL END AS "idLast4",
+              national_identity_number_encrypted IS NOT NULL AS "hasId"
+       FROM supplier_people WHERE id = $1`,
+      [personId, encryptionKey]
+    );
+    return fetched.rows[0];
+  }
+
+  async deletePerson(supplierId: string, personId: string, user?: any): Promise<{ ok: boolean; id?: string; alreadyRemoved?: boolean }> {
+    const result = await withTransaction(async (client) => {
+      const checkRes = await client.query(
+        `SELECT id, is_active FROM supplier_people WHERE id = $1 AND supplier_id = $2`,
+        [personId, supplierId]
+      );
+      if (checkRes.rows.length === 0) {
+        const err = new Error('This person was not found.') as any;
+        err.status = 404;
+        err.code = 'not_found';
+        throw err;
+      }
+
+      const personRecord = checkRes.rows[0];
+      if (!personRecord.is_active) {
+        return { ok: true, alreadyRemoved: true };
+      }
+
+      const res = await client.query(
+        `UPDATE supplier_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`,
+        [personId, supplierId]
+      );
+
+      return { ok: true, id: personId };
+    });
+
+    if (result.ok && !result.alreadyRemoved) {
+      try {
+        await auditRepository.logEvent({
+          actorName: user?.fullName || 'Supplier Administrator',
+          actorRole: user?.role || 'Supplier',
+          supplierId,
+          action: 'supplier_person.remove',
+          entityType: 'supplier_person',
+          entityId: personId,
+          details: `Removed person record ${personId}`,
+        });
+        await this.calculateCompleteness(supplierId);
+      } catch (e: any) {
+        console.warn('[DELETE PERSON AUDIT/COMPLETENESS WARNING]:', e.message);
+      }
+    }
+
+    return result;
   }
 
   async listProjects(supplierId: string): Promise<SupplierProject[]> {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useReadiness } from '../../context/ReadinessContext';
 import { supplierApi, referenceApi, CategoryTreeNode } from '../../services/api';
+import { DirectorsPanel } from './DirectorsPanel';
 import { Director } from '../../types';
 import { DB_CATEGORIES } from '../../data/dbCategories';
 import {
@@ -210,7 +211,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     }
   }, [supplier, isEditingDetails]);
 
-  // Directors State & ID Masking
+  // Directors State synced with live PostgreSQL database
   const [directorsList, setDirectorsList] = useState<
     (Director & { idNumber: string; verificationStatus: 'Not started' | 'Pending' | 'Verified' })[]
   >(
@@ -222,17 +223,31 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     }))
   );
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
-  const [isDirectorDrawerOpen, setIsDirectorDrawerOpen] = useState(false);
-  const [editingDirector, setEditingDirector] = useState<any | null>(null);
-  const [newDirectorForm, setNewDirectorForm] = useState({
-    fullName: '',
-    idNumber: '',
-    idType: 'National ID (Omang)' as 'National ID (Omang)' | 'Passport' | 'Residence Permit',
-    nationality: 'Motswana',
-    isCitizen: true,
-    shareholdingPercentage: 0,
-    role: 'Director',
-  });
+
+  useEffect(() => {
+    let isMounted = true;
+    supplierApi.listPeople().then((res) => {
+      if (isMounted && Array.isArray(res) && res.length > 0) {
+        setDirectorsList(
+          res.map((p) => ({
+            id: p.id,
+            fullName: p.fullName,
+            nationalIdOrPassport: p.idNumber || p.idLast4 || '',
+            idNumber: p.idNumber || p.idLast4 || '',
+            idType: p.identityType === 'PASSPORT' ? 'Passport' : 'National ID (Omang)',
+            nationality: p.nationality || 'Motswana',
+            isCitizen: Boolean(p.isCitizen),
+            shareholdingPercentage: Number(p.ownershipPercent) || 0,
+            role: p.personRole || 'Director',
+            verificationStatus: 'Verified',
+          }))
+        );
+      }
+    }).catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSection]);
 
   // Categories State loaded from categories table
   const [categoriesList, setCategoriesList] = useState<CategoryNode[]>(DB_CATEGORIES);
@@ -546,7 +561,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       }, 150);
     } else if (item.category === 'People') {
       setActiveSection('directors');
-      setIsDirectorDrawerOpen(true);
+      setTimeout(() => {
+        const el = document.getElementById('field-directors');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     } else if (item.category === 'Documents') {
       setActiveNav('vault');
     }
@@ -614,187 +632,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     }
   };
 
-  const handleOpenAddDirector = () => {
-    setEditingDirector(null);
-    setNewDirectorForm({
-      fullName: '',
-      idNumber: '',
-      idType: 'National ID (Omang)',
-      nationality: 'Motswana',
-      isCitizen: true,
-      shareholdingPercentage: 0,
-      role: 'Director',
-    });
-    setIsDirectorDrawerOpen(true);
-  };
-
-  const handleEditDirector = (dir: any) => {
-    setEditingDirector(dir);
-    setNewDirectorForm({
-      fullName: dir.fullName || '',
-      idNumber: dir.idNumber || dir.nationalIdOrPassport || '',
-      idType: dir.idType || (dir.isCitizen ? 'National ID (Omang)' : 'Passport'),
-      nationality: dir.nationality || (dir.isCitizen ? 'Motswana' : 'Foreign'),
-      isCitizen: dir.isCitizen ?? true,
-      shareholdingPercentage: dir.shareholdingPercentage ?? 0,
-      role: dir.role || 'Director',
-    });
-    setIsDirectorDrawerOpen(true);
-  };
-
-  // Add or Edit Director
-  const handleAddDirectorSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDirectorForm.fullName || !newDirectorForm.idNumber) return;
-
-    try {
-      if (editingDirector) {
-        let dbId = editingDirector.id;
-        if (dbId.startsWith('dir-')) {
-          const res = await supplierApi.addPerson({
-            fullName: newDirectorForm.fullName.trim(),
-            personRole: newDirectorForm.role?.toLowerCase() || 'director',
-            ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
-            nationality: newDirectorForm.nationality,
-            isCitizen: newDirectorForm.isCitizen,
-            identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
-            idNumber: newDirectorForm.idNumber.trim(),
-            nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-          });
-          if (res && res.id) dbId = res.id;
-        } else {
-          await supplierApi.updatePerson(dbId, {
-            fullName: newDirectorForm.fullName.trim(),
-            personRole: newDirectorForm.role?.toLowerCase() || 'director',
-            ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
-            nationality: newDirectorForm.nationality,
-            isCitizen: newDirectorForm.isCitizen,
-            identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
-            idNumber: newDirectorForm.idNumber.trim(),
-            nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-          });
-        }
-
-        const updated = directorsList.map((d) => {
-          if (d.id === editingDirector.id) {
-            return {
-              ...d,
-              id: dbId,
-              fullName: newDirectorForm.fullName.trim(),
-              nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-              idNumber: newDirectorForm.idNumber.trim(),
-              idType: newDirectorForm.idType,
-              nationality: newDirectorForm.nationality,
-              isCitizen: newDirectorForm.isCitizen,
-              shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
-              role: newDirectorForm.role,
-            };
-          }
-          return d;
-        });
-
-        setDirectorsList(updated);
-        updateSupplierProfile({
-          directors: updated.map((d) => ({
-            id: d.id,
-            fullName: d.fullName,
-            nationalIdOrPassport: d.nationalIdOrPassport,
-            idType: d.idType,
-            nationality: d.nationality,
-            isCitizen: d.isCitizen,
-            shareholdingPercentage: d.shareholdingPercentage,
-            role: d.role,
-          })),
-        });
-
-        setIsDirectorDrawerOpen(false);
-        const savedName = newDirectorForm.fullName;
-        setEditingDirector(null);
-        showToast(`Database Save Confirmed: Updated ${savedName} in PostgreSQL database.`);
-      } else {
-        const res = await supplierApi.addPerson({
-          fullName: newDirectorForm.fullName.trim(),
-          personRole: newDirectorForm.role?.toLowerCase() || 'director',
-          ownershipPercent: Number(newDirectorForm.shareholdingPercentage),
-          nationality: newDirectorForm.nationality,
-          isCitizen: newDirectorForm.isCitizen,
-          identityType: newDirectorForm.idType === 'Passport' ? 'PASSPORT' : 'OMANG',
-          idNumber: newDirectorForm.idNumber.trim(),
-          nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-        });
-
-        const newDir = {
-          id: res?.id || `dir-${Date.now()}`,
-          fullName: newDirectorForm.fullName.trim(),
-          nationalIdOrPassport: newDirectorForm.idNumber.trim(),
-          idNumber: newDirectorForm.idNumber.trim(),
-          idType: newDirectorForm.idType,
-          nationality: newDirectorForm.nationality,
-          isCitizen: newDirectorForm.isCitizen,
-          shareholdingPercentage: Number(newDirectorForm.shareholdingPercentage),
-          role: newDirectorForm.role,
-          verificationStatus: 'Verified' as const,
-        };
-
-        const updated = [...directorsList, newDir];
-        setDirectorsList(updated);
-        updateSupplierProfile({
-          directors: updated.map((d) => ({
-            id: d.id,
-            fullName: d.fullName,
-            nationalIdOrPassport: d.nationalIdOrPassport,
-            idType: d.idType,
-            nationality: d.nationality,
-            isCitizen: d.isCitizen,
-            shareholdingPercentage: d.shareholdingPercentage,
-            role: d.role,
-          })),
-        });
-
-        setIsDirectorDrawerOpen(false);
-        showToast(`Database Save Confirmed: Added ${newDir.fullName} to PostgreSQL database.`);
-      }
-    } catch (err: any) {
-      console.error('Director save to database error:', err);
-      showToast(err.message || 'Error saving director to database. Please check your connection.');
-    }
-
-    setNewDirectorForm({
-      fullName: '',
-      idNumber: '',
-      idType: 'National ID (Omang)',
-      nationality: 'Motswana',
-      isCitizen: true,
-      shareholdingPercentage: 0,
-      role: 'Director',
-    });
-  };
-
-  const handleDeleteDirector = async (dirId: string) => {
-    try {
-      if (dirId && !dirId.startsWith('dir-')) {
-        await supplierApi.deletePerson(dirId);
-      }
-    } catch (err) {
-      console.warn('Could not delete person from database API:', err);
-    }
-
-    const updated = directorsList.filter((d) => d.id !== dirId);
-    setDirectorsList(updated);
-    updateSupplierProfile({
-      directors: updated.map((d) => ({
-        id: d.id,
-        fullName: d.fullName,
-        nationalIdOrPassport: d.nationalIdOrPassport,
-        idType: d.idType,
-        nationality: d.nationality,
-        isCitizen: d.isCitizen,
-        shareholdingPercentage: d.shareholdingPercentage,
-        role: d.role,
-      })),
-    });
-    showToast('Director removed and database updated successfully.');
-  };
+  // Note: Directors and beneficial owners are authoritatively managed by <DirectorsPanel />
 
   // Save Project
   const handleSaveProject = (e: React.FormEvent) => {
@@ -2107,187 +1945,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           )}
 
           {/* ================= SECTION 2: Directors and Owners (1 Item: 100% Equity) ================= */}
-          {activeSection === 'directors' && (
-            <div id="field-directors" className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                <div>
-                  <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
-                    Directors and beneficial owners
-                  </h2>
-                  <p className="text-[14px] text-[#6B7A87] mt-0.5">
-                    Statutory requirement: At least one resident director, with total shareholdings tallying exactly 100%.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleOpenAddDirector}
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add director</span>
-                </button>
-              </div>
-
-              {/* Ownership Total & Status */}
-              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px]">
-                <div className="flex items-center gap-2">
-                  <span className="text-[#6B7A87]">Running equity total:</span>
-                  <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white tabular-nums">
-                    {totalOwnership}%
-                  </span>
-                  {directorsList.length > 0 && Math.round(totalOwnership) === 100 ? (
-                    <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>Balanced (100% equity allocated)</span>
-                    </span>
-                  ) : totalOwnership > 100 ? (
-                    <span className="bg-[#FEF2F2] text-[#C2412D] px-2 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      <span>Exceeds 100% allocation</span>
-                    </span>
-                  ) : (
-                    <span className="bg-[#FFFBEB] text-[#D97706] px-2 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
-                      <Info className="w-3 h-3" />
-                      <span>{100 - totalOwnership}% unallocated</span>
-                    </span>
-                  )}
-                </div>
-                <span className="text-[13px] text-[#6B7A87]">
-                  {directorsList.length} director{directorsList.length === 1 ? '' : 's'} recorded
-                </span>
-              </div>
-
-              {/* Directors Table or Empty State */}
-              {directorsList.length === 0 ? (
-                <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center space-y-3">
-                  <p className="text-[15px] font-semibold text-[#10212E] dark:text-white">
-                    No directors registered yet
-                  </p>
-                  <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto">
-                    To fulfill statutory compliance, add at least one resident director whose shareholdings total exactly 100%.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleOpenAddDirector}
-                    className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add first director</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
-                  <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-                    <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px]">
-                      <tr>
-                        <th className="p-4">Name</th>
-                        <th className="p-4">Role</th>
-                        <th className="p-4 text-right">Ownership</th>
-                        <th className="p-4">ID number</th>
-                        <th className="p-4">Verification</th>
-                        <th className="p-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
-                      {directorsList.map((dir) => {
-                        const isRevealed = revealedIds[dir.id];
-                        const maskedId = `••••••${(dir.idNumber || '').slice(-4)}`;
-
-                        return (
-                          <tr key={dir.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
-                            <td className="p-4">
-                              <div className="space-y-0.5">
-                                <span className="font-semibold block">{dir.fullName}</span>
-                                <span className="text-[13px] text-[#6B7A87] block">{dir.nationality}</span>
-                              </div>
-                            </td>
-
-                            <td className="p-4 text-[#43525F] dark:text-[#B2C3D2]">{dir.role}</td>
-
-                            <td className="p-4 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleEditDirector(dir)}
-                                className="group inline-flex items-center gap-1.5 font-semibold tabular-nums text-[15px] text-[#10212E] dark:text-white hover:text-[#1F5F99] dark:hover:text-[#38BDF8] cursor-pointer transition-colors"
-                                title="Click to edit director details or ownership %"
-                              >
-                                <span>{dir.shareholdingPercentage}%</span>
-                                <Edit2 className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#38BDF8] opacity-70 group-hover:opacity-100 transition-opacity" />
-                              </button>
-                            </td>
-
-                            <td className="p-4">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-2 tabular-nums">
-                                  <span className="font-medium">
-                                    {isRevealed ? dir.idNumber : maskedId}
-                                  </span>
-                                  {!isRevealed ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRevealId(dir.id, dir.fullName)}
-                                      className="text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                                      title="Unmask identity number (action logged)"
-                                    >
-                                      <Eye className="w-3 h-3" />
-                                      <span>Reveal</span>
-                                    </button>
-                                  ) : (
-                                    <span className="text-[12px] text-[#2F8F5B] bg-[#ECFDF5] px-1.5 py-0.5 rounded">
-                                      Audit logged
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="text-[11px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium inline-block">
-                                  {dir.idType || (dir.isCitizen ? 'National ID (Omang)' : 'Passport')}
-                                </span>
-                              </div>
-                            </td>
-
-                            <td className="p-4">
-                              <span
-                                className={`text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 ${
-                                  dir.verificationStatus === 'Verified'
-                                    ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                                    : 'bg-[#FFFBEB] text-[#D97706]'
-                                }`}
-                              >
-                                <ShieldCheck className="w-3 h-3" />
-                                <span>{dir.verificationStatus}</span>
-                              </span>
-                            </td>
-
-                            <td className="p-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditDirector(dir)}
-                                  className="px-2.5 py-1 text-[13px] font-medium text-[#1F5F99] dark:text-[#38BDF8] bg-[#EAF2FA] dark:bg-[#1E364A] hover:bg-[#dbeafe] dark:hover:bg-[#254661] rounded-[4px] inline-flex items-center gap-1 cursor-pointer transition-colors"
-                                  title="Edit director details or ownership %"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                  <span>Edit</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteDirector(dir.id)}
-                                  className="p-1.5 text-[#C2412D] hover:bg-[#FEF2F2] dark:hover:bg-[#3D1414] rounded-[4px] cursor-pointer transition-colors"
-                                  title="Remove director"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+          {activeSection === 'directors' && <DirectorsPanel />}
 
           {/* ================= SECTION 3: Categories ================= */}
           {activeSection === 'categories' && (
@@ -3133,194 +2791,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         </div>
       </div>
 
-      {/* 4. MODAL: Add Director */}
-      {isDirectorDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-              <div>
-                <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
-                  {editingDirector ? 'Edit director details or ownership %' : 'Add director or beneficial owner'}
-                </h3>
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
-                  {editingDirector
-                    ? 'Update CIPA registered person details, statutory role, or equity allocation percentage.'
-                    : 'Record CIPA registered person and equity allocation.'}
-                </p>
-                <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#ECFDF5] text-[#2F8F5B] text-[12px] font-medium border border-[#A7F3D0]">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B]" />
-                  <span>Direct Database Save Active: Changes persist to PostgreSQL & local store</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDirectorDrawerOpen(false);
-                  setEditingDirector(null);
-                }}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleAddDirectorSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                  Full legal name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Boitumelo Masire"
-                  value={newDirectorForm.fullName}
-                  onChange={(e) =>
-                    setNewDirectorForm({ ...newDirectorForm, fullName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    ID Document Type *
-                  </label>
-                  <select
-                    value={newDirectorForm.idType}
-                    onChange={(e) => {
-                      const val = e.target.value as any;
-                      setNewDirectorForm({ ...newDirectorForm, idType: val });
-                    }}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  >
-                    <option value="National ID (Omang)">National ID (Omang)</option>
-                    <option value="Passport">Passport (Foreign / Local)</option>
-                    <option value="Residence Permit">Residence Permit</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Nationality *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newDirectorForm.nationality}
-                    onChange={(e) => {
-                      const nat = e.target.value;
-                      const isMot = nat.toLowerCase().includes('botswana') || nat.toLowerCase().includes('motswana');
-                      setNewDirectorForm({
-                        ...newDirectorForm,
-                        nationality: nat,
-                        isCitizen: isMot,
-                        idType: isMot ? newDirectorForm.idType : 'Passport',
-                      });
-                    }}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                  {newDirectorForm.idType === 'Passport'
-                    ? 'Passport Number *'
-                    : newDirectorForm.idType === 'Residence Permit'
-                    ? 'Residence Permit Number *'
-                    : 'National ID / Omang *'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder={
-                    newDirectorForm.idType === 'Passport'
-                      ? 'e.g. BW9876543 or GB123456'
-                      : newDirectorForm.idType === 'Residence Permit'
-                      ? 'e.g. RP887766'
-                      : 'e.g. 529124018'
-                  }
-                  value={newDirectorForm.idNumber}
-                  onChange={(e) =>
-                    setNewDirectorForm({ ...newDirectorForm, idNumber: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Shareholding percentage (%) *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    required
-                    value={newDirectorForm.shareholdingPercentage === 0 ? '' : newDirectorForm.shareholdingPercentage}
-                    onChange={(e) =>
-                      setNewDirectorForm({
-                        ...newDirectorForm,
-                        shareholdingPercentage: e.target.value === '' ? 0 : Number(e.target.value),
-                      })
-                    }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Statutory role
-                  </label>
-                  <select
-                    value={newDirectorForm.role}
-                    onChange={(e) =>
-                      setNewDirectorForm({ ...newDirectorForm, role: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  >
-                    <option value="Director">Director</option>
-                    <option value="Managing Director">Managing Director</option>
-                    <option value="Shareholder">Shareholder</option>
-                    <option value="Company Secretary">Company Secretary</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsDirectorDrawerOpen(false);
-                    setEditingDirector(null);
-                  }}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  {editingDirector ? (
-                    <>
-                      <Save className="w-4 h-4" />
-                      <span>Save changes</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      <span>Add person</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* 5. MODAL: Add / Edit Project */}
       {isProjectDrawerOpen && (

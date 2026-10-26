@@ -4,12 +4,14 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { requireAuth, requireTenantType } from '../middleware/auth.middleware';
 import { getSupplierContext } from '../middleware/tenant.helper';
 import { suppliersRepository } from '../repositories/suppliers.repository';
+import { auditRepository } from '../repositories/audit.repository';
 import { documentsRepository } from '../repositories/documents.repository';
 import { consentRepository } from '../repositories/consent.repository';
 import { applicationsRepository } from '../repositories/applications.repository';
 import { bidsRepository } from '../repositories/bids.repository';
 import { translateDbError } from '../db/errors';
 import { extractClientIp } from '../utils/ip';
+import { pool } from '../db/client';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -85,7 +87,8 @@ router.get('/people', async (req: Request, res: Response) => {
     const people = await suppliersRepository.listPeople(ctx.tenantId);
     res.json(people);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
   }
 });
 
@@ -93,11 +96,15 @@ router.get('/people', async (req: Request, res: Response) => {
 router.post('/people', async (req: Request, res: Response) => {
   try {
     const ctx = getSupplierContext(req);
-    const person = await suppliersRepository.addPerson(ctx.tenantId, req.body);
-    await suppliersRepository.calculateCompleteness(ctx.tenantId);
+    const person = await suppliersRepository.addPerson(ctx.tenantId, req.body, { id: ctx.userId, email: ctx.userEmail });
     res.status(201).json(person);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    const status = err.status || 400;
+    res.status(status).json({
+      error: err.code || 'VALIDATION_ERROR',
+      field: err.field || 'fullName',
+      message: err.message || 'Failed to save director',
+    });
   }
 });
 
@@ -105,26 +112,129 @@ router.post('/people', async (req: Request, res: Response) => {
 router.put('/people/:id', async (req: Request, res: Response) => {
   try {
     const ctx = getSupplierContext(req);
-    const person = await suppliersRepository.updatePerson(ctx.tenantId, req.params.id, req.body);
+    const person = await suppliersRepository.updatePerson(ctx.tenantId, req.params.id, req.body, { id: ctx.userId, email: ctx.userEmail });
     if (!person) {
-      return res.status(404).json({ error: 'Person not found' });
+      return res.status(404).json({ error: 'NOT_FOUND', field: 'id', message: 'Person not found' });
     }
-    await suppliersRepository.calculateCompleteness(ctx.tenantId);
     res.json(person);
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    const status = err.status || 400;
+    res.status(status).json({
+      error: err.code || 'VALIDATION_ERROR',
+      field: err.field || 'fullName',
+      message: err.message || 'Failed to update director',
+    });
   }
 });
 
+// Helper functions for director deletion (Step 2 structure)
+async function getSupplierIdForUser(client: any, userId: string, activeTenantId?: string): Promise<string | null> {
+  if (activeTenantId && activeTenantId !== 'platform') {
+    const res = await client.query(
+      `SELECT supplier_id FROM supplier_members WHERE user_id = $1 AND supplier_id = $2 AND status = 'active' LIMIT 1`,
+      [userId, activeTenantId]
+    );
+    if (res.rows.length > 0) return res.rows[0].supplier_id;
+  }
+  const res = await client.query(
+    `SELECT supplier_id FROM supplier_members WHERE user_id = $1 AND status = 'active' ORDER BY is_owner DESC, created_at ASC LIMIT 1`,
+    [userId]
+  );
+  return res.rows[0]?.supplier_id || null;
+}
+
+function writeAuditLogSafely(req: Request, action: string, entityId: string, t0: number) {
+  // separate connection, awaited inside its own try/catch, never blocks the response
+  (async () => {
+    try {
+      const actorName = req.user?.fullName || req.user?.email || 'Supplier Administrator';
+      const actorRole = req.activeTenant?.roleName || (req.user?.isPlatformAdmin ? 'Super Admin' : 'Supplier');
+      const supplierId = req.activeTenant?.tenantId || null;
+      await auditRepository.logEvent({
+        actorName,
+        actorRole,
+        supplierId,
+        action,
+        entityType: 'supplier_person',
+        entityId,
+        details: `Removed person record ${entityId}`,
+      });
+      console.log('[remove-director] audit done', Math.round(performance.now() - t0));
+      if (supplierId) {
+        await suppliersRepository.calculateCompleteness(supplierId).catch(() => {});
+      }
+    } catch (e: any) {
+      console.warn('[remove-director] audit log warning:', e.message);
+    }
+  })();
+}
+
 // DELETE /api/supplier/people/:id
 router.delete('/people/:id', async (req: Request, res: Response) => {
+  const t0 = performance.now();
+  console.log('[remove-director] route entered', Math.round(performance.now() - t0));
+
+  if (!req.user || !req.session) {
+    return res.status(401).json({ error: 'unauthorized', message: 'You must be signed in.' });
+  }
+  console.log('[remove-director] session verified', Math.round(performance.now() - t0));
+
+  let client;
   try {
-    const ctx = getSupplierContext(req);
-    await suppliersRepository.deletePerson(ctx.tenantId, req.params.id);
-    await suppliersRepository.calculateCompleteness(ctx.tenantId);
-    res.status(204).send();
+    client = await pool.connect(); // ONE client for the whole transaction
+    console.log('[remove-director] connection acquired', Math.round(performance.now() - t0));
+
+    await client.query('BEGIN');
+    console.log('[remove-director] BEGIN', Math.round(performance.now() - t0));
+
+    await client.query("SET LOCAL lock_timeout = '3s'");
+    await client.query("SET LOCAL statement_timeout = '8s'");
+
+    const supplierId = await getSupplierIdForUser(client, req.user.id, req.activeTenant?.tenantId); // from the session, never from the request
+    if (!supplierId) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'forbidden', message: 'You do not have access.' });
+    }
+
+    const r = await client.query(
+      'UPDATE supplier_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE RETURNING id',
+      [req.params.id, supplierId]
+    );
+
+    if (r.rowCount === 0) {
+      const ex = await client.query(
+        'SELECT is_active FROM supplier_people WHERE id = $1 AND supplier_id = $2',
+        [req.params.id, supplierId]
+      );
+      await client.query('ROLLBACK');
+      if (ex.rowCount === 0) {
+        return res.status(404).json({ error: 'not_found', message: 'This person was not found.' });
+      }
+      return res.json({ ok: true, alreadyRemoved: true });
+    }
+
+    console.log('[remove-director] UPDATE done', Math.round(performance.now() - t0));
+
+    await client.query('COMMIT');
+    console.log('[remove-director] COMMIT done', Math.round(performance.now() - t0));
+
+    res.json({ ok: true, id: r.rows[0].id }); // respond BEFORE any optional extra work
+    console.log('[remove-director] response sent', Math.round(performance.now() - t0));
+
+    writeAuditLogSafely(req, 'supplier_person.remove', r.rows[0].id, t0); // separate connection, awaited inside its own try/catch, never blocks the response
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    try {
+      if (client) await client.query('ROLLBACK');
+    } catch {}
+    console.error('[remove-director] failed', err.code, err.message);
+    if (!res.headersSent) {
+      res.status(err.code === '55P03' ? 503 : 500).json({
+        error: 'server',
+        message: 'We could not remove this person. Try again.',
+      });
+    }
+  } finally {
+    if (client) client.release(); // ALWAYS release
   }
 });
 

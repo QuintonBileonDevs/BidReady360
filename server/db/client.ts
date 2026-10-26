@@ -33,17 +33,19 @@ export const pool = new Pool(
         max: 5,
         idleTimeoutMillis: 10000,
         connectionTimeoutMillis: 5000,
+        options: '-c idle_in_transaction_session_timeout=15000',
       }
     : {
         host: 'localhost',
         port: 5432,
         database: expectedDbName,
         connectionTimeoutMillis: 2000,
+        options: '-c idle_in_transaction_session_timeout=15000',
       }
 );
 
-pool.on('error', (err) => {
-  console.error('[DATABASE POOL ERROR]:', err.message);
+pool.on('error', (e) => {
+  console.error('[pool]', e.message);
 });
 
 let dbVerified = false;
@@ -67,6 +69,7 @@ export async function verifyDatabaseGuard(): Promise<void> {
     } else {
       console.log(`[DATABASE GUARD] Successfully verified database: ${actualDb}`);
     }
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
     dbVerified = true;
   } catch (err: any) {
     console.warn('[DATABASE GUARD WARNING]:', err.message);
@@ -89,7 +92,8 @@ export async function query<T = any>(text: string, params: any[] = []): Promise<
       err.code === '57P02' ||
       err.code === '57P03' ||
       err.code === '08001' ||
-      err.code === '08006'
+      err.code === '08006' ||
+      (err.message && err.message.toLowerCase().includes('timeout'))
     ) {
       const dbErr = new Error('Database service is currently unreachable. Please try again shortly.') as any;
       dbErr.code = 'DATABASE_UNAVAILABLE';
@@ -118,6 +122,8 @@ export async function withTransaction<T>(
 
   try {
     await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '3s'");
+    await client.query("SET LOCAL statement_timeout = '8s'");
     const wrappedClient: DbClient = {
       query: async <R = any>(text: string, p: any[] = []) => {
         const res = await client.query(text, p);
