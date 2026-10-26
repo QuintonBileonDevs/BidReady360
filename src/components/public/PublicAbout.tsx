@@ -308,7 +308,7 @@ export const PublicAbout: React.FC = () => {
           </div>
 
           {/* Right Column: Composed Product Preview Built With Demo-Only Data & Fluid Animations */}
-          <div className="lg:col-span-6">
+          <div className="lg:col-span-6 pointer-events-none select-none opacity-95 cursor-default">
             <div className="relative group">
               {/* Animated Ambient Backlight Glow */}
               <div className="absolute -inset-1.5 bg-gradient-to-r from-[#1F5F99]/25 via-[#2F8F5B]/20 to-[#6FAEE0]/25 rounded-[16px] blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-700 motion-reduce:animate-none -z-10 pointer-events-none" />
@@ -321,7 +321,7 @@ export const PublicAbout: React.FC = () => {
                 <Card
                   variant="default"
                   padding="none"
-                  className="overflow-hidden shadow-elevated border-hairline transition-all duration-300 hover:shadow-2xl hover:border-[#1F5F99]/40 relative bg-white dark:bg-[#132635]"
+                  className="overflow-hidden shadow-elevated border-hairline relative bg-white dark:bg-[#132635]"
                 >
                   <div aria-hidden="true">
                     {/* Active Laser Scanner Beam across the card during scan */}
