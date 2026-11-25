@@ -1,143 +1,150 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { supplierApi } from '../../services/api';
+import { normaliseOmang, validateOmang, genderFromOmang } from '../../../shared/omang';
 import {
-  Users,
   Plus,
   Edit2,
   Trash2,
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
-  Eye,
+  Clock,
   Info,
   X,
   Loader2,
 } from 'lucide-react';
 
-interface DirectorRecord {
+export interface DirectorRecord {
   id: string;
   supplierId: string;
   fullName: string;
   personRole: string;
   ownershipPercent: number | null;
   identityType: string | null;
+  gender?: 'male' | 'female' | null;
   nationality: string;
   isCitizen: boolean;
   email: string | null;
   phone: string | null;
   dateOfBirth: string | null;
-  kycStatus: string;
-  idNumber?: string;
-  idLast4?: string;
+  kycStatus: 'not_started' | 'pending' | 'verified' | 'failed' | string;
+  kycVerifiedAt?: string | null;
+  kycReference?: string | null;
+  idLast4?: string | null;
   hasId: boolean;
 }
 
-export const DirectorsPanel: React.FC = () => {
-  const { supplier, updateSupplierProfile, addAuditEvent } = useApp();
-  const [directors, setDirectors] = useState<DirectorRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingDirector, setEditingDirector] = useState<DirectorRecord | null>(null);
+interface DirectorFormModalProps {
+  editingDirector: DirectorRecord | null;
+  otherDirectorsOwnership: number;
+  remainingEquityAvailable: number;
+  onClose: () => void;
+  onSaved: (saved?: DirectorRecord) => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+}
 
-  // Form state
-  const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('director');
-  const [ownershipPercent, setOwnershipPercent] = useState<string>('');
-  const [identityType, setIdentityType] = useState<'OMANG' | 'PASSPORT'>('OMANG');
-  const [idNumber, setIdNumber] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [nationality, setNationality] = useState('Motswana');
-  const [isCitizen, setIsCitizen] = useState(true);
+const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
+  editingDirector,
+  otherDirectorsOwnership,
+  remainingEquityAvailable,
+  onClose,
+  onSaved,
+  onDirtyChange,
+}) => {
+  // Initialised ONCE per open (component is keyed by editingDirector?.id ?? 'new')
+  const [fullName, setFullName] = useState<string>(() => editingDirector?.fullName || '');
+  const [role, setRole] = useState<string>(() => editingDirector?.personRole || 'director');
+  const [ownershipPercent, setOwnershipPercent] = useState<string>(() => {
+    if (editingDirector && editingDirector.ownershipPercent !== null && editingDirector.ownershipPercent !== undefined) {
+      return String(editingDirector.ownershipPercent);
+    }
+    return remainingEquityAvailable > 0 ? '' : '0';
+  });
+  const [identityType, setIdentityType] = useState<'OMANG' | 'PASSPORT'>(() =>
+    editingDirector?.identityType === 'PASSPORT' ? 'PASSPORT' : 'OMANG'
+  );
+  const [gender, setGender] = useState<'male' | 'female' | ''>(() =>
+    editingDirector?.gender === 'male' || editingDirector?.gender === 'female' ? editingDirector.gender : ''
+  );
+  const [idNumber, setIdNumber] = useState<string>('');
+  const [idTouched, setIdTouched] = useState<boolean>(false);
+  const [email, setEmail] = useState<string>(() => editingDirector?.email || '');
+  const [phone, setPhone] = useState<string>(() => editingDirector?.phone || '');
+  const [nationality, setNationality] = useState<string>(() => editingDirector?.nationality || 'Motswana');
+  const [isCitizen, setIsCitizen] = useState<boolean>(() => editingDirector?.isCitizen ?? true);
 
   const [formError, setFormError] = useState<{ field?: string; message: string } | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [revealedIds, setRevealedIds] = useState<Record<string, string>>({});
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [confirmDeleteDirector, setConfirmDeleteDirector] = useState<DirectorRecord | null>(null);
-  const [isRemoving, setIsRemoving] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const fetchDirectors = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const res = await supplierApi.listPeople();
-      if (Array.isArray(res)) {
-        setDirectors(res);
-        // Synchronize with AppContext supplier.directors so completeness and checklist update immediately
-        const mapped = res.map((p: any) => ({
-          id: p.id,
-          fullName: p.fullName || p.full_name || '',
-          nationalIdOrPassport: p.idNumber || p.idLast4 || p.nationalIdOrPassport || '',
-          idType: (p.identityType === 'PASSPORT' || p.identity_type === 'PASSPORT') ? 'Passport' as const : 'National ID (Omang)' as const,
-          nationality: p.nationality || 'Motswana',
-          isCitizen: p.isCitizen ?? p.is_citizen ?? true,
-          shareholdingPercentage: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
-          ownershipPercent: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
-          role: p.personRole || p.person_role || 'Director',
-        }));
-        updateSupplierProfile({ directors: mapped });
-      }
-    } catch (err) {
-      console.warn('Failed to load directors:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [updateSupplierProfile]);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+
+  const markDirty = useCallback(() => {
+    onDirtyChangeRef.current(true);
+  }, []);
 
   useEffect(() => {
-    fetchDirectors();
-  }, [fetchDirectors]);
+    onDirtyChangeRef.current(false);
+    return () => {
+      onDirtyChangeRef.current(false);
+    };
+  }, []);
 
-  // Total ownership calculation for directors & shareholders
-  const totalOwnership = directors
-    .reduce((sum, d: any) => sum + (Number(d.ownershipPercent ?? d.shareholdingPercentage ?? d.ownership_percent) || 0), 0);
-
-  // Remaining equity available excluding the director currently being edited
-  const otherDirectorsOwnership = directors
-    .filter((d: any) => (!editingDirector || d.id !== editingDirector.id))
-    .reduce((sum, d: any) => sum + (Number(d.ownershipPercent ?? d.shareholdingPercentage ?? d.ownership_percent) || 0), 0);
-  const remainingEquityAvailable = Math.max(0, parseFloat((100 - otherDirectorsOwnership).toFixed(2)));
-
-  const handleOpenAdd = () => {
-    setEditingDirector(null);
-    setFullName('');
-    setRole('director');
-    setOwnershipPercent(remainingEquityAvailable > 0 ? '' : '0');
-    setIdentityType('OMANG');
-    setIdNumber('');
-    setDateOfBirth('');
-    setEmail('');
-    setPhone('');
-    setNationality('Motswana');
-    setIsCitizen(true);
-    setFormError(null);
-    setIsModalOpen(true);
+  const handleOmangValue = (rawInput: string) => {
+    const digitsOnly = normaliseOmang(rawInput).replace(/\D/g, '').slice(0, 9);
+    setIdNumber(digitsOnly);
+    setIdTouched(true);
+    markDirty();
+    if (formError?.field === 'idNumber' || formError?.field === 'gender') {
+      setFormError(null);
+    }
+    // Preselect gender from 5th digit only when gender is currently empty
+    if (gender === '') {
+      const derived = genderFromOmang(digitsOnly);
+      if (derived) {
+        setGender(derived);
+      }
+    }
   };
 
-  const handleOpenEdit = (dir: DirectorRecord) => {
-    setEditingDirector(dir);
-    setFullName(dir.fullName || '');
-    setRole(dir.personRole || 'director');
-    setOwnershipPercent(dir.ownershipPercent !== null && dir.ownershipPercent !== undefined ? String(dir.ownershipPercent) : '');
-    setIdentityType((dir.identityType as any) || 'OMANG');
-    setIdNumber(dir.idNumber || '');
-    setDateOfBirth(dir.dateOfBirth ? dir.dateOfBirth.split('T')[0] : '');
-    setEmail(dir.email || '');
-    setPhone(dir.phone || '');
-    setNationality(dir.nationality || 'Motswana');
-    setIsCitizen(dir.isCitizen ?? true);
-    setFormError(null);
-    setIsModalOpen(true);
+  const handleIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (identityType === 'OMANG') {
+      handleOmangValue(e.target.value);
+    } else {
+      setIdNumber(e.target.value);
+      setIdTouched(true);
+      markDirty();
+      if (formError?.field === 'idNumber') {
+        setFormError(null);
+      }
+    }
   };
+
+  const handleIdPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (identityType !== 'OMANG') return;
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    handleOmangValue(pasted);
+  };
+
+  // Live Omang validation message when Omang is selected and user has typed an ID
+  const liveOmangResult =
+    identityType === 'OMANG' && idNumber.length > 0
+      ? validateOmang(idNumber, gender || undefined)
+      : null;
+
+  const liveIdError =
+    identityType === 'OMANG' && idTouched && idNumber.length > 0 && liveOmangResult && !liveOmangResult.ok
+      ? liveOmangResult.message
+      : formError?.field === 'idNumber'
+      ? formError.message
+      : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    setIsSaving(true);
-    setSuccessMessage(null);
+    setIdTouched(true);
 
     const enteredOwnership = ownershipPercent === '' ? 0 : Number(ownershipPercent);
     if (isNaN(enteredOwnership) || enteredOwnership < 0 || enteredOwnership > 100) {
@@ -145,7 +152,6 @@ export const DirectorsPanel: React.FC = () => {
         field: 'ownershipPercent',
         message: 'Ownership percentage must be a valid number between 0 and 100.',
       });
-      setIsSaving(false);
       return;
     }
 
@@ -156,35 +162,60 @@ export const DirectorsPanel: React.FC = () => {
           field: 'ownershipPercent',
           message: `Ownership would total ${projectedTotal}%. Currently ${otherDirectorsOwnership}% is allocated across other directors, so maximum available to allocate is ${remainingEquityAvailable}%.`,
         });
-        setIsSaving(false);
         return;
       }
     }
 
-    const payload: any = {
+    const trimmedId = idNumber.trim();
+    const keepingExistingId = Boolean(editingDirector?.hasId) && trimmedId === '';
+
+    if (identityType === 'OMANG') {
+      if (!gender) {
+        setFormError({
+          field: 'gender',
+          message: 'Please select a gender for Omang ID.',
+        });
+        return;
+      }
+      if (!keepingExistingId) {
+        const omangCheck = validateOmang(trimmedId, gender);
+        if (!omangCheck.ok) {
+          setFormError({
+            field: 'idNumber',
+            message: omangCheck.message,
+          });
+          return;
+        }
+      }
+    } else if (!keepingExistingId && !trimmedId) {
+      setFormError({
+        field: 'idNumber',
+        message: 'Identification number is required.',
+      });
+      return;
+    }
+
+    const payload: Record<string, any> = {
       fullName: fullName.trim(),
       personRole: role,
       ownershipPercent: enteredOwnership,
       identityType,
-      idNumber: idNumber.trim() ? idNumber.trim() : undefined,
-      dateOfBirth: dateOfBirth || undefined,
+      gender: identityType === 'OMANG' ? gender : undefined,
+      idNumber: trimmedId ? (identityType === 'OMANG' ? normaliseOmang(trimmedId) : trimmedId) : undefined,
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
       nationality,
       isCitizen,
     };
 
+    setIsSaving(true);
     try {
-      if (editingDirector) {
-        await supplierApi.updatePerson(editingDirector.id, payload);
-      } else {
-        await supplierApi.addPerson(payload);
-      }
+      const saved = editingDirector
+        ? await supplierApi.updatePerson(editingDirector.id, payload)
+        : await supplierApi.addPerson(payload);
 
-      setSuccessMessage('Director saved successfully.');
-      setIsModalOpen(false);
-      await fetchDirectors();
-      setTimeout(() => setSuccessMessage(null), 3500);
+      onDirtyChangeRef.current(false);
+      await onSaved(saved);
     } catch (err: any) {
       setFormError({
         field: err.field || 'fullName',
@@ -194,6 +225,464 @@ export const DirectorsPanel: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+      <div className="w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
+            {editingDirector ? 'Edit director' : 'Add director'}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {formError && (
+          <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-[8px] text-red-800 dark:text-red-200 text-[14px]">
+            {formError.message}
+          </div>
+        )}
+
+        {!editingDirector && remainingEquityAvailable <= 0 && (
+          <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-[8px] text-amber-800 dark:text-amber-200 text-[13px] flex items-start gap-2.5">
+            <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-semibold block">100% of company equity is already allocated</span>
+              <span className="text-[12px] text-amber-700 dark:text-amber-300">
+                Existing directors hold 100% total equity. You may add non-equity roles (e.g. 0% ownership director or authorised signatory), or edit an existing director first to rebalance equity.
+              </span>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+              Full name *
+            </label>
+            <input
+              type="text"
+              required
+              value={fullName}
+              onChange={(e) => {
+                setFullName(e.target.value);
+                markDirty();
+              }}
+              placeholder="e.g. Kagiso Phiri"
+              className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                Role *
+              </label>
+              <select
+                value={role}
+                onChange={(e) => {
+                  setRole(e.target.value);
+                  markDirty();
+                }}
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+              >
+                <option value="director">Director</option>
+                <option value="shareholder">Shareholder</option>
+                <option value="owner">Owner</option>
+                <option value="authorised_signatory">Authorised Signatory</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                  Ownership percentage *
+                </label>
+                <span className="text-[12px] text-[#6B7A87]">
+                  Max: <strong className="text-[#10212E] dark:text-white tabular-nums">{remainingEquityAvailable}%</strong>
+                </span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                max={remainingEquityAvailable > 0 ? 100 : 0}
+                step="0.01"
+                required
+                value={ownershipPercent}
+                onChange={(e) => {
+                  let val = e.target.value;
+                  if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+                    val = val.replace(/^0+/, '');
+                  }
+                  setOwnershipPercent(val);
+                  markDirty();
+                }}
+                placeholder={remainingEquityAvailable > 0 ? `e.g. ${Math.min(50, remainingEquityAvailable)}` : '0'}
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+              />
+              <p className="text-[12px] text-[#6B7A87]">
+                {otherDirectorsOwnership > 0 ? (
+                  <>Currently <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">{otherDirectorsOwnership}%</span> allocated across other directors. Total equity cannot exceed 100%.</>
+                ) : (
+                  <>Total equity across directors & shareholders must tally up to 100%.</>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                Identity type *
+              </label>
+              <select
+                value={identityType}
+                onChange={(e) => {
+                  const val = e.target.value as 'OMANG' | 'PASSPORT';
+                  setIdentityType(val);
+                  setIsCitizen(val === 'OMANG');
+                  setNationality(val === 'OMANG' ? 'Motswana' : 'Foreign');
+                  setFormError(null);
+                  markDirty();
+                }}
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+              >
+                <option value="OMANG">National ID (Omang)</option>
+                <option value="PASSPORT">Passport</option>
+              </select>
+            </div>
+
+            {identityType === 'OMANG' ? (
+              <div className="space-y-1.5">
+                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                  Gender *
+                </label>
+                <select
+                  required
+                  value={gender}
+                  onChange={(e) => {
+                    setGender(e.target.value as 'male' | 'female' | '');
+                    markDirty();
+                    if (formError?.field === 'gender' || formError?.field === 'idNumber') {
+                      setFormError(null);
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] ${
+                    formError?.field === 'gender'
+                      ? 'border-red-400 dark:border-red-600'
+                      : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                  }`}
+                >
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                  Nationality
+                </label>
+                <input
+                  type="text"
+                  value={nationality}
+                  onChange={(e) => {
+                    setNationality(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="e.g. South African"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+              {identityType === 'OMANG' ? 'Omang ID number' : 'Passport number'} {editingDirector?.hasId ? '(leave blank to keep saved)' : '*'}
+            </label>
+            <input
+              type="text"
+              inputMode={identityType === 'OMANG' ? 'numeric' : 'text'}
+              maxLength={identityType === 'OMANG' ? 9 : 40}
+              required={!editingDirector?.hasId}
+              placeholder={
+                editingDirector?.hasId && editingDirector.idLast4
+                  ? `Saved ending ${editingDirector.idLast4} — enter new ID to replace`
+                  : identityType === 'OMANG'
+                  ? 'e.g. 123416789 (9 digits)'
+                  : 'e.g. P12345678'
+              }
+              value={idNumber}
+              onChange={handleIdChange}
+              onPaste={handleIdPaste}
+              onBlur={() => setIdTouched(true)}
+              className={`w-full px-3 py-2 border rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums ${
+                liveIdError
+                  ? 'border-red-400 dark:border-red-600'
+                  : 'border-[#D5E0EA] dark:border-[#1E364A]'
+              }`}
+            />
+            {liveIdError ? (
+              <p className="text-[12px] text-[#C2412D] dark:text-red-400 font-medium" role="alert">
+                {liveIdError}
+              </p>
+            ) : identityType === 'OMANG' ? (
+              <p className="text-[12px] text-[#6B7A87]">
+                {editingDirector?.hasId && editingDirector.idLast4
+                  ? `Saved ID ending ${editingDirector.idLast4}. Leave blank to keep existing ID, or enter a 9-digit Omang (5th digit: 1 = male, 2 = female).`
+                  : '9 digits only. The 5th digit indicates gender (1 = male, 2 = female).'}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                Email (optional)
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  markDirty();
+                }}
+                placeholder="e.g. name@company.co.bw"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
+                Phone (optional)
+              </label>
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  markDirty();
+                }}
+                placeholder="e.g. +267 71 234 567"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium hover:bg-slate-50 dark:hover:bg-[#10212E] cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || Boolean(liveIdError)}
+              className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{isSaving ? 'Saving…' : 'Save director'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+interface DeleteDirectorModalProps {
+  director: DirectorRecord;
+  isRemoving: boolean;
+  removeError: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+const DeleteDirectorModal: React.FC<DeleteDirectorModalProps> = ({
+  director,
+  isRemoving,
+  removeError,
+  onClose,
+  onConfirm,
+}) => (
+  <div
+    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+    onKeyDown={(e) => {
+      if (e.key === 'Escape' && !isRemoving) {
+        onClose();
+      }
+    }}
+  >
+    <div
+      role="alertdialog"
+      aria-labelledby="remove-director-title"
+      className="w-full max-w-md bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-2xl space-y-4"
+    >
+      <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <h3 id="remove-director-title" className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
+          Remove director?
+        </h3>
+        <button
+          type="button"
+          disabled={isRemoving}
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer disabled:opacity-50"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+        Remove {director.fullName} from your directors list?
+      </p>
+
+      {removeError && (
+        <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-[8px] text-[14px] text-[#C2412D]">
+          {removeError}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          autoFocus
+          disabled={isRemoving}
+          onClick={onClose}
+          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={isRemoving}
+          onClick={onConfirm}
+          className="px-4 py-2 bg-[#C2412D] hover:bg-[#a53424] text-white rounded-[6px] text-[14px] font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
+        >
+          {isRemoving && <Loader2 className="w-4 h-4 animate-spin" />}
+          <span>{isRemoving ? 'Removing…' : removeError ? 'Try again' : 'Remove'}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+export const DirectorsPanel: React.FC = () => {
+  const { updateSupplierProfile } = useApp();
+  const [directors, setDirectors] = useState<DirectorRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDirector, setEditingDirector] = useState<DirectorRecord | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [confirmDeleteDirector, setConfirmDeleteDirector] = useState<DirectorRecord | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  const updateSupplierProfileRef = useRef(updateSupplierProfile);
+  updateSupplierProfileRef.current = updateSupplierProfile;
+
+  const isModalOpenRef = useRef(false);
+  isModalOpenRef.current = isModalOpen;
+
+  const isFormDirtyRef = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
+
+  const fetchDirectors = useCallback(async (options?: { force?: boolean }) => {
+    // Never refetch the list while the form is open and dirty
+    if (!options?.force && isModalOpenRef.current && isFormDirtyRef.current) {
+      return;
+    }
+    try {
+      if (!hasLoadedOnceRef.current) {
+        setIsLoading(true);
+      }
+      const res = await supplierApi.listPeople();
+      if (Array.isArray(res)) {
+        setDirectors(res);
+        hasLoadedOnceRef.current = true;
+        // Synchronize with AppContext supplier.directors so completeness and checklist update immediately
+        const mapped = res.map((p: any) => ({
+          id: p.id,
+          fullName: p.fullName || p.full_name || '',
+          nationalIdOrPassport: p.idLast4 ? `ending ${p.idLast4}` : (p.hasId ? 'Provided' : ''),
+          idLast4: p.idLast4 ?? null,
+          hasId: Boolean(p.hasId),
+          gender: p.gender ?? null,
+          idType: (p.identityType === 'PASSPORT' || p.identity_type === 'PASSPORT') ? 'Passport' as const : 'National ID (Omang)' as const,
+          nationality: p.nationality || 'Motswana',
+          isCitizen: p.isCitizen ?? p.is_citizen ?? true,
+          shareholdingPercentage: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
+          ownershipPercent: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
+          role: p.personRole || p.person_role || 'Director',
+          kycStatus: p.kycStatus || p.kyc_status || 'not_started',
+          kycVerifiedAt: p.kycVerifiedAt ?? p.kyc_verified_at ?? null,
+          kycReference: p.kycReference ?? p.kyc_reference ?? null,
+        }));
+        updateSupplierProfileRef.current({ directors: mapped });
+      }
+    } catch (err) {
+      console.warn('Failed to load directors:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDirectors();
+  }, [fetchDirectors]);
+
+  // Total ownership calculation for directors & shareholders
+  const totalOwnership = directors.reduce(
+    (sum, d: any) => sum + (Number(d.ownershipPercent ?? d.shareholdingPercentage ?? d.ownership_percent) || 0),
+    0
+  );
+
+  // Remaining equity available excluding the director currently being edited
+  const otherDirectorsOwnership = directors
+    .filter((d: any) => !editingDirector || d.id !== editingDirector.id)
+    .reduce((sum, d: any) => sum + (Number(d.ownershipPercent ?? d.shareholdingPercentage ?? d.ownership_percent) || 0), 0);
+  const remainingEquityAvailable = Math.max(0, parseFloat((100 - otherDirectorsOwnership).toFixed(2)));
+
+  const handleOpenAdd = useCallback(() => {
+    setEditingDirector(null);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleOpenEdit = useCallback((dir: DirectorRecord) => {
+    setEditingDirector(dir);
+    setIsModalOpen(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    isFormDirtyRef.current = false;
+    setIsModalOpen(false);
+  }, []);
+
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    isFormDirtyRef.current = dirty;
+  }, []);
+
+  const handleSaved = useCallback(async (saved?: DirectorRecord) => {
+    isFormDirtyRef.current = false;
+    setIsModalOpen(false);
+    if (saved && saved.id) {
+      setDirectors((prev) => {
+        const exists = prev.some((d) => d.id === saved.id);
+        return exists ? prev.map((d) => (d.id === saved.id ? { ...d, ...saved } : d)) : [...prev, saved];
+      });
+    }
+    setSuccessMessage('Director saved successfully.');
+    await fetchDirectors({ force: true });
+    setTimeout(() => setSuccessMessage(null), 3500);
+  }, [fetchDirectors]);
 
   const handleDelete = async () => {
     if (!confirmDeleteDirector) return;
@@ -227,7 +716,7 @@ export const DirectorsPanel: React.FC = () => {
       }
 
       setConfirmDeleteDirector(null);
-      await fetchDirectors();
+      await fetchDirectors({ force: true });
       setSuccessMessage('Director removed');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
@@ -240,20 +729,6 @@ export const DirectorsPanel: React.FC = () => {
       clearTimeout(timeoutId);
       setIsRemoving(false);
     }
-  };
-
-  const handleRevealId = async (id: string) => {
-    // In production, unmasking full ID requires secure authorization. For UI demo/verification:
-    setRevealedIds((prev) => ({ ...prev, [id]: 'Encrypted verified' }));
-    addAuditEvent({
-      action: 'National Identity Number Unmasked',
-      actorName: 'Supplier Admin',
-      actorRole: 'Supplier',
-      organizationName: supplier?.legalName || 'Supplier',
-      entityType: 'Organization',
-      entityId: id,
-      details: 'Unmasked director identity number for audit verification.',
-    });
   };
 
   return (
@@ -352,7 +827,13 @@ export const DirectorsPanel: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
               {directors.map((dir) => {
-                const displayId = dir.idNumber || dir.idLast4 || (dir.hasId ? 'Provided' : 'Not provided');
+                const displayId = dir.idLast4
+                  ? `ending ${dir.idLast4}`
+                  : dir.hasId
+                  ? 'Provided'
+                  : 'Not provided';
+                const isOmang = (dir.identityType || 'OMANG') === 'OMANG';
+                const needsGender = dir.hasId && isOmang && !dir.gender;
                 return (
                   <tr key={dir.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
                     <td className="p-4">
@@ -361,23 +842,71 @@ export const DirectorsPanel: React.FC = () => {
                         <span className="text-[13px] text-[#6B7A87] block">{dir.nationality}</span>
                       </div>
                     </td>
-                    <td className="p-4 capitalize text-[#43525F] dark:text-[#B2C3D2]">{dir.personRole}</td>
+                    <td className="p-4 capitalize text-[#43525F] dark:text-[#B2C3D2]">{dir.personRole.replace('_', ' ')}</td>
                     <td className="p-4 text-right font-semibold tabular-nums text-[15px]">
                       {dir.ownershipPercent}%
                     </td>
                     <td className="p-4">
                       <div className="space-y-1">
                         <span className="font-medium tabular-nums block">{displayId}</span>
-                        <span className="text-[11px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium inline-block">
-                          {dir.identityType || 'OMANG'}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[11px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium inline-block">
+                            {dir.identityType || 'OMANG'}
+                          </span>
+                          {dir.gender ? (
+                            <span className="text-[11px] px-2 py-0.5 bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] rounded font-medium capitalize inline-block">
+                              {dir.gender}
+                            </span>
+                          ) : needsGender ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(dir)}
+                              className="text-[11px] px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded font-medium hover:bg-amber-200 dark:hover:bg-amber-900/60 cursor-pointer"
+                            >
+                              Add gender
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#ECFDF5] text-[#2F8F5B]">
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>Verified</span>
-                      </span>
+                      {dir.kycStatus === 'verified' ? (
+                        <span
+                          className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#ECFDF5] text-[#2F8F5B]"
+                          title={dir.kycVerifiedAt ? `Verified by admin on ${new Date(dir.kycVerifiedAt).toLocaleDateString()}` : 'Verified by platform admin'}
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>Verified</span>
+                        </span>
+                      ) : dir.kycStatus === 'failed' ? (
+                        <div className="space-y-0.5">
+                          <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#FEF2F2] text-[#C2412D]">
+                            <AlertCircle className="w-3 h-3" />
+                            <span>Rejected</span>
+                          </span>
+                          {dir.kycReference && (
+                            <span className="block text-[11px] text-[#C2412D] max-w-[180px] truncate" title={dir.kycReference}>
+                              {dir.kycReference}
+                            </span>
+                          )}
+                        </div>
+                      ) : dir.kycStatus === 'pending' ? (
+                        <span
+                          className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#FFFBEB] text-[#92400E] dark:bg-amber-950/50 dark:text-amber-300"
+                          title="Awaiting admin review against uploaded identity documents"
+                        >
+                          <Clock className="w-3 h-3" />
+                          <span>Pending admin review</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          title="Not yet verified by platform admin"
+                        >
+                          <Clock className="w-3 h-3" />
+                          <span>Unverified</span>
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -407,254 +936,29 @@ export const DirectorsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Add / Edit Modal */}
+      {/* Module-level Add / Edit Modal with stable key */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-              <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
-                {editingDirector ? 'Edit director' : 'Add director'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {formError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-[8px] text-red-800 dark:text-red-200 text-[14px]">
-                {formError.message}
-              </div>
-            )}
-
-            {!editingDirector && remainingEquityAvailable <= 0 && (
-              <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-[8px] text-amber-800 dark:text-amber-200 text-[13px] flex items-start gap-2.5">
-                <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-                <div className="space-y-0.5">
-                  <span className="font-semibold block">100% of company equity is already allocated</span>
-                  <span className="text-[12px] text-amber-700 dark:text-amber-300">
-                    Existing directors hold 100% total equity. You may add non-equity roles (e.g. 0% ownership director or authorised signatory), or edit an existing director first to rebalance equity.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                  Full name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Kagiso Phiri"
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Role *
-                  </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  >
-                    <option value="director">Director</option>
-                    <option value="shareholder">Shareholder</option>
-                    <option value="owner">Owner</option>
-                    <option value="authorised_signatory">Authorised Signatory</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                      Ownership percentage *
-                    </label>
-                    <span className="text-[12px] text-[#6B7A87]">
-                      Max: <strong className="text-[#10212E] dark:text-white tabular-nums">{remainingEquityAvailable}%</strong>
-                    </span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    max={remainingEquityAvailable > 0 ? 100 : 0}
-                    step="0.01"
-                    required
-                    value={ownershipPercent}
-                    onChange={(e) => {
-                      let val = e.target.value;
-                      if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
-                        val = val.replace(/^0+/, '');
-                      }
-                      setOwnershipPercent(val);
-                    }}
-                    placeholder={remainingEquityAvailable > 0 ? `e.g. ${Math.min(50, remainingEquityAvailable)}` : '0'}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
-                  />
-                  <p className="text-[12px] text-[#6B7A87]">
-                    {otherDirectorsOwnership > 0 ? (
-                      <>Currently <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">{otherDirectorsOwnership}%</span> allocated across other directors. Total equity cannot exceed 100%.</>
-                    ) : (
-                      <>Total equity across directors & shareholders must tally up to 100%.</>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Identity type *
-                  </label>
-                  <select
-                    value={identityType}
-                    onChange={(e) => {
-                      const val = e.target.value as 'OMANG' | 'PASSPORT';
-                      setIdentityType(val);
-                      setIsCitizen(val === 'OMANG');
-                    }}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  >
-                    <option value="OMANG">National ID (Omang)</option>
-                    <option value="PASSPORT">Passport</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Identification number *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 748123918"
-                    value={idNumber}
-                    onChange={(e) => setIdNumber(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Email (optional)
-                  </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. name@company.co.bw"
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                    Phone (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. +267 71 234 567"
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium hover:bg-slate-50 dark:hover:bg-[#10212E] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{isSaving ? 'Saving…' : 'Save director'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <DirectorFormModal
+          key={editingDirector ? editingDirector.id : 'new'}
+          editingDirector={editingDirector}
+          otherDirectorsOwnership={otherDirectorsOwnership}
+          remainingEquityAvailable={remainingEquityAvailable}
+          onClose={handleCloseModal}
+          onSaved={handleSaved}
+          onDirtyChange={handleDirtyChange}
+        />
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Module-level Delete Confirmation Modal */}
       {confirmDeleteDirector && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' && !isRemoving) {
-              setConfirmDeleteDirector(null);
-            }
-          }}
-        >
-          <div
-            role="alertdialog"
-            aria-labelledby="remove-director-title"
-            className="w-full max-w-md bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-2xl space-y-4"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-              <h3 id="remove-director-title" className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
-                Remove director?
-              </h3>
-              <button
-                type="button"
-                disabled={isRemoving}
-                onClick={() => setConfirmDeleteDirector(null)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer disabled:opacity-50"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-              Remove {confirmDeleteDirector.fullName} from your directors list?
-            </p>
-
-            {removeError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-[8px] text-[14px] text-[#C2412D]">
-                {removeError}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                autoFocus
-                disabled={isRemoving}
-                onClick={() => setConfirmDeleteDirector(null)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isRemoving}
-                onClick={handleDelete}
-                className="px-4 py-2 bg-[#C2412D] hover:bg-[#a53424] text-white rounded-[6px] text-[14px] font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-2"
-              >
-                {isRemoving && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>{isRemoving ? 'Removing…' : removeError ? 'Try again' : 'Remove'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteDirectorModal
+          key={confirmDeleteDirector.id}
+          director={confirmDeleteDirector}
+          isRemoving={isRemoving}
+          removeError={removeError}
+          onClose={() => setConfirmDeleteDirector(null)}
+          onConfirm={handleDelete}
+        />
       )}
     </div>
   );

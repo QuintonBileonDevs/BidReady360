@@ -3,6 +3,8 @@ import { query, tx } from '../db/client';
 import { computeSupplierCompleteness, CompletenessResult } from '../services/completeness.service';
 import { auditRepository } from './audit.repository';
 import { clearReferenceCache } from './reference.repository';
+import { getIdKey, getIdHashKey } from '../config/secrets';
+import { normaliseOmang, validateOmang } from '../../shared/omang';
 
 export interface SupplierProfile {
   id: string;
@@ -45,6 +47,7 @@ export interface SupplierPerson {
   personRole: string;
   ownershipPercent: string | null;
   identityType: string | null;
+  gender?: 'male' | 'female' | null;
   nationality: string;
   isCitizen: boolean;
   email: string | null;
@@ -304,6 +307,71 @@ export function normalizeComplianceStatus(input?: string | null): string {
 }
 
 export class SuppliersRepository {
+  private peopleHasGenderColumn: boolean | null = null;
+  private ensureGenderPromise: Promise<boolean> | null = null;
+
+  private async hasPeopleGenderColumn(autoMigrate = true): Promise<boolean> {
+    if (this.peopleHasGenderColumn === true) return true;
+
+    const checkExists = async (): Promise<boolean> => {
+      const res = await query<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'supplier_people'
+             AND column_name = 'gender'
+         ) AS exists`
+      );
+      return Boolean(res.rows[0]?.exists);
+    };
+
+    try {
+      if (await checkExists()) {
+        this.peopleHasGenderColumn = true;
+        return true;
+      }
+
+      if (!autoMigrate) return false;
+
+      if (!this.ensureGenderPromise) {
+        this.ensureGenderPromise = (async () => {
+          try {
+            await query(
+              `ALTER TABLE supplier_people ADD COLUMN IF NOT EXISTS gender VARCHAR(10) CHECK (gender IN ('male', 'female'))`
+            );
+            const created = await checkExists();
+            if (created) {
+              this.peopleHasGenderColumn = true;
+              console.log('[DB MIGRATION] Added missing supplier_people.gender column.');
+            }
+            return created;
+          } catch (err: any) {
+            console.error('[DB MIGRATION] Could not add supplier_people.gender column:', err?.message || err);
+            return false;
+          } finally {
+            this.ensureGenderPromise = null;
+          }
+        })();
+      }
+
+      return await this.ensureGenderPromise;
+    } catch {
+      return false;
+    }
+  }
+
+  private normalizeGenderInput(raw: unknown): 'male' | 'female' | null {
+    if (raw === undefined || raw === null || raw === '') return null;
+    const norm = String(raw).trim().toLowerCase();
+    if (norm === 'male' || norm === 'female') return norm;
+    const err = new Error('Gender must be male or female.') as any;
+    err.status = 400;
+    err.code = 'INVALID_GENDER';
+    err.field = 'gender';
+    throw err;
+  }
+
   /**
    * Recalculates and persists completeness only when called on data mutation events.
    * Never called on read operations.
@@ -645,18 +713,18 @@ export class SuppliersRepository {
   }
 
   async listPeople(supplierId: string): Promise<any[]> {
-    const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
+    const encryptionKey = getIdKey();
+    const hasGender = await this.hasPeopleGenderColumn();
+    const genderSelect = hasGender ? 'gender,' : 'NULL::varchar AS gender,';
     const res = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", person_role,
               ownership_percent AS "ownershipPercent", ownership_percent,
               is_active AS "isActive", is_active,
-              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
-                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
-                   ELSE NULL END AS "idNumber",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+              identity_type AS "identityType", ${genderSelect} nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth",
+              kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt", kyc_reference AS "kycReference",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
                    THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
                    ELSE NULL END AS "idLast4",
               national_identity_number_encrypted IS NOT NULL AS "hasId"
@@ -669,7 +737,8 @@ export class SuppliersRepository {
   }
 
   async addPerson(supplierId: string, person: any, user?: any): Promise<any> {
-    const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
+    const encryptionKey = getIdKey();
+    const hasGender = await this.hasPeopleGenderColumn();
     const fullName = person.fullName ? String(person.fullName).trim() : '';
     if (!fullName || fullName.length < 2 || fullName.length > 200) {
       const err = new Error('Full name is required and must be between 2 and 200 characters.') as any;
@@ -714,12 +783,51 @@ export class SuppliersRepository {
     const identityType = person.identityType === 'PASSPORT' ? 'PASSPORT' : 'OMANG';
     const isCitizen = identityType === 'OMANG';
     const nationality = person.nationality || (isCitizen ? 'Motswana' : 'Foreign');
-    const idNumber = person.idNumber ? String(person.idNumber).trim() : null;
+    const gender = this.normalizeGenderInput(person.gender);
+    const rawIdNumber = person.idNumber ? String(person.idNumber).trim() : '';
+
+    if (identityType === 'OMANG' && !hasGender) {
+      const err = new Error('Could not save gender because the supplier_people.gender column is missing in the database.') as any;
+      err.status = 500;
+      err.code = 'GENDER_COLUMN_MISSING';
+      err.field = 'gender';
+      throw err;
+    }
+
+    let finalIdNumber: string | null = null;
+    if (identityType === 'OMANG') {
+      if (rawIdNumber) {
+        const omangCheck = validateOmang(rawIdNumber, gender);
+        if (!omangCheck.ok) {
+          const err = new Error(omangCheck.message) as any;
+          err.status = 400;
+          err.code = omangCheck.code;
+          err.field = 'idNumber';
+          throw err;
+        }
+        if (!gender) {
+          const err = new Error('Gender is required for Omang ID.') as any;
+          err.status = 400;
+          err.code = 'GENDER_REQUIRED';
+          err.field = 'gender';
+          throw err;
+        }
+        finalIdNumber = omangCheck.normalised;
+      } else {
+        const err = new Error('ID number must be 9 digits.') as any;
+        err.status = 400;
+        err.code = 'INVALID_LENGTH_OR_CHARS';
+        err.field = 'idNumber';
+        throw err;
+      }
+    } else if (rawIdNumber) {
+      finalIdNumber = rawIdNumber.toUpperCase();
+    }
 
     let identityHash: string | null = null;
-    if (idNumber) {
-      const normalizedId = idNumber.toUpperCase();
-      identityHash = crypto.createHmac('sha256', encryptionKey).update(normalizedId).digest('hex');
+    if (finalIdNumber) {
+      const normalizedForHash = identityType === 'OMANG' ? normaliseOmang(finalIdNumber) : finalIdNumber.toUpperCase();
+      identityHash = crypto.createHmac('sha256', getIdHashKey()).update(normalizedForHash).digest('hex');
 
       const dupCheck = await query(
         `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND is_active = TRUE LIMIT 1`,
@@ -734,34 +842,65 @@ export class SuppliersRepository {
       }
     }
 
-    const newPersonId = await tx(async (client) => {
-      const insertRes = await client.query(
-        `INSERT INTO supplier_people (
-           supplier_id, full_name, person_role, ownership_percent, identity_type,
-           nationality, is_citizen, email, phone, date_of_birth,
-           national_identity_number_encrypted, national_identity_hash, is_active
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-           CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE NULL END,
-           $13, TRUE
-         ) RETURNING id`,
-        [
-          supplierId,
-          fullName,
-          role,
-          ownership,
-          identityType,
-          nationality,
-          isCitizen,
-          person.email || null,
-          person.phone || null,
-          person.dateOfBirth || null,
-          idNumber,
-          encryptionKey,
-          identityHash,
-        ]
-      );
+    const initialKycStatus = finalIdNumber ? 'pending' : 'not_started';
 
+    const newPersonId = await tx(async (client) => {
+      const insertSql = hasGender
+        ? `INSERT INTO supplier_people (
+             supplier_id, full_name, person_role, ownership_percent, identity_type, gender,
+             nationality, is_citizen, email, phone, date_of_birth,
+             national_identity_number_encrypted, national_identity_hash, kyc_status, is_active
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+             CASE WHEN $12::text IS NOT NULL THEN pgp_sym_encrypt($12, $13) ELSE NULL END,
+             $14, $15, TRUE
+           ) RETURNING id`
+        : `INSERT INTO supplier_people (
+             supplier_id, full_name, person_role, ownership_percent, identity_type,
+             nationality, is_citizen, email, phone, date_of_birth,
+             national_identity_number_encrypted, national_identity_hash, kyc_status, is_active
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+             CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE NULL END,
+             $13, $14, TRUE
+           ) RETURNING id`;
+
+      const insertParams = hasGender
+        ? [
+            supplierId,
+            fullName,
+            role,
+            ownership,
+            identityType,
+            gender,
+            nationality,
+            isCitizen,
+            person.email || null,
+            person.phone || null,
+            person.dateOfBirth || null,
+            finalIdNumber,
+            encryptionKey,
+            identityHash,
+            initialKycStatus,
+          ]
+        : [
+            supplierId,
+            fullName,
+            role,
+            ownership,
+            identityType,
+            nationality,
+            isCitizen,
+            person.email || null,
+            person.phone || null,
+            person.dateOfBirth || null,
+            finalIdNumber,
+            encryptionKey,
+            identityHash,
+            initialKycStatus,
+          ];
+
+      const insertRes = await client.query(insertSql, insertParams);
       return insertRes.rows[0].id;
     });
 
@@ -780,15 +919,14 @@ export class SuppliersRepository {
       console.warn('[ADD PERSON AUDIT/COMPLETENESS WARNING]:', e.message);
     }
 
+    const genderSelect = hasGender ? 'gender,' : 'NULL::varchar AS gender,';
     const fetched = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", ownership_percent AS "ownershipPercent",
-              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
-                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
-                   ELSE NULL END AS "idNumber",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+              identity_type AS "identityType", ${genderSelect} nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth",
+              kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt", kyc_reference AS "kycReference",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
                    THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
                    ELSE NULL END AS "idLast4",
               national_identity_number_encrypted IS NOT NULL AS "hasId"
@@ -799,9 +937,19 @@ export class SuppliersRepository {
   }
 
   async updatePerson(supplierId: string, personId: string, person: any, user?: any): Promise<any> {
-    const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
-    
-    const existing = await query(`SELECT id, ownership_percent, person_role FROM supplier_people WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`, [personId, supplierId]);
+    const encryptionKey = getIdKey();
+    const hasGender = await this.hasPeopleGenderColumn();
+
+    const existing = await query(
+      `SELECT id, full_name, ownership_percent, person_role, identity_type, kyc_status,
+              ${hasGender ? 'gender,' : 'NULL::varchar AS gender,'}
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
+                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $3)
+                   ELSE NULL END AS existing_id
+       FROM supplier_people
+       WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`,
+      [personId, supplierId, encryptionKey]
+    );
     if (existing.rows.length === 0) {
       const err = new Error('Person not found or unauthorized.') as any;
       err.status = 404;
@@ -809,13 +957,31 @@ export class SuppliersRepository {
       throw err;
     }
 
+    const existingRow = existing.rows[0];
     const fullName = person.fullName !== undefined ? String(person.fullName).trim() : undefined;
+    if (fullName !== undefined && (fullName.length < 2 || fullName.length > 200)) {
+      const err = new Error('Full name is required and must be between 2 and 200 characters.') as any;
+      err.status = 400;
+      err.code = 'INVALID_FULL_NAME';
+      err.field = 'fullName';
+      throw err;
+    }
+
     const role = person.personRole !== undefined ? person.personRole : undefined;
     const ownership = person.ownershipPercent !== undefined ? Number(person.ownershipPercent) : undefined;
-    const identityType = person.identityType !== undefined ? person.identityType : undefined;
-    const idNumber = person.idNumber !== undefined && person.idNumber !== '' ? String(person.idNumber).trim() : undefined;
+    const identityType = person.identityType !== undefined
+      ? (person.identityType === 'PASSPORT' ? 'PASSPORT' : 'OMANG')
+      : undefined;
+    const effectiveIdentityType = identityType ?? (existingRow.identity_type === 'PASSPORT' ? 'PASSPORT' : 'OMANG');
 
-    if (ownership !== undefined && (ownership < 0 || ownership > 100)) {
+    const requestedGender = person.gender !== undefined ? this.normalizeGenderInput(person.gender) : undefined;
+    const effectiveGender = requestedGender !== undefined ? requestedGender : (existingRow.gender ?? null);
+
+    const rawIdNumber = person.idNumber !== undefined && String(person.idNumber).trim() !== ''
+      ? String(person.idNumber).trim()
+      : undefined;
+
+    if (ownership !== undefined && (isNaN(ownership) || ownership < 0 || ownership > 100)) {
       const err = new Error('Ownership percentage must be between 0 and 100.') as any;
       err.status = 400;
       err.code = 'INVALID_OWNERSHIP';
@@ -839,10 +1005,53 @@ export class SuppliersRepository {
       }
     }
 
+    let finalIdNumber: string | undefined;
+    if (effectiveIdentityType === 'OMANG') {
+      const idToValidate = rawIdNumber ?? existingRow.existing_id ?? '';
+      if (rawIdNumber !== undefined) {
+        const omangCheck = validateOmang(rawIdNumber, effectiveGender);
+        if (!omangCheck.ok) {
+          const err = new Error(omangCheck.message) as any;
+          err.status = 400;
+          err.code = omangCheck.code;
+          err.field = 'idNumber';
+          throw err;
+        }
+        if (!effectiveGender) {
+          const err = new Error('Gender is required for Omang ID.') as any;
+          err.status = 400;
+          err.code = 'GENDER_REQUIRED';
+          err.field = 'gender';
+          throw err;
+        }
+        finalIdNumber = omangCheck.normalised;
+      } else if (person.gender !== undefined || identityType === 'OMANG') {
+        if (idToValidate) {
+          const omangCheck = validateOmang(idToValidate, effectiveGender);
+          if (!omangCheck.ok) {
+            const err = new Error(omangCheck.message) as any;
+            err.status = 400;
+            err.code = omangCheck.code;
+            err.field = 'idNumber';
+            throw err;
+          }
+        }
+        if (!effectiveGender) {
+          const err = new Error('Gender is required for Omang ID.') as any;
+          err.status = 400;
+          err.code = 'GENDER_REQUIRED';
+          err.field = 'gender';
+          throw err;
+        }
+      }
+    } else if (rawIdNumber !== undefined) {
+      finalIdNumber = rawIdNumber.toUpperCase();
+    }
+
     let identityHash: string | null = null;
-    if (idNumber) {
-      const normalizedId = idNumber.toUpperCase();
-      identityHash = crypto.createHmac('sha256', encryptionKey).update(normalizedId).digest('hex');
+    if (finalIdNumber) {
+      const normalizedForHash = effectiveIdentityType === 'OMANG' ? normaliseOmang(finalIdNumber) : finalIdNumber.toUpperCase();
+      identityHash = crypto.createHmac('sha256', getIdHashKey()).update(normalizedForHash).digest('hex');
 
       const dupCheck = await query(
         `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND id != $3 AND is_active = TRUE LIMIT 1`,
@@ -857,39 +1066,99 @@ export class SuppliersRepository {
       }
     }
 
-    return await tx(async (client) => {
-      await client.query(
-        `UPDATE supplier_people
-         SET full_name = COALESCE($3, full_name),
-             person_role = COALESCE($4, person_role),
-             ownership_percent = COALESCE($5, ownership_percent),
-             identity_type = COALESCE($6, identity_type),
-             nationality = COALESCE($7, nationality),
-             email = COALESCE($8, email),
-             phone = COALESCE($9, phone),
-             date_of_birth = COALESCE($10, date_of_birth),
-             national_identity_number_encrypted = CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE national_identity_number_encrypted END,
-             national_identity_hash = COALESCE($13, national_identity_hash),
-             updated_at = NOW()
-         WHERE id = $2 AND supplier_id = $1`,
-        [
-          supplierId,
-          personId,
-          fullName || null,
-          role || null,
-          ownership !== undefined ? ownership : null,
-          identityType || null,
-          person.nationality || null,
-          person.email || null,
-          person.phone || null,
-          person.dateOfBirth || null,
-          idNumber || null,
-          encryptionKey,
-          identityHash !== undefined ? identityHash : null,
-        ]
-      );
+    if (!hasGender && (person.gender !== undefined || effectiveIdentityType === 'OMANG')) {
+      const err = new Error('Could not save gender because the supplier_people.gender column is missing in the database.') as any;
+      err.status = 500;
+      err.code = 'GENDER_COLUMN_MISSING';
+      err.field = 'gender';
+      throw err;
+    }
 
-      return personId;
+    // Reset verification to 'pending' whenever a supplier edits identity fields on a verified/rejected director
+    const identityFieldsChanged =
+      (fullName !== undefined && fullName !== existingRow.full_name) ||
+      (identityType !== undefined && identityType !== existingRow.identity_type) ||
+      (requestedGender !== undefined && requestedGender !== (existingRow.gender ?? null)) ||
+      (finalIdNumber !== undefined && finalIdNumber !== (existingRow.existing_id ?? undefined));
+
+    const shouldResetKyc =
+      identityFieldsChanged && (existingRow.kyc_status === 'verified' || existingRow.kyc_status === 'failed' || existingRow.kyc_status === 'not_started');
+
+    await tx(async (client) => {
+      const updateSql = hasGender
+        ? `UPDATE supplier_people
+           SET full_name = COALESCE($3, full_name),
+               person_role = COALESCE($4, person_role),
+               ownership_percent = COALESCE($5, ownership_percent),
+               identity_type = COALESCE($6, identity_type),
+               gender = CASE WHEN $7::boolean THEN $8::varchar ELSE gender END,
+               is_citizen = CASE WHEN $6::text IS NOT NULL THEN ($6 = 'OMANG') ELSE is_citizen END,
+               nationality = COALESCE($9, nationality),
+               email = COALESCE($10, email),
+               phone = COALESCE($11, phone),
+               date_of_birth = COALESCE($12, date_of_birth),
+               national_identity_number_encrypted = CASE WHEN $13::text IS NOT NULL THEN pgp_sym_encrypt($13, $14) ELSE national_identity_number_encrypted END,
+               national_identity_hash = COALESCE($15, national_identity_hash),
+               kyc_status = CASE WHEN $16::boolean THEN 'pending' ELSE kyc_status END,
+               kyc_verified_at = CASE WHEN $16::boolean THEN NULL ELSE kyc_verified_at END,
+               kyc_reference = CASE WHEN $16::boolean THEN NULL ELSE kyc_reference END,
+               updated_at = NOW()
+           WHERE id = $2 AND supplier_id = $1`
+        : `UPDATE supplier_people
+           SET full_name = COALESCE($3, full_name),
+               person_role = COALESCE($4, person_role),
+               ownership_percent = COALESCE($5, ownership_percent),
+               identity_type = COALESCE($6, identity_type),
+               is_citizen = CASE WHEN $6::text IS NOT NULL THEN ($6 = 'OMANG') ELSE is_citizen END,
+               nationality = COALESCE($7, nationality),
+               email = COALESCE($8, email),
+               phone = COALESCE($9, phone),
+               date_of_birth = COALESCE($10, date_of_birth),
+               national_identity_number_encrypted = CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE national_identity_number_encrypted END,
+               national_identity_hash = COALESCE($13, national_identity_hash),
+               kyc_status = CASE WHEN $14::boolean THEN 'pending' ELSE kyc_status END,
+               kyc_verified_at = CASE WHEN $14::boolean THEN NULL ELSE kyc_verified_at END,
+               kyc_reference = CASE WHEN $14::boolean THEN NULL ELSE kyc_reference END,
+               updated_at = NOW()
+           WHERE id = $2 AND supplier_id = $1`;
+
+      const updateParams = hasGender
+        ? [
+            supplierId,
+            personId,
+            fullName || null,
+            role || null,
+            ownership !== undefined ? ownership : null,
+            identityType || null,
+            person.gender !== undefined,
+            requestedGender ?? null,
+            person.nationality || null,
+            person.email || null,
+            person.phone || null,
+            person.dateOfBirth || null,
+            finalIdNumber || null,
+            encryptionKey,
+            identityHash !== undefined ? identityHash : null,
+            shouldResetKyc,
+          ]
+        : [
+            supplierId,
+            personId,
+            fullName || null,
+            role || null,
+            ownership !== undefined ? ownership : null,
+            identityType || null,
+            person.nationality || null,
+            person.email || null,
+            person.phone || null,
+            person.dateOfBirth || null,
+            finalIdNumber || null,
+            encryptionKey,
+            identityHash !== undefined ? identityHash : null,
+            shouldResetKyc,
+          ];
+
+      await client.query(updateSql, updateParams);
     });
 
     try {
@@ -907,15 +1176,14 @@ export class SuppliersRepository {
       console.warn('[UPDATE PERSON AUDIT/COMPLETENESS WARNING]:', e.message);
     }
 
+    const genderSelect = hasGender ? 'gender,' : 'NULL::varchar AS gender,';
     const fetched = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", ownership_percent AS "ownershipPercent",
-              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
-                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
-                   ELSE NULL END AS "idNumber",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+              identity_type AS "identityType", ${genderSelect} nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth",
+              kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt", kyc_reference AS "kycReference",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
                    THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
                    ELSE NULL END AS "idLast4",
               national_identity_number_encrypted IS NOT NULL AS "hasId"

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { useReadinessContext } from './ReadinessContext';
 import {
   Supplier,
@@ -486,7 +486,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const mappedDirectors: Director[] = (data.people || []).map((p: any) => ({
             id: p.id,
             fullName: p.full_name || p.fullName || '',
-            nationalIdOrPassport: p.idNumber || p.idLast4 || p.national_identity_hash || p.nationalIdOrPassport || '',
+            nationalIdOrPassport: p.idLast4 ? `ending ${p.idLast4}` : (p.hasId ? 'Provided' : ''),
+            idLast4: p.idLast4 ?? null,
+            hasId: Boolean(p.hasId),
+            gender: p.gender ?? null,
             idType: (p.identity_type === 'PASSPORT' || p.identityType === 'PASSPORT') ? 'Passport' : 'National ID (Omang)',
             nationality: p.nationality || 'Motswana',
             isCitizen: p.is_citizen ?? p.isCitizen ?? true,
@@ -821,10 +824,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout('inactivity');
       } else if (idleTime >= INACTIVITY_TIMEOUT_MS - INACTIVITY_WARNING_MS) {
         const secondsRemaining = Math.max(0, Math.ceil((INACTIVITY_TIMEOUT_MS - idleTime) / 1000));
-        setInactivitySecondsLeft(secondsRemaining);
-        setIsInactiveWarningOpen(true);
+        setInactivitySecondsLeft((prev) => (prev === secondsRemaining ? prev : secondsRemaining));
+        setIsInactiveWarningOpen((prev) => (prev ? prev : true));
       } else {
-        setIsInactiveWarningOpen(false);
+        setIsInactiveWarningOpen((prev) => (prev ? false : prev));
       }
     }, 1000);
 
@@ -1057,6 +1060,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [supplier, setSupplier] = useState<Supplier>(EMPTY_SUPPLIER);
   const [allSuppliers] = useState<Supplier[]>([EMPTY_SUPPLIER]);
   const [documents, setDocuments] = useState<SupplierDocument[]>([]);
+  const supplierRef = useRef<Supplier>(supplier);
+  supplierRef.current = supplier;
+  const documentsRef = useRef<SupplierDocument[]>(documents);
+  documentsRef.current = documents;
   const [organizations] = useState<Organization[]>([
     {
       id: 'org-grc',
@@ -1264,7 +1271,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       directors: supplier.directors?.length ? supplier.directors : [{
         id: 'dir-1',
         fullName: 'Kagiso Molosiwa',
-        nationalIdOrPassport: '123456789',
+        nationalIdOrPassport: '123416789',
+        idType: 'National ID (Omang)',
+        gender: 'male',
+        idLast4: '6789',
+        hasId: true,
         nationality: 'Botswana',
         isCitizen: true,
         shareholdingPercentage: 100,
@@ -1343,19 +1354,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addAuditEvent = (event: Omit<AuditEvent, 'id' | 'timestamp'>) => {
+  const addAuditEvent = useCallback((event: Omit<AuditEvent, 'id' | 'timestamp'>) => {
     const newEvent: AuditEvent = {
       ...event,
       id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
     };
     setAuditEvents((prev) => [newEvent, ...prev]);
-  };
+  }, []);
 
-  const updateSupplierProfile = async (updates: Partial<Supplier>) => {
+  const updateSupplierProfile = useCallback(async (updates: Partial<Supplier>) => {
+    const currentSupplier = supplierRef.current;
+    const currentDocuments = documentsRef.current;
+
     // 1. Immediately compute the synchronous merged supplier object
-    const nextMerged: Supplier = { ...supplier, ...updates };
-    const completeness = calculateSupplierCompleteness(nextMerged, documents);
+    const nextMerged: Supplier = { ...currentSupplier, ...updates };
+    const completeness = calculateSupplierCompleteness(nextMerged, currentDocuments);
     const computedCompleteness = completeness.score;
     const computedMissing = completeness.missingItems.map((m) => m.label);
 
@@ -1367,8 +1381,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       nextMerged.complianceStatus = 'Action required';
     }
 
+    supplierRef.current = nextMerged;
     saveSupplierToStorage(nextMerged);
     setSupplier(nextMerged);
+
+    // Directors are persisted via /api/supplier/people; syncing them into context should not trigger PUT /api/supplier/profile
+    const updateKeys = Object.keys(updates);
+    if (updateKeys.length === 1 && updateKeys[0] === 'directors') {
+      return;
+    }
 
     // 2. Persist to Postgres database via REST API
     const token = localStorage.getItem('bidready_token');
@@ -1450,6 +1471,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               hasTradingLicence: saved.hasTradingLicence ?? curr.hasTradingLicence,
               tradingLicenceReason: saved.tradingLicenceReason ?? curr.tradingLicenceReason,
             };
+            supplierRef.current = reMerged;
             saveSupplierToStorage(reMerged);
             return reMerged;
           });
@@ -1460,15 +1482,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
+      actorName: currentSupplier.directors[0]?.fullName || 'Supplier Admin',
       actorRole: 'Supplier',
-      organizationName: supplier.legalName,
+      organizationName: currentSupplier.legalName,
       action: 'Updated Company Profile',
       entityType: 'Document',
-      entityId: supplier.id,
+      entityId: currentSupplier.id,
       details: 'Modified general registration and corporate profile fields.',
     });
-  };
+  }, [addAuditEvent]);
 
   const uploadDocument = (docData: any) => {
     const newDoc: SupplierDocument = {

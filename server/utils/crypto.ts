@@ -1,11 +1,25 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { getSessionSecret, getMfaKey, getEncryptionSalt } from '../config/secrets';
 
-const ENCRYPTION_KEY = crypto.scryptSync(
-  process.env.SESSION_SECRET || 'bidready360-sec-token-32b-auth-secret-prod-2026',
-  'salt_bw_2026',
-  32
-);
+let cachedMfaKey: Buffer | null = null;
+function getMfaEncryptionKey(): Buffer {
+  if (!cachedMfaKey) {
+    cachedMfaKey = crypto.scryptSync(getMfaKey(), getEncryptionSalt(), 32);
+  }
+  return cachedMfaKey;
+}
+
+let cachedTokenHashKey: Buffer | null = null;
+function getTokenHashKey(): Buffer {
+  if (!cachedTokenHashKey) {
+    cachedTokenHashKey = crypto
+      .createHmac('sha256', getSessionSecret())
+      .update('session-token-v1')
+      .digest();
+  }
+  return cachedTokenHashKey;
+}
 
 // Precomputed valid bcrypt hash with cost 12 used for dummy timing checks
 export const DUMMY_HASH = '$2b$12$K8y43jZ10aW2Yh64k5W15e74R6g7o8p9q0r1s2t3u4v5w6x7y8z9a';
@@ -73,7 +87,7 @@ export function generateRandomToken(bytes: number = 32): string {
 }
 
 export function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token.trim()).digest('hex');
+  return crypto.createHmac('sha256', getTokenHashKey()).update(token.trim()).digest('hex');
 }
 
 // =====================================================================
@@ -82,7 +96,7 @@ export function hashToken(token: string): string {
 
 export function encryptData(plainText: string): Buffer {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getMfaEncryptionKey(), iv);
   const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, encrypted]);
@@ -92,7 +106,7 @@ export function decryptData(buffer: Buffer): string {
   const iv = buffer.subarray(0, 12);
   const tag = buffer.subarray(12, 28);
   const encrypted = buffer.subarray(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', getMfaEncryptionKey(), iv);
   decipher.setAuthTag(tag);
   return decipher.update(encrypted) + decipher.final('utf8');
 }

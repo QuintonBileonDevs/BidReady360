@@ -8,12 +8,18 @@ export interface Director {
   fullName: string;
   nationalIdOrPassport: string;
   idType?: 'National ID (Omang)' | 'Passport' | 'Residence Permit';
+  gender?: 'male' | 'female' | null;
+  idLast4?: string | null;
+  hasId?: boolean;
   nationality: string;
   isCitizen: boolean;
   shareholdingPercentage: number;
   ownershipPercent?: number | null;
   ownership_percent?: any;
   role: string;
+  kycStatus?: 'not_started' | 'pending' | 'verified' | 'failed';
+  kycVerifiedAt?: string | null;
+  kycReference?: string | null;
 }
 
 export interface DocumentVersion {

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { referenceApi, apiRequest, supplierApi } from '../../services/api';
 import { SupplierDocument } from '../../types';
+import { normaliseOmang, validateOmang } from '../../../shared/omang';
 import {
   FileText,
   Upload,
@@ -190,6 +191,10 @@ export const SupplierVault: React.FC = () => {
   const [drawerDocType, setDrawerDocType] = useState<string>('');
   const [customDocType, setCustomDocType] = useState<string>('');
   const [drawerDocNumber, setDrawerDocNumber] = useState('');
+  const [drawerIdentityType, setDrawerIdentityType] = useState<'OMANG' | 'PASSPORT'>('OMANG');
+  const [drawerDocNumberError, setDrawerDocNumberError] = useState<string | null>(null);
+  const [drawerReadStatus, setDrawerReadStatus] = useState<{ status: string; error?: string | null; extractedNumber?: string | null } | null>(null);
+  const [isReadingDocument, setIsReadingDocument] = useState(false);
   const [drawerIssueDate, setDrawerIssueDate] = useState('2026-01-15');
   const [drawerExpiryDate, setDrawerExpiryDate] = useState('2027-01-15');
   const [drawerFileName, setDrawerFileName] = useState('');
@@ -202,6 +207,10 @@ export const SupplierVault: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedDocTypeObj = dbDocumentTypes.find(dt => dt.name === drawerDocType || dt.code === drawerDocType);
+  const resolvedDrawerDocType = drawerDocType === 'Other (Custom)' ? customDocType : drawerDocType;
+  const isDirectorsIdDrawer =
+    selectedDocTypeObj?.code?.toUpperCase() === 'DIRECTOR_ID' ||
+    /director|shareholder|omang/i.test(resolvedDrawerDocType || '');
   const requiresNumber = selectedDocTypeObj ? (selectedDocTypeObj.requiresNumber ?? true) : true;
   const requiresExpiry = selectedDocTypeObj ? (selectedDocTypeObj.requiresExpiry ?? true) : true;
 
@@ -234,6 +243,60 @@ export const SupplierVault: React.FC = () => {
     setIsFileUploaded(true);
     setDrawerFileName(file.name);
     setDrawerFileSize(`${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+    setDrawerReadStatus(null);
+  };
+
+  const handleReadSelectedFile = async () => {
+    if (!selectedFile) return;
+    setIsReadingDocument(true);
+    setDrawerReadStatus(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const commaIdx = result.indexOf(',');
+          resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+        };
+        reader.onerror = () => reject(new Error('Failed to read selected file'));
+        reader.readAsDataURL(selectedFile);
+      });
+
+      const readRes = await supplierApi.readDocument({
+        fileBase64: base64,
+        mimeType: selectedFile.type || 'application/pdf',
+        documentTypeName: resolvedDrawerDocType || drawerDocType,
+        identityType: isDirectorsIdDrawer ? drawerIdentityType : undefined,
+      });
+
+      if (readRes.omang_valid === false || readRes.validation_status === 'Needs review') {
+        // Keep "Needs review" and do NOT auto-fill invalid Omang or verify
+        setDrawerReadStatus({
+          status: 'Needs review',
+          error: readRes.omang_error || 'Could not confirm a valid document number. Please check and enter it manually.',
+          extractedNumber: readRes.document_number || null,
+        });
+      } else {
+        if (readRes.auto_fill_allowed && readRes.document_number) {
+          setDrawerDocNumber(readRes.document_number);
+          setDrawerDocNumberError(null);
+        }
+        if (readRes.issue_date) setDrawerIssueDate(readRes.issue_date);
+        if (readRes.expiry_date && requiresExpiry) setDrawerExpiryDate(readRes.expiry_date);
+        setDrawerReadStatus({
+          status: readRes.validation_status || 'Extracted (unverified)',
+          error: null,
+          extractedNumber: readRes.document_number || null,
+        });
+      }
+    } catch {
+      setDrawerReadStatus({
+        status: 'Needs review',
+        error: 'Could not read document details automatically. Enter details manually.',
+      });
+    } finally {
+      setIsReadingDocument(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -545,6 +608,9 @@ export const SupplierVault: React.FC = () => {
     setCustomDocType(resolvedCustom);
 
     setDrawerDocNumber(existingDoc?.documentNumber || '');
+    setDrawerIdentityType('OMANG');
+    setDrawerDocNumberError(null);
+    setDrawerReadStatus(null);
     setDrawerIssueDate(existingDoc?.issueDate || '2026-01-15');
     setDrawerExpiryDate(existingDoc?.expiryDate || '2027-01-15');
     setDrawerFileName(existingDoc ? existingDoc.fileName : '');
@@ -605,15 +671,27 @@ export const SupplierVault: React.FC = () => {
     const finalDocType = drawerDocType === 'Other (Custom)' ? (customDocType.trim() || 'Custom Document') : drawerDocType;
     const docTypeCode = getDocumentTypeCode(finalDocType);
 
+    const isDirectorDoc = docTypeCode === 'DIRECTOR_ID' || isDirectorsIdDrawer;
+    let finalDocNumber = drawerDocNumber.trim() || undefined;
+    if (isDirectorDoc && finalDocNumber && drawerIdentityType === 'OMANG') {
+      const omangCheck = validateOmang(finalDocNumber);
+      if (!omangCheck.ok) {
+        setDrawerDocNumberError(omangCheck.message);
+        return;
+      }
+      finalDocNumber = omangCheck.normalised;
+    }
+
     try {
       const res = await supplierApi.uploadDocument({
         documentTypeCode: docTypeCode,
         file: selectedFile,
-        documentNumber: drawerDocNumber || undefined,
+        documentNumber: finalDocNumber,
         issueDate: drawerIssueDate,
         expiryDate: requiresExpiry ? drawerExpiryDate : undefined,
         certifiedCopy: drawerCertifiedCopy,
         title: finalDocType,
+        identityType: isDirectorDoc ? drawerIdentityType : undefined,
       });
 
       uploadDocument({
@@ -1386,18 +1464,88 @@ export const SupplierVault: React.FC = () => {
                   )}
                 </div>
 
-                {/* Document Number - Optional */}
+                {/* Identity type selector for Directors' ID documents */}
+                {isDirectorsIdDrawer && (
+                  <div className="space-y-1">
+                    <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
+                      Identity document type
+                    </label>
+                    <select
+                      value={drawerIdentityType}
+                      onChange={(e) => {
+                        const val = e.target.value as 'OMANG' | 'PASSPORT';
+                        setDrawerIdentityType(val);
+                        setDrawerDocNumberError(null);
+                      }}
+                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                    >
+                      <option value="OMANG">National ID (Omang)</option>
+                      <option value="PASSPORT">Passport</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Document Number - Optional (Omang validated when Directors' ID + OMANG) */}
                 <div className="space-y-1">
                   <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
-                    Document or certificate number <span className="text-[12px] font-normal text-[#6B7A87]">(optional if not applicable)</span>
+                    {isDirectorsIdDrawer && drawerIdentityType === 'OMANG'
+                      ? 'Omang ID number'
+                      : isDirectorsIdDrawer && drawerIdentityType === 'PASSPORT'
+                      ? 'Passport number'
+                      : 'Document or certificate number'}{' '}
+                    <span className="text-[12px] font-normal text-[#6B7A87]">(optional if not applicable)</span>
                   </label>
                   <input
                     type="text"
+                    inputMode={isDirectorsIdDrawer && drawerIdentityType === 'OMANG' ? 'numeric' : 'text'}
+                    maxLength={isDirectorsIdDrawer && drawerIdentityType === 'OMANG' ? 9 : 60}
                     value={drawerDocNumber}
-                    onChange={(e) => setDrawerDocNumber(e.target.value)}
-                    placeholder="e.g. BURS-TX-2026-9921 (leave blank if none)"
-                    className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#1F5F99]"
+                    onChange={(e) => {
+                      if (isDirectorsIdDrawer && drawerIdentityType === 'OMANG') {
+                        const digitsOnly = normaliseOmang(e.target.value).replace(/\D/g, '').slice(0, 9);
+                        setDrawerDocNumber(digitsOnly);
+                        if (digitsOnly.length > 0) {
+                          const check = validateOmang(digitsOnly);
+                          setDrawerDocNumberError(check.ok ? null : check.message);
+                        } else {
+                          setDrawerDocNumberError(null);
+                        }
+                      } else {
+                        setDrawerDocNumber(e.target.value);
+                        setDrawerDocNumberError(null);
+                      }
+                    }}
+                    onPaste={(e) => {
+                      if (!isDirectorsIdDrawer || drawerIdentityType !== 'OMANG') return;
+                      e.preventDefault();
+                      const pasted = e.clipboardData.getData('text');
+                      const digitsOnly = normaliseOmang(pasted).replace(/\D/g, '').slice(0, 9);
+                      setDrawerDocNumber(digitsOnly);
+                      if (digitsOnly.length > 0) {
+                        const check = validateOmang(digitsOnly);
+                        setDrawerDocNumberError(check.ok ? null : check.message);
+                      } else {
+                        setDrawerDocNumberError(null);
+                      }
+                    }}
+                    placeholder={
+                      isDirectorsIdDrawer && drawerIdentityType === 'OMANG'
+                        ? 'e.g. 123416789 (9 digits, 5th digit 1 or 2)'
+                        : isDirectorsIdDrawer && drawerIdentityType === 'PASSPORT'
+                        ? 'e.g. P12345678'
+                        : 'e.g. BURS-TX-2026-9921 (leave blank if none)'
+                    }
+                    className={`w-full px-3.5 py-2 rounded-[6px] border bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#1F5F99] ${
+                      drawerDocNumberError
+                        ? 'border-red-400 dark:border-red-600'
+                        : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                    }`}
                   />
+                  {drawerDocNumberError && (
+                    <p className="text-[12px] text-[#C2412D] dark:text-red-400 font-medium" role="alert">
+                      {drawerDocNumberError}
+                    </p>
+                  )}
                 </div>
 
                 {/* Dates - Conditional Expiry */}
@@ -1494,6 +1642,39 @@ export const SupplierVault: React.FC = () => {
                       </div>
                     )}
                   </div>
+
+                  {selectedFile && (
+                    <div className="pt-2 space-y-2">
+                      <button
+                        type="button"
+                        disabled={isReadingDocument}
+                        onClick={handleReadSelectedFile}
+                        className="px-3 py-1.5 text-[12px] font-medium rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{isReadingDocument ? 'Reading details…' : 'Read document details (does not verify)'}</span>
+                      </button>
+
+                      {drawerReadStatus && (
+                        <div
+                          className={`p-3 rounded-[6px] border text-[12px] ${
+                            drawerReadStatus.status === 'Needs review'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                              : 'bg-[#F7FAFD] dark:bg-[#182C3A] border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2]'
+                          }`}
+                        >
+                          <span className="font-semibold block">
+                            Read status: {drawerReadStatus.status}
+                          </span>
+                          {drawerReadStatus.error ? (
+                            <span>{drawerReadStatus.error}</span>
+                          ) : (
+                            <span>Fields extracted for convenience only — document remains Pending until verified by a reviewer.</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Certified Copy Checkbox */}

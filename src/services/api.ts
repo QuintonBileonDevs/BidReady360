@@ -352,6 +352,8 @@ export const supplierApi = {
     expiryDate?: string;
     certifiedCopy?: boolean;
     title?: string;
+    identityType?: 'OMANG' | 'PASSPORT';
+    gender?: 'male' | 'female' | '';
   }) {
     const token = localStorage.getItem('bidready_token');
     const headers: Record<string, string> = {};
@@ -367,6 +369,8 @@ export const supplierApi = {
     if (payload.expiryDate) formData.append('expiryDate', payload.expiryDate);
     if (payload.certifiedCopy !== undefined) formData.append('certifiedCopy', String(payload.certifiedCopy));
     if (payload.title) formData.append('title', payload.title);
+    if (payload.identityType) formData.append('identityType', payload.identityType);
+    if (payload.gender) formData.append('gender', payload.gender);
 
     const res = await fetch('/api/supplier/documents/upload', {
       method: 'POST',
@@ -380,9 +384,35 @@ export const supplierApi = {
       const err = new Error(errorMsg) as any;
       err.status = res.status;
       err.code = data.code || 'API_ERROR';
+      err.field = data.field;
       throw err;
     }
     return data;
+  },
+
+  async readDocument(payload: {
+    fileBase64: string;
+    mimeType: string;
+    documentTypeName?: string;
+    identityType?: 'OMANG' | 'PASSPORT';
+  }) {
+    return apiRequest<{
+      document_type?: string | null;
+      holder_name?: string | null;
+      document_number?: string | null;
+      issue_date?: string | null;
+      expiry_date?: string | null;
+      issuing_authority?: string | null;
+      omang_valid?: boolean | null;
+      omang_error?: string | null;
+      derived_gender?: 'male' | 'female' | null;
+      validation_status?: string;
+      auto_fill_allowed?: boolean;
+      verified?: boolean;
+    }>('/api/supplier/documents/read', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   async deleteDocument(id: string) {
@@ -432,7 +462,7 @@ export const supplierApi = {
   },
 
   async listPeople() {
-    return apiRequest<any[]>('/api/supplier/people');
+    return apiRequest<any[]>('/api/supplier/people', { cache: 'no-store' });
   },
 
   async addPerson(data: any) {
@@ -610,3 +640,127 @@ export const auditApi = {
     });
   },
 };
+
+// ---------------------------------------------------------------------
+// Platform Admin Verification API
+// ---------------------------------------------------------------------
+export interface AdminSupportingDoc {
+  documentId: string;
+  versionId: string;
+  documentTypeCode: string;
+  documentTypeName: string;
+  title: string;
+  fileName: string;
+  mimeType: string;
+  documentNumber: string | null;
+  verificationStatus: string;
+  uploadedAt: string;
+}
+
+export interface AdminQueuePerson {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  supplierCipa: string | null;
+  fullName: string;
+  personRole: string;
+  ownershipPercent: number | null;
+  identityType: string | null;
+  gender: 'male' | 'female' | null;
+  nationality: string | null;
+  isCitizen: boolean;
+  kycStatus: 'not_started' | 'pending' | 'verified' | 'failed';
+  kycVerifiedAt: string | null;
+  kycReference: string | null;
+  idLast4: string | null;
+  hasId: boolean;
+  createdAt: string;
+  updatedAt: string;
+  supportingDocuments: AdminSupportingDoc[];
+}
+
+export interface AdminQueueDocument {
+  documentId: string;
+  versionId: string;
+  supplierId: string;
+  supplierName: string;
+  supplierCipa: string | null;
+  documentTypeCode: string;
+  documentTypeName: string;
+  title: string;
+  versionNo: number;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: string | null;
+  documentNumber: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+  verificationStatus: string;
+  verifiedVia: string | null;
+  verifiedAt: string | null;
+  verificationNotes: string | null;
+  rejectionReason: string | null;
+  extractionConfidence: number | null;
+  uploadedAt: string;
+}
+
+export const adminApi = {
+  async getVerificationQueue(): Promise<{ people: AdminQueuePerson[]; documents: AdminQueueDocument[] }> {
+    return apiRequest('/api/admin/verification/queue', { cache: 'no-store' });
+  },
+
+  async verifyPerson(
+    personId: string,
+    payload: { status: 'verified' | 'failed' | 'pending'; notes?: string }
+  ) {
+    return apiRequest(`/api/admin/verification/people/${personId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async verifyDocument(
+    versionId: string,
+    payload: { status: 'VERIFIED' | 'REJECTED' | 'UNVERIFIABLE' | 'PENDING_VERIFICATION'; notes?: string; rejectionReason?: string }
+  ) {
+    return apiRequest(`/api/admin/verification/documents/${versionId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async fetchDocumentBlob(versionId: string): Promise<{ blob: Blob; fileName: string; mimeType: string; objectUrl: string }> {
+    const token = localStorage.getItem('bidready_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`/api/admin/verification/documents/${versionId}/file`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers,
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || `Failed to load document preview (HTTP ${res.status})`);
+    }
+
+    const contentDisposition = res.headers.get('content-disposition');
+    let fileName = 'document';
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+      if (match && match[1]) {
+        fileName = match[1];
+      }
+    }
+
+    const blob = await res.blob();
+    const mimeType = blob.type || res.headers.get('content-type') || 'application/octet-stream';
+    const objectUrl = URL.createObjectURL(blob);
+    return { blob, fileName, mimeType, objectUrl };
+  },
+};
+

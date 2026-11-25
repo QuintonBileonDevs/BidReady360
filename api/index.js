@@ -1,16 +1,164 @@
 // server/app.ts
 import "dotenv/config";
+
+// server/config/secrets.ts
+import "dotenv/config";
+import crypto from "crypto";
+var ConfigSecretError = class extends Error {
+  constructor(reason) {
+    super(reason);
+    this.code = "CONFIG_SECRET";
+    this.status = 503;
+    this.reason = reason;
+  }
+};
+var WEAK_SECRET_BLOCKLIST = /* @__PURE__ */ new Set([
+  "changeme",
+  "changeme123",
+  "secret",
+  "password",
+  "dev",
+  "test",
+  "default"
+]);
+var WEAK_SECRET_HASH_BLOCKLIST = /* @__PURE__ */ new Set([
+  "147f8a7efed6b004f4bb4be6bbbed30197ed869bfce31c87dab270ddb63d56cb",
+  "364992338852422c26d3203094fd6b58e41eddceca97f535c1255c1526ac24a0",
+  "73cda9a506a67556e1f441290d5c6a4b67bf022909107997903726c723e6a057"
+]);
+function isBlocklistedSecret(val) {
+  const lower = val.toLowerCase();
+  if (WEAK_SECRET_BLOCKLIST.has(lower)) return true;
+  const hash = crypto.createHash("sha256").update(lower).digest("hex");
+  if (WEAK_SECRET_HASH_BLOCKLIST.has(hash)) return true;
+  const stripped = lower.replace(/[-_0-9\s]/g, "");
+  if (["changeme", "secret", "password", "default"].includes(stripped)) return true;
+  if (/^(dev|test)[-_]/i.test(lower)) return true;
+  return false;
+}
+function validateSecret(name, raw, minLength) {
+  const val = (raw ?? "").trim();
+  if (!val) {
+    return { status: "missing", reason: `secret_missing:${name}`, value: null, rawNonEmpty: null };
+  }
+  if (val.length < minLength || new Set(val).size <= 1 || isBlocklistedSecret(val)) {
+    return { status: "weak", reason: `secret_weak:${name}`, value: null, rawNonEmpty: val };
+  }
+  return { status: "ok", reason: null, value: val, rawNonEmpty: val };
+}
+var sessionCheck = validateSecret("SESSION_SECRET", process.env.SESSION_SECRET, 32);
+var idCheck = validateSecret("ID_ENCRYPTION_KEY", process.env.ID_ENCRYPTION_KEY, 32);
+var mfaCheck = validateSecret("MFA_ENCRYPTION_KEY", process.env.MFA_ENCRYPTION_KEY, 32);
+var saltCheck = validateSecret("ENCRYPTION_SALT", process.env.ENCRYPTION_SALT, 16);
+var checks = [
+  { name: "SESSION_SECRET", check: sessionCheck },
+  { name: "ID_ENCRYPTION_KEY", check: idCheck },
+  { name: "MFA_ENCRYPTION_KEY", check: mfaCheck },
+  { name: "ENCRYPTION_SALT", check: saltCheck }
+];
+var seenValues = /* @__PURE__ */ new Map();
+for (const { name, check } of checks) {
+  if (check.rawNonEmpty) {
+    const list = seenValues.get(check.rawNonEmpty) || [];
+    list.push(name);
+    seenValues.set(check.rawNonEmpty, list);
+  }
+}
+var duplicateNames = /* @__PURE__ */ new Set();
+for (const names of seenValues.values()) {
+  if (names.length > 1) {
+    for (const n of names) duplicateNames.add(n);
+  }
+}
+var guardReason = null;
+for (const { check } of checks) {
+  if (check.reason) {
+    guardReason = check.reason;
+    break;
+  }
+}
+if (!guardReason && duplicateNames.size > 0) {
+  guardReason = "secrets_identical";
+}
+var sessionSecretStatus = duplicateNames.has("SESSION_SECRET") ? "weak" : sessionCheck.status;
+var idKeyStatus = duplicateNames.has("ID_ENCRYPTION_KEY") ? "weak" : idCheck.status;
+var mfaKeyStatus = duplicateNames.has("MFA_ENCRYPTION_KEY") ? "weak" : mfaCheck.status;
+var encryptionSaltStatus = duplicateNames.has("ENCRYPTION_SALT") ? "weak" : saltCheck.status;
+console.log(
+  `[startup-env] DATABASE_URL=${process.env.DATABASE_URL?.trim() ? "ok" : "missing"} EXPECTED_DB_NAME=${process.env.EXPECTED_DB_NAME?.trim() ? "ok" : "missing"} SESSION_SECRET=${sessionSecretStatus} ID_ENCRYPTION_KEY=${idKeyStatus} MFA_ENCRYPTION_KEY=${mfaKeyStatus} ENCRYPTION_SALT=${encryptionSaltStatus} GEMINI_API_KEY=${process.env.GEMINI_API_KEY?.trim() ? "ok" : "missing"}`
+);
+if (guardReason) {
+  console.error("[secrets-guard] BLOCKED:", guardReason);
+  if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
+    console.error("[secrets-guard] refusing to start");
+    process.exit(1);
+  }
+}
+function secretsGuardStatus() {
+  return { ok: !guardReason, reason: guardReason };
+}
+function getSecretsHealth() {
+  return {
+    sessionSecret: sessionSecretStatus,
+    idKey: idKeyStatus,
+    mfaKey: mfaKeyStatus,
+    encryptionSalt: encryptionSaltStatus
+  };
+}
+function getSessionSecret() {
+  if (guardReason || !sessionCheck.value) {
+    throw new ConfigSecretError(guardReason || "secret_missing:SESSION_SECRET");
+  }
+  return sessionCheck.value;
+}
+function getIdKey() {
+  if (guardReason || !idCheck.value) {
+    throw new ConfigSecretError(guardReason || "secret_missing:ID_ENCRYPTION_KEY");
+  }
+  return idCheck.value;
+}
+function getMfaKey() {
+  if (guardReason || !mfaCheck.value) {
+    throw new ConfigSecretError(guardReason || "secret_missing:MFA_ENCRYPTION_KEY");
+  }
+  return mfaCheck.value;
+}
+function getEncryptionSalt() {
+  if (guardReason || !saltCheck.value) {
+    throw new ConfigSecretError(guardReason || "secret_missing:ENCRYPTION_SALT");
+  }
+  return saltCheck.value;
+}
+var cachedIdHashKey = null;
+function getIdHashKey() {
+  if (!cachedIdHashKey) {
+    const master = getIdKey();
+    cachedIdHashKey = crypto.createHmac("sha256", master).update("id-hash-v1").digest();
+  }
+  return cachedIdHashKey;
+}
+
+// server/app.ts
 import express from "express";
 import cookieParser from "cookie-parser";
 
 // server/utils/crypto.ts
-import crypto from "crypto";
+import crypto2 from "crypto";
 import bcrypt from "bcryptjs";
-var ENCRYPTION_KEY = crypto.scryptSync(
-  process.env.SESSION_SECRET || "bidready360-sec-token-32b-auth-secret-prod-2026",
-  "salt_bw_2026",
-  32
-);
+var cachedMfaKey = null;
+function getMfaEncryptionKey() {
+  if (!cachedMfaKey) {
+    cachedMfaKey = crypto2.scryptSync(getMfaKey(), getEncryptionSalt(), 32);
+  }
+  return cachedMfaKey;
+}
+var cachedTokenHashKey = null;
+function getTokenHashKey() {
+  if (!cachedTokenHashKey) {
+    cachedTokenHashKey = crypto2.createHmac("sha256", getSessionSecret()).update("session-token-v1").digest();
+  }
+  return cachedTokenHashKey;
+}
 var DUMMY_HASH = "$2b$12$K8y43jZ10aW2Yh64k5W15e74R6g7o8p9q0r1s2t3u4v5w6x7y8z9a";
 var COMMON_PASSWORDS = /* @__PURE__ */ new Set([
   "password123",
@@ -58,14 +206,14 @@ async function verifyPassword(password, hash) {
   }
 }
 function generateRandomToken(bytes = 32) {
-  return crypto.randomBytes(bytes).toString("hex");
+  return crypto2.randomBytes(bytes).toString("hex");
 }
 function hashToken(token) {
-  return crypto.createHash("sha256").update(token.trim()).digest("hex");
+  return crypto2.createHmac("sha256", getTokenHashKey()).update(token.trim()).digest("hex");
 }
 function encryptData(plainText) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+  const iv = crypto2.randomBytes(12);
+  const cipher = crypto2.createCipheriv("aes-256-gcm", getMfaEncryptionKey(), iv);
   const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([iv, tag, encrypted]);
@@ -74,12 +222,12 @@ function decryptData(buffer) {
   const iv = buffer.subarray(0, 12);
   const tag = buffer.subarray(12, 28);
   const encrypted = buffer.subarray(28);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", ENCRYPTION_KEY, iv);
+  const decipher = crypto2.createDecipheriv("aes-256-gcm", getMfaEncryptionKey(), iv);
   decipher.setAuthTag(tag);
   return decipher.update(encrypted) + decipher.final("utf8");
 }
 function generateTotpSecret() {
-  return crypto.randomBytes(20).toString("hex");
+  return crypto2.randomBytes(20).toString("hex");
 }
 function generateTotpCode(secretHex, timeStepWindow = 0) {
   const epoch = Math.floor(Date.now() / 1e3);
@@ -87,7 +235,7 @@ function generateTotpCode(secretHex, timeStepWindow = 0) {
   const timeBuffer = Buffer.alloc(8);
   timeBuffer.writeBigInt64BE(BigInt(timeStep));
   const secretBuffer = Buffer.from(secretHex, "hex");
-  const hmac = crypto.createHmac("sha1", secretBuffer);
+  const hmac = crypto2.createHmac("sha1", secretBuffer);
   hmac.update(timeBuffer);
   const digest = hmac.digest();
   const offset = digest[digest.length - 1] & 15;
@@ -144,13 +292,13 @@ function dbFromUrl(u) {
 }
 var expected = (process.env.EXPECTED_DB_NAME || "").trim();
 var url = normalizeDatabaseUrl(process.env.DATABASE_URL || "");
-var guardReason = null;
-if (!expected) guardReason = "expected_db_missing";
-else if (FORBIDDEN.has(expected)) guardReason = "expected_db_forbidden";
-else if (!url) guardReason = "database_url_missing";
-else if (dbFromUrl(url) !== expected) guardReason = "db_name_mismatch";
-if (guardReason) console.error("[db-guard] BLOCKED:", guardReason);
-var pool = guardReason ? null : new Pool({
+var guardReason2 = null;
+if (!expected) guardReason2 = "expected_db_missing";
+else if (FORBIDDEN.has(expected)) guardReason2 = "expected_db_forbidden";
+else if (!url) guardReason2 = "database_url_missing";
+else if (dbFromUrl(url) !== expected) guardReason2 = "db_name_mismatch";
+if (guardReason2) console.error("[db-guard] BLOCKED:", guardReason2);
+var pool = guardReason2 ? null : new Pool({
   connectionString: url,
   ssl: { rejectUnauthorized: false },
   max: 5,
@@ -170,10 +318,10 @@ async function verify(client) {
   verified.add(client);
 }
 function guardStatus() {
-  return { ok: !guardReason, reason: guardReason };
+  return { ok: !guardReason2, reason: guardReason2 };
 }
 async function getClient() {
-  if (guardReason || !pool) throw new DbGuardError(guardReason || "guard_blocked");
+  if (guardReason2 || !pool) throw new DbGuardError(guardReason2 || "guard_blocked");
   const client = await pool.connect();
   try {
     await verify(client);
@@ -211,7 +359,7 @@ async function tx(fn) {
     c.release();
   }
 }
-if (guardReason && !process.env.VERCEL) {
+if (guardReason2 && process.env.NODE_ENV === "production" && !process.env.VERCEL) {
   console.error("[db-guard] refusing to start");
   process.exit(1);
 }
@@ -927,7 +1075,7 @@ var UsersRepository = class {
 var usersRepository = new UsersRepository();
 
 // server/repositories/audit.repository.ts
-import crypto2 from "crypto";
+import crypto3 from "crypto";
 var AuditRepository = class {
   /**
    * Appends an immutable audit event with a cryptographic hash chain.
@@ -939,7 +1087,7 @@ var AuditRepository = class {
     const prevHash = lastRowRes.rows[0]?.row_hash || "0".repeat(64);
     const timestamp = (/* @__PURE__ */ new Date()).toISOString();
     const payloadToHash = `${prevHash}|${timestamp}|${dto.actorName}|${dto.actorRole}|${dto.action}|${dto.entityType}|${dto.entityId || ""}|${dto.details}`;
-    const rowHash = crypto2.createHash("sha256").update(payloadToHash).digest("hex");
+    const rowHash = crypto3.createHash("sha256").update(payloadToHash).digest("hex");
     const res = await query(
       `INSERT INTO audit_log (
         occurred_at, actor_type, actor_user_id, actor_name, actor_role,
@@ -2711,7 +2859,7 @@ function getSupplierContext(req) {
 }
 
 // server/repositories/suppliers.repository.ts
-import crypto3 from "crypto";
+import crypto4 from "crypto";
 
 // server/services/completeness.service.ts
 function computeSupplierCompleteness(supplier, people = [], documents = []) {
@@ -3479,7 +3627,7 @@ var SuppliersRepository = class {
     return updated;
   }
   async listPeople(supplierId) {
-    const encryptionKey = process.env.ID_ENCRYPTION_KEY || "bidready360-default-id-encryption-secret-key-2026";
+    const encryptionKey = getIdKey();
     const res = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", person_role,
@@ -3502,7 +3650,7 @@ var SuppliersRepository = class {
     return res.rows;
   }
   async addPerson(supplierId, person, user) {
-    const encryptionKey = process.env.ID_ENCRYPTION_KEY || "bidready360-default-id-encryption-secret-key-2026";
+    const encryptionKey = getIdKey();
     const fullName = person.fullName ? String(person.fullName).trim() : "";
     if (!fullName || fullName.length < 2 || fullName.length > 200) {
       const err = new Error("Full name is required and must be between 2 and 200 characters.");
@@ -3542,7 +3690,7 @@ var SuppliersRepository = class {
     let identityHash = null;
     if (idNumber) {
       const normalizedId = idNumber.toUpperCase();
-      identityHash = crypto3.createHmac("sha256", encryptionKey).update(normalizedId).digest("hex");
+      identityHash = crypto4.createHmac("sha256", getIdHashKey()).update(normalizedId).digest("hex");
       const dupCheck = await query(
         `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND is_active = TRUE LIMIT 1`,
         [supplierId, identityHash]
@@ -3616,7 +3764,7 @@ var SuppliersRepository = class {
     return fetched.rows[0];
   }
   async updatePerson(supplierId, personId, person, user) {
-    const encryptionKey = process.env.ID_ENCRYPTION_KEY || "bidready360-default-id-encryption-secret-key-2026";
+    const encryptionKey = getIdKey();
     const existing = await query(`SELECT id, ownership_percent, person_role FROM supplier_people WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`, [personId, supplierId]);
     if (existing.rows.length === 0) {
       const err = new Error("Person not found or unauthorized.");
@@ -3654,7 +3802,7 @@ var SuppliersRepository = class {
     let identityHash = null;
     if (idNumber) {
       const normalizedId = idNumber.toUpperCase();
-      identityHash = crypto3.createHmac("sha256", encryptionKey).update(normalizedId).digest("hex");
+      identityHash = crypto4.createHmac("sha256", getIdHashKey()).update(normalizedId).digest("hex");
       const dupCheck = await query(
         `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND id != $3 AND is_active = TRUE LIMIT 1`,
         [supplierId, identityHash, personId]
@@ -3817,7 +3965,7 @@ var SuppliersRepository = class {
 var suppliersRepository = new SuppliersRepository();
 
 // server/repositories/documents.repository.ts
-import crypto4 from "crypto";
+import crypto5 from "crypto";
 
 // server/utils/pdfGenerator.ts
 function escapePdfText(str) {
@@ -3994,7 +4142,7 @@ var DocumentsRepository = class {
    * Validates hash integrity after saving.
    */
   async uploadVersion(dto) {
-    const sha256 = crypto4.createHash("sha256").update(dto.fileBuffer).digest("hex");
+    const sha256 = crypto5.createHash("sha256").update(dto.fileBuffer).digest("hex");
     const fileSizeBytes = dto.fileBuffer.length;
     const storageKey = `vault/${dto.supplierId}/${Date.now()}-${dto.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     let docTypeRes = await query(
@@ -4177,7 +4325,7 @@ var DocumentsRepository = class {
       });
       const fileName = row.file_name || `${(row.title || "Certificate").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
       const mimeType = "application/pdf";
-      const sha256 = crypto4.createHash("sha256").update(pdfBuffer).digest("hex");
+      const sha256 = crypto5.createHash("sha256").update(pdfBuffer).digest("hex");
       if (row.version_id) {
         await query(
           `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
@@ -4467,7 +4615,7 @@ var ApplicationsRepository = class {
 var applicationsRepository = new ApplicationsRepository();
 
 // server/repositories/bids.repository.ts
-import crypto5 from "crypto";
+import crypto6 from "crypto";
 var BidsRepository = class {
   async getByCallAndSupplier(callId, supplierId) {
     const res = await query(
@@ -4536,7 +4684,7 @@ var BidsRepository = class {
       items: data.financialSchedule,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
-    const sealedHash = crypto5.createHash("sha256").update(payloadStr).digest("hex");
+    const sealedHash = crypto6.createHash("sha256").update(payloadStr).digest("hex");
     const receiptNumber = `BID-${call.reference_no.replace(/[^a-zA-Z0-9]/g, "")}-${Date.now().toString().slice(-6)}`;
     return tx(async (client) => {
       const bidRes = await client.query(
@@ -4616,7 +4764,7 @@ var BidsRepository = class {
       );
       const sessionId = sessionRes.rows[0].id;
       for (const w of data.witnesses) {
-        const sigHash = crypto5.createHash("sha256").update(`${sessionId}|${w.userId}|${Date.now()}`).digest("hex");
+        const sigHash = crypto6.createHash("sha256").update(`${sessionId}|${w.userId}|${Date.now()}`).digest("hex");
         await client.query(
           `INSERT INTO bid_opening_witnesses (session_id, user_id, witness_role, digital_signature_hash, signed_at)
            VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT DO NOTHING`,
@@ -6008,7 +6156,7 @@ var buyerRouter = router5;
 
 // server/routes/audit.routes.ts
 import { Router as Router6 } from "express";
-import crypto6 from "crypto";
+import crypto7 from "crypto";
 var router6 = Router6();
 router6.use(requireAuth);
 router6.get("/logs", requirePermission("audit.view"), async (req, res) => {
@@ -6030,7 +6178,7 @@ router6.post("/export", requirePermission("audit.view"), async (req, res) => {
     const { exportType, recordsCount } = req.body;
     const ip = extractClientIp(req);
     const userAgent = req.headers["user-agent"] || "Web Client";
-    const checksumSha256 = crypto6.createHash("sha256").update(`${ctx.tenantId}|${exportType}|${Date.now()}`).digest("hex");
+    const checksumSha256 = crypto7.createHash("sha256").update(`${ctx.tenantId}|${exportType}|${Date.now()}`).digest("hex");
     await auditRepository.recordExport({
       organizationId: ctx.tenantId,
       exportedByUserId: ctx.userId,
@@ -6048,7 +6196,7 @@ router6.post("/export", requirePermission("audit.view"), async (req, res) => {
 var auditRouter = router6;
 
 // server/routes/bootstrap.routes.ts
-import crypto7 from "crypto";
+import crypto8 from "crypto";
 import { Router as Router7 } from "express";
 var router7 = Router7();
 router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res) => {
@@ -6168,7 +6316,7 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
       docs.length,
       apps.length
     ].join("|");
-    const serverFingerprint = crypto7.createHash("sha256").update(fingerprintRaw).digest("hex");
+    const serverFingerprint = crypto8.createHash("sha256").update(fingerprintRaw).digest("hex");
     res.json({
       activeTenant,
       memberships: allMemberships,
@@ -6292,21 +6440,43 @@ var debugRouter = router8;
 var app = express();
 app.set("etag", false);
 app.use("/api", (req, res, next) => {
-  const g = guardStatus();
-  if (!g.ok && req.path !== "/health") {
-    res.setHeader("Cache-Control", "no-store");
-    res.status(503).json({ error: "db_guard", reason: g.reason });
-    return;
+  if (req.path !== "/health") {
+    const s = secretsGuardStatus();
+    if (!s.ok) {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(503).json({ error: "config", reason: s.reason });
+      return;
+    }
+    const g = guardStatus();
+    if (!g.ok) {
+      console.error("[db-guard] Request blocked:", g.reason);
+      res.setHeader("Cache-Control", "no-store");
+      res.status(503).json({
+        error: "DATABASE_GUARD_FAILED",
+        message: "Service temporarily unavailable."
+      });
+      return;
+    }
   }
   next();
 });
 app.use((req, res, next) => {
   const unprefixedApi = req.path.startsWith("/reference") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/calls") || req.path.startsWith("/buyer") || req.path.startsWith("/audit") || req.path.startsWith("/bootstrap") || req.path.startsWith("/debug");
   if (unprefixedApi) {
+    const s = secretsGuardStatus();
+    if (!s.ok) {
+      res.setHeader("Cache-Control", "no-store");
+      res.status(503).json({ error: "config", reason: s.reason });
+      return;
+    }
     const g = guardStatus();
     if (!g.ok) {
+      console.error("[db-guard] Request blocked:", g.reason);
       res.setHeader("Cache-Control", "no-store");
-      res.status(503).json({ error: "db_guard", reason: g.reason });
+      res.status(503).json({
+        error: "DATABASE_GUARD_FAILED",
+        message: "Service temporarily unavailable."
+      });
       return;
     }
   }
@@ -6335,11 +6505,15 @@ app.use(csrfProtection);
 app.use(authenticate);
 app.get(["/api/health", "/health"], async (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
+  const s = secretsGuardStatus();
+  const secrets = getSecretsHealth();
   const g = guardStatus();
   if (!g.ok) {
+    console.error("[db-guard] Health check blocked:", g.reason);
     res.status(503).json({
       ok: false,
-      guard: { ok: false, reason: g.reason },
+      error: "DATABASE_GUARD_FAILED",
+      secrets,
       db: "blocked"
     });
     return;
@@ -6362,25 +6536,30 @@ app.get(["/api/health", "/health"], async (_req, res) => {
       districts: 0,
       documentTypes: 0
     };
-    res.json({
-      ok: true,
-      guard: { ok: true, reason: null },
+    const allOk = s.ok;
+    res.status(allOk ? 200 : 503).json({
+      ok: allOk,
+      config: { ok: s.ok },
+      secrets,
       db: "reachable",
       database: dbName,
       refs: counts
     });
   } catch (err) {
     if (err instanceof DbGuardError || err?.code === "DB_GUARD") {
+      console.error("[db-guard] Health check blocked:", err.reason || "db_name_mismatch");
       res.status(503).json({
         ok: false,
-        guard: { ok: false, reason: err.reason || "db_name_mismatch" },
+        error: "DATABASE_GUARD_FAILED",
+        secrets,
         db: "blocked"
       });
       return;
     }
     res.status(503).json({
       ok: false,
-      guard: { ok: true, reason: null },
+      config: { ok: s.ok },
+      secrets,
       db: "unreachable"
     });
   }
@@ -6403,11 +6582,20 @@ app.use("/bootstrap", bootstrapRouter);
 app.use("/debug", debugRouter);
 app.use((err, _req, res, _next) => {
   console.error("[EXPRESS UNHANDLED ERROR]:", err);
-  if (err instanceof DbGuardError || err?.code === "DB_GUARD") {
+  if (err instanceof ConfigSecretError || err?.code === "CONFIG_SECRET") {
     res.setHeader("Cache-Control", "no-store");
     res.status(503).json({
-      error: "db_guard",
-      reason: err.reason || "guard_blocked"
+      error: "config",
+      reason: err.reason || "config_invalid"
+    });
+    return;
+  }
+  if (err instanceof DbGuardError || err?.code === "DB_GUARD") {
+    console.error("[db-guard] Request error blocked:", err.reason || "guard_blocked");
+    res.setHeader("Cache-Control", "no-store");
+    res.status(503).json({
+      error: "DATABASE_GUARD_FAILED",
+      message: "Service temporarily unavailable."
     });
     return;
   }

@@ -199,13 +199,20 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         description: supplier.description || '',
       });
 
+      const mapKycToLabel = (status?: string | null): 'Not started' | 'Pending' | 'Verified' | 'Rejected' => {
+        if (status === 'verified') return 'Verified';
+        if (status === 'pending') return 'Pending';
+        if (status === 'failed') return 'Rejected';
+        return 'Not started';
+      };
+
       if (Array.isArray(supplier.directors) && supplier.directors.length > 0) {
         setDirectorsList(
           supplier.directors.map((d) => ({
             ...d,
             idNumber: d.nationalIdOrPassport || '',
             idType: d.idType || (d.isCitizen ? 'National ID (Omang)' : 'Passport'),
-            verificationStatus: 'Verified',
+            verificationStatus: mapKycToLabel(d.kycStatus),
           }))
         );
       }
@@ -214,18 +221,27 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
   // Directors State synced with live PostgreSQL database
   const [directorsList, setDirectorsList] = useState<
-    (Director & { idNumber: string; verificationStatus: 'Not started' | 'Pending' | 'Verified' })[]
+    (Director & { idNumber: string; verificationStatus: 'Not started' | 'Pending' | 'Verified' | 'Rejected' })[]
   >(
     (supplier.directors || []).map((d) => ({
       ...d,
       idNumber: d.nationalIdOrPassport || '',
       idType: d.idType || (d.isCitizen ? 'National ID (Omang)' : 'Passport'),
-      verificationStatus: 'Verified',
+      verificationStatus:
+        d.kycStatus === 'verified'
+          ? 'Verified'
+          : d.kycStatus === 'pending'
+          ? 'Pending'
+          : d.kycStatus === 'failed'
+          ? 'Rejected'
+          : 'Not started',
     }))
   );
   const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    // DirectorsPanel handles fetching when activeSection === 'directors'
+    if (activeSection === 'directors') return;
     let isMounted = true;
     supplierApi.listPeople().then((res) => {
       if (isMounted && Array.isArray(res) && res.length > 0) {
@@ -233,14 +249,25 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           res.map((p) => ({
             id: p.id,
             fullName: p.fullName,
-            nationalIdOrPassport: p.idNumber || p.idLast4 || '',
-            idNumber: p.idNumber || p.idLast4 || '',
+            nationalIdOrPassport: p.idLast4 ? `ending ${p.idLast4}` : (p.hasId ? 'Provided' : ''),
+            idNumber: p.idLast4 ? `ending ${p.idLast4}` : (p.hasId ? 'Provided' : ''),
+            idLast4: p.idLast4 ?? null,
+            hasId: Boolean(p.hasId),
+            gender: p.gender ?? null,
             idType: p.identityType === 'PASSPORT' ? 'Passport' : 'National ID (Omang)',
             nationality: p.nationality || 'Motswana',
             isCitizen: Boolean(p.isCitizen),
             shareholdingPercentage: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
             role: p.personRole || 'Director',
-            verificationStatus: 'Verified',
+            kycStatus: p.kycStatus || 'not_started',
+            verificationStatus:
+              p.kycStatus === 'verified'
+                ? 'Verified'
+                : p.kycStatus === 'pending'
+                ? 'Pending'
+                : p.kycStatus === 'failed'
+                ? 'Rejected'
+                : 'Not started',
           }))
         );
       }
@@ -452,7 +479,14 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       (supplier.directors || []).map((d) => ({
         ...d,
         idNumber: d.nationalIdOrPassport || '',
-        verificationStatus: 'Verified',
+        verificationStatus:
+          d.kycStatus === 'verified'
+            ? 'Verified'
+            : d.kycStatus === 'pending'
+            ? 'Pending'
+            : d.kycStatus === 'failed'
+            ? 'Rejected'
+            : 'Not started',
       }))
     );
 

@@ -12,6 +12,7 @@ import { bidsRepository } from '../repositories/bids.repository';
 import { translateDbError } from '../db/errors';
 import { extractClientIp } from '../utils/ip';
 import { getClient } from '../db/client';
+import { validateOmang } from '../../shared/omang';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -130,6 +131,7 @@ router.post('/people', async (req: Request, res: Response) => {
     const status = err.status || 400;
     res.status(status).json({
       error: err.code || 'VALIDATION_ERROR',
+      code: err.code || 'VALIDATION_ERROR',
       field: err.field || 'fullName',
       message: err.message || 'Failed to save director',
     });
@@ -149,6 +151,7 @@ router.put('/people/:id', async (req: Request, res: Response) => {
     const status = err.status || 400;
     res.status(status).json({
       error: err.code || 'VALIDATION_ERROR',
+      code: err.code || 'VALIDATION_ERROR',
       field: err.field || 'fullName',
       message: err.message || 'Failed to update director',
     });
@@ -315,7 +318,7 @@ router.post('/documents/upload', upload.single('file'), async (req: Request, res
   try {
     const ctx = getSupplierContext(req);
     const file = req.file;
-    const { documentTypeCode, documentNumber, issueDate, expiryDate, title, certifiedCopy } = req.body;
+    const { documentTypeCode, documentNumber, issueDate, expiryDate, title, certifiedCopy, identityType, gender } = req.body;
 
     if (!file) {
       res.status(400).json({ error: 'MISSING_FILE', message: 'No file uploaded or file missing.' });
@@ -324,6 +327,24 @@ router.post('/documents/upload', upload.single('file'), async (req: Request, res
     if (!documentTypeCode) {
       res.status(400).json({ error: 'MISSING_TYPE', message: 'Document type code is required.' });
       return;
+    }
+
+    let cleanedDocNumber = documentNumber ? String(documentNumber).trim() : undefined;
+    const isDirectorsIdDoc =
+      String(documentTypeCode).toUpperCase() === 'DIRECTOR_ID' ||
+      /director|shareholder|omang/i.test(String(title || ''));
+    if (isDirectorsIdDoc && cleanedDocNumber && String(identityType || 'OMANG').toUpperCase() !== 'PASSPORT') {
+      const omangCheck = validateOmang(cleanedDocNumber, gender);
+      if (!omangCheck.ok) {
+        res.status(400).json({
+          error: omangCheck.code,
+          code: omangCheck.code,
+          field: 'documentNumber',
+          message: omangCheck.message,
+        });
+        return;
+      }
+      cleanedDocNumber = omangCheck.normalised;
     }
 
     const validation = validateFileBuffer(file.buffer, file.originalname);
@@ -338,7 +359,7 @@ router.post('/documents/upload', upload.single('file'), async (req: Request, res
       fileName: file.originalname || 'document.pdf',
       mimeType: validation.mimeType,
       fileBuffer: file.buffer,
-      documentNumber,
+      documentNumber: cleanedDocNumber,
       issueDate,
       expiryDate,
       certifiedCopy: certifiedCopy === 'true' || certifiedCopy === true,
@@ -396,7 +417,7 @@ router.get('/documents/:id/file', async (req: Request, res: Response) => {
 // POST /api/supplier/documents/read
 router.post('/documents/read', async (req: Request, res: Response) => {
   try {
-    const { fileBase64, mimeType, documentTypeName } = req.body;
+    const { fileBase64, mimeType, documentTypeName, identityType } = req.body;
     if (!fileBase64) {
       res.status(400).json({ error: 'File content is required' });
       return;
@@ -405,7 +426,7 @@ router.post('/documents/read', async (req: Request, res: Response) => {
     let parsed: any = null;
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: {
           parts: [
             {
@@ -427,48 +448,72 @@ router.post('/documents/read', async (req: Request, res: Response) => {
       let rawText = response.text || '{}';
       rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
       parsed = JSON.parse(rawText);
-    } catch (aiErr) {
-      console.warn('[GEMINI API READ WARNING - USING SMART FALLBACK]', aiErr);
+    } catch (aiErr: any) {
+      console.warn('[GEMINI API READ WARNING]:', aiErr?.message || 'Read failed');
     }
 
-    if (!parsed || !parsed.document_number) {
-      // Smart fallback so user never gets "We could not read this file" error
-      parsed = {
-        document_type: documentTypeName || 'CIPA Certificate of Incorporation',
-        holder_name: 'ACME Botswana (Pty) Ltd',
-        document_number: `DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-        issue_date: '2026-01-15',
-        expiry_date: '2027-01-15',
-        issuing_authority: 'Botswana Regulatory Authority',
-        confidence: {
-          document_type: 0.95,
-          holder_name: 0.92,
-          document_number: 0.89,
-          issue_date: 0.90,
-          expiry_date: 0.88,
-          issuing_authority: 0.91
+    if (!parsed || typeof parsed !== 'object') {
+      return res.json({
+        document_type: documentTypeName || null,
+        holder_name: null,
+        document_number: null,
+        issue_date: null,
+        expiry_date: null,
+        issuing_authority: null,
+        confidence: {},
+        validation_status: 'Needs review',
+        omang_valid: null,
+        auto_fill_allowed: false,
+        verified: false,
+      });
+    }
+
+    const isDirectorsIdDoc =
+      /director|shareholder|omang|national.?id|director_id/i.test(String(documentTypeName || '')) ||
+      /omang|national.?id/i.test(String(parsed.document_type || ''));
+    const isOmangCheck = isDirectorsIdDoc && String(identityType || 'OMANG').toUpperCase() !== 'PASSPORT';
+
+    let omangValid: boolean | null = null;
+    let omangError: string | null = null;
+    let derivedGender: 'male' | 'female' | null = null;
+    let validationStatus = 'Extracted (unverified)';
+    let autoFillAllowed = Boolean(parsed.document_number);
+
+    if (isOmangCheck) {
+      if (parsed.document_number) {
+        const omangCheck = validateOmang(String(parsed.document_number));
+        omangValid = omangCheck.ok;
+        if (omangCheck.ok) {
+          parsed.document_number = omangCheck.normalised;
+          derivedGender = omangCheck.derivedGender;
+        } else {
+          omangError = omangCheck.message;
+          validationStatus = 'Needs review';
+          autoFillAllowed = false;
         }
-      };
+      } else {
+        validationStatus = 'Needs review';
+        autoFillAllowed = false;
+      }
     }
 
-    res.json(parsed);
-  } catch (err: any) {
-    console.error('[GEMINI DOCUMENT READ ERROR]', err);
     res.json({
-      document_type: 'Official Document',
-      holder_name: 'ACME Botswana (Pty) Ltd',
-      document_number: `REG-${Math.floor(100000 + Math.random() * 900000)}`,
-      issue_date: '2026-01-15',
-      expiry_date: '2027-01-15',
-      issuing_authority: 'Botswana Regulatory Authority',
-      confidence: {
-        document_type: 0.90,
-        holder_name: 0.90,
-        document_number: 0.85,
-        issue_date: 0.90,
-        expiry_date: 0.90,
-        issuing_authority: 0.90
-      }
+      ...parsed,
+      omang_valid: omangValid,
+      omang_error: omangError,
+      derived_gender: derivedGender,
+      validation_status: validationStatus,
+      auto_fill_allowed: autoFillAllowed,
+      verified: false, // Reading a document never verifies it
+    });
+  } catch (err: any) {
+    console.error('[GEMINI DOCUMENT READ ERROR]', err?.message || 'Unknown error');
+    res.status(500).json({
+      error: 'DOCUMENT_READ_FAILED',
+      validation_status: 'Needs review',
+      auto_fill_allowed: false,
+      verified: false,
+      message: 'Could not read document details automatically.',
     });
   }
 });
@@ -479,7 +524,6 @@ router.post('/documents/:id/read', async (req: Request, res: Response) => {
     const ctx = getSupplierContext(req);
     const docId = req.params.id;
 
-    // Get document and version
     const docs = await documentsRepository.listBySupplier(ctx.tenantId);
     const targetDoc = docs.find(d => d.documentId === docId);
 
@@ -488,23 +532,84 @@ router.post('/documents/:id/read', async (req: Request, res: Response) => {
       return;
     }
 
-    // Extract / generate parsed metadata for this uploaded document
-    const extracted = {
+    const extracted: any = {
       document_type: targetDoc.documentTypeName,
-      holder_name: 'ACME Botswana (Pty) Ltd',
-      document_number: targetDoc.documentNumber || `DOC-${Math.floor(100000 + Math.random() * 900000)}`,
-      issue_date: targetDoc.issueDate || '2026-01-15',
-      expiry_date: targetDoc.expiryDate || '2027-01-15',
-      issuing_authority: targetDoc.issuingAuthority || 'Botswana Regulatory Authority',
-      confidence: {
-        document_type: 0.96,
-        holder_name: 0.95,
-        document_number: 0.94,
-        issue_date: 0.93,
-        expiry_date: 0.92,
-        issuing_authority: 0.95
-      }
+      holder_name: null,
+      document_number: targetDoc.documentNumber || null,
+      issue_date: targetDoc.issueDate || null,
+      expiry_date: targetDoc.expiryDate || null,
+      issuing_authority: targetDoc.issuingAuthority || null,
+      confidence: {},
+      validation_status: 'Needs review',
+      omang_valid: null as boolean | null,
+      omang_error: null as string | null,
+      derived_gender: null as 'male' | 'female' | null,
+      auto_fill_allowed: false,
+      verified: false, // Reading a document never verifies it
     };
+
+    const fileRecord = await documentsRepository.getFileByVersionOrDocId(docId, ctx.tenantId).catch(() => null);
+    if (fileRecord && fileRecord.content) {
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: fileRecord.mimeType || 'application/pdf',
+                  data: fileRecord.content.toString('base64'),
+                },
+              },
+              {
+                text: 'Extract document details from this uploaded document. Return valid JSON only (no markdown formatting), with these exact fields: document_type, holder_name, document_number, issue_date (YYYY-MM-DD), expiry_date (YYYY-MM-DD), issuing_authority, and confidence (an object containing a confidence score from 0 to 1 for each of document_type, holder_name, document_number, issue_date, expiry_date, issuing_authority). Use null when a field is not visible. Never guess.'
+              }
+            ]
+          },
+          config: {
+            responseMimeType: 'application/json'
+          }
+        });
+
+        let rawText = response.text || '{}';
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/, '').trim();
+        const parsed = JSON.parse(rawText);
+        if (parsed && typeof parsed === 'object') {
+          Object.assign(extracted, parsed, { verified: false });
+        }
+      } catch (aiErr: any) {
+        console.warn('[GEMINI STORED DOC READ WARNING]:', aiErr?.message || 'Read failed');
+      }
+    }
+
+    const isDirectorsIdDoc =
+      String(targetDoc.documentTypeCode || '').toUpperCase() === 'DIRECTOR_ID' ||
+      /director|shareholder|omang|national.?id/i.test(String(targetDoc.documentTypeName || ''));
+
+    if (isDirectorsIdDoc) {
+      if (extracted.document_number) {
+        const omangCheck = validateOmang(String(extracted.document_number));
+        extracted.omang_valid = omangCheck.ok;
+        if (omangCheck.ok) {
+          extracted.document_number = omangCheck.normalised;
+          extracted.derived_gender = omangCheck.derivedGender;
+          extracted.validation_status = 'Extracted (unverified)';
+          extracted.auto_fill_allowed = true;
+        } else {
+          extracted.omang_error = omangCheck.message;
+          extracted.validation_status = 'Needs review';
+          extracted.auto_fill_allowed = false;
+        }
+      } else {
+        extracted.validation_status = 'Needs review';
+        extracted.auto_fill_allowed = false;
+      }
+    } else if (extracted.document_number) {
+      extracted.validation_status = 'Extracted (unverified)';
+      extracted.auto_fill_allowed = true;
+    }
+
+    extracted.verified = false;
 
     res.json({ success: true, extracted, document: targetDoc });
   } catch (err: any) {

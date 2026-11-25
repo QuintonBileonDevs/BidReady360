@@ -1,4 +1,9 @@
 import 'dotenv/config';
+import {
+  secretsGuardStatus,
+  getSecretsHealth,
+  ConfigSecretError,
+} from './config/secrets';
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { authenticate, csrfProtection } from './middleware/auth.middleware';
@@ -11,17 +16,30 @@ import { buyerRouter } from './routes/buyer.routes';
 import { auditRouter } from './routes/audit.routes';
 import { bootstrapRouter } from './routes/bootstrap.routes';
 import { debugRouter } from './routes/debug.routes';
+import { adminRouter } from './routes/admin.routes';
 
 const app = express();
 app.set('etag', false);
 
-// Fail-closed database guard middleware (FIRST middleware on /api and non-prefixed API paths)
+// Fail-closed config secrets & database guard middleware (FIRST middleware on /api and non-prefixed API paths)
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
-  const g = guardStatus();
-  if (!g.ok && req.path !== '/health') {
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(503).json({ error: 'db_guard', reason: g.reason });
-    return;
+  if (req.path !== '/health') {
+    const s = secretsGuardStatus();
+    if (!s.ok) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: 'config', reason: s.reason });
+      return;
+    }
+    const g = guardStatus();
+    if (!g.ok) {
+      console.error('[db-guard] Request blocked:', g.reason);
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({
+        error: 'DATABASE_GUARD_FAILED',
+        message: 'Service temporarily unavailable.',
+      });
+      return;
+    }
   }
   next();
 });
@@ -35,12 +53,23 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     req.path.startsWith('/buyer') ||
     req.path.startsWith('/audit') ||
     req.path.startsWith('/bootstrap') ||
-    req.path.startsWith('/debug');
+    req.path.startsWith('/debug') ||
+    req.path.startsWith('/admin');
   if (unprefixedApi) {
+    const s = secretsGuardStatus();
+    if (!s.ok) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: 'config', reason: s.reason });
+      return;
+    }
     const g = guardStatus();
     if (!g.ok) {
+      console.error('[db-guard] Request blocked:', g.reason);
       res.setHeader('Cache-Control', 'no-store');
-      res.status(503).json({ error: 'db_guard', reason: g.reason });
+      res.status(503).json({
+        error: 'DATABASE_GUARD_FAILED',
+        message: 'Service temporarily unavailable.',
+      });
       return;
     }
   }
@@ -55,7 +84,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Origin, Accept');
 
   // Enforce no-store on all API endpoints by default (reference success responses override with max-age=300)
-  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/supplier') || req.path.startsWith('/bootstrap') || req.path.startsWith('/buyer') || req.path.startsWith('/reference') || req.path.startsWith('/calls') || req.path.startsWith('/audit')) {
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/supplier') || req.path.startsWith('/bootstrap') || req.path.startsWith('/buyer') || req.path.startsWith('/reference') || req.path.startsWith('/calls') || req.path.startsWith('/audit') || req.path.startsWith('/admin')) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -74,14 +103,18 @@ app.use(cookieParser());
 app.use(csrfProtection);
 app.use(authenticate);
 
-// Health check (reports guard status, DB reachability, database name when OK, and reference counts)
+// Health check (reports secrets status words, guard status, DB reachability, database name when OK, and reference counts)
 app.get(['/api/health', '/health'], async (_req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store');
+  const s = secretsGuardStatus();
+  const secrets = getSecretsHealth();
   const g = guardStatus();
   if (!g.ok) {
+    console.error('[db-guard] Health check blocked:', g.reason);
     res.status(503).json({
       ok: false,
-      guard: { ok: false, reason: g.reason },
+      error: 'DATABASE_GUARD_FAILED',
+      secrets,
       db: 'blocked',
     });
     return;
@@ -112,25 +145,30 @@ app.get(['/api/health', '/health'], async (_req: Request, res: Response) => {
       documentTypes: 0,
     };
 
-    res.json({
-      ok: true,
-      guard: { ok: true, reason: null },
+    const allOk = s.ok;
+    res.status(allOk ? 200 : 503).json({
+      ok: allOk,
+      config: { ok: s.ok },
+      secrets,
       db: 'reachable',
       database: dbName,
       refs: counts,
     });
   } catch (err: any) {
     if (err instanceof DbGuardError || err?.code === 'DB_GUARD') {
+      console.error('[db-guard] Health check blocked:', err.reason || 'db_name_mismatch');
       res.status(503).json({
         ok: false,
-        guard: { ok: false, reason: err.reason || 'db_name_mismatch' },
+        error: 'DATABASE_GUARD_FAILED',
+        secrets,
         db: 'blocked',
       });
       return;
     }
     res.status(503).json({
       ok: false,
-      guard: { ok: true, reason: null },
+      config: { ok: s.ok },
+      secrets,
       db: 'unreachable',
     });
   }
@@ -145,6 +183,7 @@ app.use('/api/buyer', buyerRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api/bootstrap', bootstrapRouter);
 app.use('/api/debug', debugRouter);
+app.use('/api/admin', adminRouter);
 
 // Same routes without the prefix, in case a rewrite strips '/api'
 app.use('/reference', referenceRouter);
@@ -155,15 +194,25 @@ app.use('/buyer', buyerRouter);
 app.use('/audit', auditRouter);
 app.use('/bootstrap', bootstrapRouter);
 app.use('/debug', debugRouter);
+app.use('/admin', adminRouter);
 
 // Centralized error handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error('[EXPRESS UNHANDLED ERROR]:', err);
-  if (err instanceof DbGuardError || err?.code === 'DB_GUARD') {
+  if (err instanceof ConfigSecretError || err?.code === 'CONFIG_SECRET') {
     res.setHeader('Cache-Control', 'no-store');
     res.status(503).json({
-      error: 'db_guard',
-      reason: err.reason || 'guard_blocked',
+      error: 'config',
+      reason: err.reason || 'config_invalid',
+    });
+    return;
+  }
+  if (err instanceof DbGuardError || err?.code === 'DB_GUARD') {
+    console.error('[db-guard] Request error blocked:', err.reason || 'guard_blocked');
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(503).json({
+      error: 'DATABASE_GUARD_FAILED',
+      message: 'Service temporarily unavailable.',
     });
     return;
   }

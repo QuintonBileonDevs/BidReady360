@@ -16,6 +16,7 @@ export interface DocumentType {
   description: string | null;
   issuingAuthority: string | null;
   requiresExpiry: boolean;
+  requiresNumber: boolean;
   defaultValidityDays: number | null;
   maxFileSizeMb: number;
   allowedMimeTypes: string[] | null;
@@ -159,6 +160,24 @@ async function cachedReferenceQuery<T>(key: string, fetcher: () => Promise<T[]>)
 }
 
 export class ReferenceRepository {
+  private docTypesHasRequiresNumber: boolean | null = null;
+
+  private async hasDocumentTypesRequiresNumber(): Promise<boolean> {
+    if (this.docTypesHasRequiresNumber === true) return true;
+    const res = await query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'document_types'
+           AND column_name = 'requires_number'
+       ) AS exists`
+    );
+    const exists = Boolean(res.rows[0]?.exists);
+    if (exists) this.docTypesHasRequiresNumber = true;
+    return exists;
+  }
+
   async getDistricts(): Promise<GeographicDistrict[]> {
     return cachedReferenceQuery<GeographicDistrict>('districts', async () => {
       const res = await query<GeographicDistrict>(
@@ -171,9 +190,13 @@ export class ReferenceRepository {
 
   async getDocumentTypes(): Promise<DocumentType[]> {
     return cachedReferenceQuery<DocumentType>('documentTypes', async () => {
+      const hasRequiresNumber = await this.hasDocumentTypesRequiresNumber();
+      const requiresNumberSelect = hasRequiresNumber
+        ? 'requires_number AS "requiresNumber"'
+        : 'TRUE AS "requiresNumber"';
       const res = await query<DocumentType>(
         `SELECT id, organization_id AS "organizationId", code, name, description, issuing_authority AS "issuingAuthority",
-                requires_expiry AS "requiresExpiry", requires_number AS "requiresNumber", default_validity_days AS "defaultValidityDays",
+                requires_expiry AS "requiresExpiry", ${requiresNumberSelect}, default_validity_days AS "defaultValidityDays",
                 max_file_size_mb AS "maxFileSizeMb", allowed_mime_types AS "allowedMimeTypes",
                 verification_method AS "verificationMethod", is_mandatory_default AS "isMandatoryDefault", sort_order AS "sortOrder"
          FROM document_types WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`

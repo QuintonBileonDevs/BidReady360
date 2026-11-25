@@ -361,6 +361,7 @@ CREATE TABLE IF NOT EXISTS supplier_people (
   national_identity_number_encrypted BYTEA,
   national_identity_hash CHAR(64),
   identity_type         VARCHAR(20) CHECK (identity_type IN ('OMANG', 'PASSPORT')),
+  gender                VARCHAR(10) CHECK (gender IN ('male', 'female')),
   nationality           VARCHAR(50) DEFAULT 'Motswana',
   is_citizen            BOOLEAN NOT NULL DEFAULT TRUE,
   date_of_birth         DATE,

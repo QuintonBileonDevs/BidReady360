@@ -128,8 +128,8 @@ export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
   }
 }
 
-// 3. STARTUP: fail closed
-if (guardReason && !process.env.VERCEL) {
+// 3. STARTUP: fail closed (refuse startup in production; in dev mode HTTP server stays up returning 503 on /api/*)
+if (guardReason && process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   console.error('[db-guard] refusing to start');
   process.exit(1);
 }
