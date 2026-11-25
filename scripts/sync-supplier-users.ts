@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 
 async function syncSuppliersToUsers() {
   console.log('--- Syncing All Suppliers to Users Table ---');
@@ -78,7 +78,7 @@ async function syncSuppliersToUsers() {
   console.log(`New users created: ${createdCount}`);
   console.log(`Existing users synced: ${syncedCount}`);
 
-  await pool.end();
+  process.exit(0);
 }
 
 syncSuppliersToUsers().catch((err) => {

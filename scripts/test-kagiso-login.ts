@@ -1,6 +1,6 @@
 import { authService } from '../server/services/auth.service';
 import { suppliersRepository } from '../server/repositories/suppliers.repository';
-import { pool } from '../server/db/client';
+
 
 async function testKagisoFlow() {
   console.log('--- Testing Kagiso Login & Profile Retrieval ---');
@@ -40,7 +40,7 @@ async function testKagisoFlow() {
     console.log('   Physical Address:', updated.physicalAddress);
   }
 
-  await pool.end();
+  process.exit(0);
 }
 
 testKagisoFlow().catch((err) => {

@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 
 async function resetKagisoPassword() {
   console.log('--- Resetting Password & Activating Kagiso Phiri Account ---');
@@ -71,7 +71,7 @@ async function resetKagisoPassword() {
   }
 
   console.log('--- Kagiso Password Reset & Workspace Association Complete ---');
-  await pool.end();
+  process.exit(0);
 }
 
 resetKagisoPassword().catch((err) => {

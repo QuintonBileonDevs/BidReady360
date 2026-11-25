@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { authService } from '../server/services/auth.service';
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 import { hashPassword, hashToken } from '../server/utils/crypto';
 
 async function runAuthTests() {
@@ -149,7 +149,7 @@ async function runAuthTests() {
 
   // -------------------------------------------------------------------------
   console.log('\n=== ALL AUTH VERIFICATIONS PASSED SUCCESSFULLY ===');
-  await pool.end();
+  process.exit(0);
 }
 
 runAuthTests().catch((err) => {

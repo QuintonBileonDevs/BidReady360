@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 import { auditRepository } from './audit.repository';
 
 export interface EvaluationCriterionRecord {
@@ -51,7 +51,7 @@ export class EvaluationsRepository {
   }
 
   async signConflictDeclaration(callId: string, userId: string, orgId: string, hasConflict: boolean, details?: string): Promise<void> {
-    await withTransaction(async (client) => {
+    await tx(async (client) => {
       // Find or create assignment
       let assignmentRes = await client.query<{ id: string }>(
         `SELECT id FROM evaluator_assignments WHERE call_id = $1 AND user_id = $2`,
@@ -129,7 +129,7 @@ export class EvaluationsRepository {
     const assignment = await this.getEvaluatorAssignment(data.callId, data.userId);
     if (!assignment) throw new Error('Evaluator assignment not found.');
 
-    await withTransaction(async (client) => {
+    await tx(async (client) => {
       // 1. Lock assignment
       await client.query(
         `UPDATE evaluator_assignments

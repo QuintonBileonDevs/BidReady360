@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 import { auditRepository } from './audit.repository';
 
 export interface ApplicationView {
@@ -155,7 +155,7 @@ export class ApplicationsRepository {
 
     const receiptNumber = `APP-${call.reference_no.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-6)}`;
 
-    return withTransaction(async (client) => {
+    return tx(async (client) => {
       // 3. Upsert application
       const appRes = await client.query<{ id: string }>(
         `INSERT INTO applications (
@@ -223,7 +223,7 @@ export class ApplicationsRepository {
     comment?: string;
     ipAddress?: string;
   }): Promise<void> {
-    await withTransaction(async (client) => {
+    await tx(async (client) => {
       // 1. Update application status
       await client.query(
         `UPDATE applications

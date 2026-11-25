@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 
 async function inspectRelationship() {
   console.log('=== INSPECTING DATABASE RELATIONSHIPS FOR KAGISO & KALAHARI ===\n');
@@ -12,8 +12,7 @@ async function inspectRelationship() {
 
   if (userRes.rows.length === 0) {
     console.log('No user found matching Kagiso.');
-    await pool.end();
-    return;
+    process.exit(0);
   }
 
   const userId = userRes.rows[0].id;
@@ -47,7 +46,7 @@ async function inspectRelationship() {
   console.log('4. Supplier people records matching Kagiso:', peopleRes.rows);
 
   console.log('\n=== INSPECTION COMPLETE ===');
-  await pool.end();
+  process.exit(0);
 }
 
 inspectRelationship().catch((err) => {

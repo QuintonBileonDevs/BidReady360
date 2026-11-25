@@ -14,8 +14,10 @@ import {
   RotateCcw,
   AlertCircle,
   HelpCircle,
+  Loader2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { referenceApi } from '../../services/api';
 
 export interface PlanTier {
   id: string;
@@ -28,64 +30,53 @@ export interface PlanTier {
   subscribersCount: number;
 }
 
-const DEFAULT_PLANS: PlanTier[] = [
-  {
-    id: 'tier-standard',
-    name: 'Local Authority',
-    category: 'Standard Tier',
-    priceBWP: 4500,
-    annualDiscountPercent: 10,
-    callsAllowance: 'Up to 10 calls / year',
-    description: 'For sub-districts and municipal boards managing up to 10 active calls per year.',
-    subscribersCount: 7,
-  },
-  {
-    id: 'tier-parastatal',
-    name: 'Regional Council / Parastatal',
-    category: 'Parastatal Tier',
-    priceBWP: 12500,
-    annualDiscountPercent: 10,
-    callsAllowance: 'Unlimited calls',
-    description: 'Unlimited tender calls, multi-evaluator scoring panels, and direct CIPA/BURS roster verification.',
-    subscribersCount: 6,
-  },
-  {
-    id: 'tier-enterprise',
-    name: 'State-Owned & Corporate',
-    category: 'Enterprise Tier',
-    priceBWP: 16000,
-    annualDiscountPercent: 15,
-    callsAllowance: 'Unlimited + priority support',
-    description: 'Custom ERP API integration, dedicated account executive, and enterprise SSO authentication.',
-    subscribersCount: 3,
-  },
-];
-
 export const AdminBilling: React.FC = () => {
   const { addAuditEvent } = useApp();
   const [invoices] = useState<AdminInvoice[]>([]);
 
-  // Load from localStorage or defaults
-  const [plans, setPlans] = useState<PlanTier[]>(() => {
-    try {
-      const saved = localStorage.getItem('bidready_admin_plans');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {
-      // Fallback
-    }
-    return DEFAULT_PLANS;
-  });
+  const [plans, setPlans] = useState<PlanTier[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState<boolean>(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
 
-  // Save to localStorage when plans change
-  useEffect(() => {
+  const loadPlans = React.useCallback(async () => {
+    setIsLoadingPlans(true);
+    setPlansError(null);
     try {
-      localStorage.setItem('bidready_admin_plans', JSON.stringify(plans));
-    } catch {
-      // Ignore
+      const data = await referenceApi.loadAll();
+      if (!data || !Array.isArray(data.plans)) {
+        throw new Error('Invalid plans response');
+      }
+      const buyerPlans = data.plans.filter((p: any) => p.audience === 'buyer');
+      const sourcePlans = buyerPlans.length > 0 ? buyerPlans : data.plans;
+      setPlans(
+        sourcePlans.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          category: p.code || (p.audience === 'buyer' ? 'Buyer Tier' : 'Supplier Tier'),
+          priceBWP: Number(p.price) || 0,
+          annualDiscountPercent: Number(p.features?.annualDiscountPercent ?? 10),
+          callsAllowance:
+            p.maxCallsPerYear === null || p.maxCallsPerYear === undefined
+              ? 'Unlimited calls'
+              : `Up to ${p.maxCallsPerYear} calls / year`,
+          description:
+            p.features?.description ||
+            `${p.name} (${p.billingInterval || 'monthly'} billing)`,
+          subscribersCount: Number(p.features?.subscribersCount ?? 0),
+        }))
+      );
+    } catch (err) {
+      console.error('Failed to load plans from database:', err);
+      setPlans([]);
+      setPlansError('We could not load this list. Try again.');
+    } finally {
+      setIsLoadingPlans(false);
     }
-  }, [plans]);
+  }, []);
+
+  useEffect(() => {
+    loadPlans();
+  }, [loadPlans]);
 
   // Inline card edit state
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
@@ -235,23 +226,21 @@ export const AdminBilling: React.FC = () => {
     setIsAdjustModalOpen(false);
   };
 
-  // Reset to default platform tariffs
+  // Reload plans from database
   const resetToDefaults = () => {
-    if (window.confirm('Reset all subscription plan tariffs to platform statutory defaults?')) {
-      setPlans(DEFAULT_PLANS);
-      addAuditEvent({
-        action: 'Subscription Pricing Reset',
-        actorName: 'Lesedi Mokgweetsi',
-        actorRole: 'Super Admin',
-        organizationName: 'BidReady360 Platform Administration',
-        entityType: 'Organization',
-        entityId: 'tiers-all',
-        details: 'Reset all organization subscription rates to baseline defaults.',
-        ipAddress: '168.167.12.89',
-      });
-      setSuccessMessage('Subscription plan pricing reset to standard platform defaults.');
-      setTimeout(() => setSuccessMessage(null), 4000);
-    }
+    loadPlans();
+    addAuditEvent({
+      action: 'Subscription Pricing Reloaded',
+      actorName: 'Lesedi Mokgweetsi',
+      actorRole: 'Super Admin',
+      organizationName: 'BidReady360 Platform Administration',
+      entityType: 'Organization',
+      entityId: 'tiers-all',
+      details: 'Reloaded organization subscription rates from reference catalogue.',
+      ipAddress: '168.167.12.89',
+    });
+    setSuccessMessage('Reloaded subscription plans from database.');
+    setTimeout(() => setSuccessMessage(null), 4000);
   };
 
   return (
@@ -328,6 +317,27 @@ export const AdminBilling: React.FC = () => {
           </div>
         </div>
 
+        {isLoadingPlans ? (
+          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 flex items-center justify-center gap-3 text-[#6B7A87]">
+            <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+            <span className="text-[14px]">Loading subscription plans from database...</span>
+          </div>
+        ) : plansError ? (
+          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-rose-200 dark:border-rose-900 p-6 flex items-center justify-between gap-4">
+            <span className="text-[14px] text-rose-700 dark:text-rose-300">{plansError}</span>
+            <button
+              type="button"
+              onClick={loadPlans}
+              className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium cursor-pointer shrink-0"
+            >
+              Retry
+            </button>
+          </div>
+        ) : plans.length === 0 ? (
+          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center text-[#6B7A87] text-[14px]">
+            No subscription plans configured in database.
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans.map((plan) => {
             const isEditing = editingPlanId === plan.id;
@@ -526,6 +536,7 @@ export const AdminBilling: React.FC = () => {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* 3. Modal: Adjust Subscription Pricing (All Tiers / Bulk Indexation) */}

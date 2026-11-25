@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 import { auditRepository } from './audit.repository';
 
 export interface AwardRecordView {
@@ -68,7 +68,7 @@ export class AwardsRepository {
     orgId: string;
     ipAddress?: string;
   }): Promise<string> {
-    return withTransaction(async (client) => {
+    return tx(async (client) => {
       const awardRes = await client.query<{ id: string }>(
         `INSERT INTO awards (
           call_id, bid_id, supplier_id, status, award_value, currency, justification, recommended_by_user_id, created_at, updated_at
@@ -143,7 +143,7 @@ export class AwardsRepository {
       );
     }
 
-    await withTransaction(async (client) => {
+    await tx(async (client) => {
       // 3. Update award
       await client.query(
         `UPDATE awards

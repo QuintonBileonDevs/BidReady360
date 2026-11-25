@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 import { generateRandomToken, hashToken } from '../server/utils/crypto';
 
 async function runLoadingGateVerification() {
@@ -103,7 +103,7 @@ async function runLoadingGateVerification() {
   console.log('5. Cleaned up test session token.');
 
   console.log('\n=== ALL LOADING GATE BACKEND CHECKS PASSED ===');
-  await pool.end();
+  process.exit(0);
 }
 
 runLoadingGateVerification().catch((err) => {

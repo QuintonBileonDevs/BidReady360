@@ -2,17 +2,24 @@ import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { app } from './server/app';
-import { referenceDataLoader } from './server/services/reference.loader';
+import { getClient, DbGuardError } from './server/db/client';
+import { completenessService } from './server/services/completeness.service';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
 async function startServer() {
-  // Pre-warm reference data cache on server boot
+  // Verify database guard and live connection before opening HTTP listener
   try {
-    await referenceDataLoader.getReferenceData();
-  } catch (err) {
-    console.warn('[SERVER INIT] Reference data pre-warm encountered non-fatal error:', err);
+    const client = await getClient();
+    client.release();
+  } catch (err: any) {
+    const reason = err instanceof DbGuardError || err?.code === 'DB_GUARD' ? err.reason : 'db_unreachable';
+    console.error('[db-guard] Startup verification failed:', reason);
+    process.exit(1);
   }
+
+  // Start daily completeness reconciliation scheduler (00:05 Africa/Gaborone)
+  completenessService.startScheduler();
 
   // Mount Vite middleware in development
   if (process.env.NODE_ENV !== 'production') {
@@ -23,7 +30,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static('dist'));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile('dist/index.html', { root: '.' });
     });
   }
@@ -34,6 +41,6 @@ async function startServer() {
 }
 
 startServer().catch((err) => {
-  console.error('[FATAL SERVER START ERROR]', err);
+  console.error('[FATAL SERVER START ERROR]', err instanceof DbGuardError ? err.reason : err?.message);
   process.exit(1);
 });

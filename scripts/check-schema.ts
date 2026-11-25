@@ -1,4 +1,4 @@
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 
 async function addUniqueEmailIndex() {
   console.log('Ensuring unique index on suppliers.email...');
@@ -12,7 +12,7 @@ async function addUniqueEmailIndex() {
   } catch (err: any) {
     console.warn('Index notice:', err.message);
   }
-  await pool.end();
+  process.exit(0);
 }
 
 addUniqueEmailIndex().catch(console.error);

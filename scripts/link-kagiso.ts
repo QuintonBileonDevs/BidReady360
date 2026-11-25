@@ -1,4 +1,4 @@
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 
 async function seedKagisoSupplier() {
   console.log('--- Linking Kagiso Phiri to Supplier Entity in bidready360 ---');
@@ -85,7 +85,7 @@ async function seedKagisoSupplier() {
   );
   console.log('Verified active memberships for Kagiso:', memberships.rows);
 
-  await pool.end();
+  process.exit(0);
 }
 
 seedKagisoSupplier().catch((err) => {

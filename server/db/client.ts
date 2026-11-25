@@ -1,145 +1,135 @@
+import 'dotenv/config';
 import pg from 'pg';
 
 const { Pool } = pg;
 
-export interface QueryResult<T> {
-  rows: T[];
-  rowCount: number;
-}
-
-export interface DbClient {
-  query<R = any>(text: string, params?: any[]): Promise<QueryResult<R>>;
-  release: () => void;
-}
-
-// ---------------------------------------------------------------------------
-// STARTUP GUARDS: EXPECTED_DB_NAME & SESSION_SECRET
-// ---------------------------------------------------------------------------
-const expectedDbName = process.env.EXPECTED_DB_NAME || 'bidready360';
-const sessionSecret = process.env.SESSION_SECRET || 'bidready360-sec-token-32b-auth-secret-prod-2026';
-
-const rawConnectionString = process.env.DATABASE_URL || '';
-const connectionString = rawConnectionString.replace(/(\?|&)sslmode=[^&]*/, '');
-
-if (!connectionString) {
-  console.warn('[DATABASE INIT WARNING]: DATABASE_URL is not defined. Database operations will return 503.');
-}
-
-export const pool = new Pool(
-  connectionString
-    ? {
-        connectionString,
-        ssl: { rejectUnauthorized: false },
-        max: 5,
-        idleTimeoutMillis: 10000,
-        connectionTimeoutMillis: 5000,
-        options: '-c idle_in_transaction_session_timeout=15000',
-      }
-    : {
-        host: 'localhost',
-        port: 5432,
-        database: expectedDbName,
-        connectionTimeoutMillis: 2000,
-        options: '-c idle_in_transaction_session_timeout=15000',
-      }
-);
-
-pool.on('error', (e) => {
-  console.error('[pool]', e.message);
-});
-
-let dbVerified = false;
-
-/**
- * Validates at startup that connected PostgreSQL database matches EXPECTED_DB_NAME.
- */
-export async function verifyDatabaseGuard(): Promise<void> {
-  if (dbVerified) return;
-  if (!connectionString) {
-    console.warn('[DATABASE GUARD] Skipped check: DATABASE_URL is empty.');
-    return;
-  }
-  try {
-    const res = await pool.query('SELECT current_database()');
-    const actualDb = res.rows[0]?.current_database;
-    if (actualDb && actualDb !== expectedDbName) {
-      console.warn(
-        `[DATABASE GUARD WARNING]: Connected database "${actualDb}" differs from EXPECTED_DB_NAME "${expectedDbName}".`
-      );
-    } else {
-      console.log(`[DATABASE GUARD] Successfully verified database: ${actualDb}`);
-    }
-    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
-    dbVerified = true;
-  } catch (err: any) {
-    console.warn('[DATABASE GUARD WARNING]:', err.message);
+export class DbGuardError extends Error {
+  code = 'DB_GUARD';
+  status = 503;
+  reason: string;
+  constructor(reason: string) {
+    super(reason);
+    this.reason = reason;
   }
 }
 
-/**
- * Execute a parameterized query against PostgreSQL.
- * NEVER falls back to mock. If unreachable, throws an error with code DATABASE_UNAVAILABLE.
- */
-export async function query<T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
+const FORBIDDEN = new Set(['defaultdb', 'postgres', 'template0', 'template1']);
+
+function normalizeDatabaseUrl(raw: string): string {
+  let cleaned = (raw || '').trim();
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  if (!cleaned) return '';
+
   try {
-    const res = await pool.query(text, params);
-    return { rows: res.rows as T[], rowCount: res.rowCount ?? 0 };
-  } catch (err: any) {
-    if (
-      err.code === 'ECONNREFUSED' ||
-      err.code === 'ETIMEDOUT' ||
-      err.code === '57P01' ||
-      err.code === '57P02' ||
-      err.code === '57P03' ||
-      err.code === '08001' ||
-      err.code === '08006' ||
-      (err.message && err.message.toLowerCase().includes('timeout'))
-    ) {
-      const dbErr = new Error('Database service is currently unreachable. Please try again shortly.') as any;
-      dbErr.code = 'DATABASE_UNAVAILABLE';
-      dbErr.status = 503;
-      throw dbErr;
-    }
-    throw err;
+    const parsed = new URL(cleaned);
+    parsed.searchParams.delete('sslmode');
+    return parsed.toString();
+  } catch {
+    return cleaned
+      .replace(/([?&])sslmode=[^&]*(&|$)/, (_m, prefix, suffix) =>
+        prefix === '?' && suffix === '&' ? '?' : ''
+      )
+      .replace(/\?$/, '');
   }
 }
 
-/**
- * Execute multiple queries inside an atomic PostgreSQL transaction.
- */
-export async function withTransaction<T>(
-  callback: (client: DbClient) => Promise<T>
-): Promise<T> {
-  let client: pg.PoolClient;
+function dbFromUrl(u: string): string | null {
   try {
-    client = await pool.connect();
-  } catch (err: any) {
-    const dbErr = new Error('Database service is currently unreachable. Please try again shortly.') as any;
-    dbErr.code = 'DATABASE_UNAVAILABLE';
-    dbErr.status = 503;
-    throw dbErr;
+    return decodeURIComponent(new URL(u).pathname.replace(/^\//, '')) || null;
+  } catch {
+    return null;
   }
+}
 
+const expected = (process.env.EXPECTED_DB_NAME || '').trim();
+const url = normalizeDatabaseUrl(process.env.DATABASE_URL || '');
+
+// 1. STATIC CHECK (before any connection is made)
+let guardReason: string | null = null;
+if (!expected) guardReason = 'expected_db_missing';
+else if (FORBIDDEN.has(expected)) guardReason = 'expected_db_forbidden';
+else if (!url) guardReason = 'database_url_missing';
+else if (dbFromUrl(url) !== expected) guardReason = 'db_name_mismatch';
+if (guardReason) console.error('[db-guard] BLOCKED:', guardReason);
+
+const pool = guardReason
+  ? null
+  : new Pool({
+      connectionString: url,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
+      options: '-c idle_in_transaction_session_timeout=15000',
+    });
+
+pool?.on('error', (e) => console.error('[pool]', e.message));
+
+// 2. LIVE CHECK on EVERY physical connection, before its first query
+const verified = new WeakSet<object>();
+
+async function verify(client: pg.PoolClient) {
+  if (verified.has(client)) return;
+  const r = await client.query('SELECT current_database() AS db');
+  if (r.rows[0]?.db !== expected) {
+    console.error('[db-guard] BLOCKED: live database differs from expected');
+    throw new DbGuardError('db_name_mismatch');
+  }
+  verified.add(client);
+}
+
+export function guardStatus() {
+  return { ok: !guardReason, reason: guardReason };
+}
+
+export async function getClient(): Promise<pg.PoolClient> {
+  if (guardReason || !pool) throw new DbGuardError(guardReason || 'guard_blocked');
+  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    await client.query("SET LOCAL lock_timeout = '3s'");
-    await client.query("SET LOCAL statement_timeout = '8s'");
-    const wrappedClient: DbClient = {
-      query: async <R = any>(text: string, p: any[] = []) => {
-        const res = await client.query(text, p);
-        return { rows: res.rows as R[], rowCount: res.rowCount ?? 0 };
-      },
-      release: () => client.release(),
-    };
-    const result = await callback(wrappedClient);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {}
-    throw err;
+    await verify(client);
+  } catch (e) {
+    client.release(true);
+    throw e;
+  }
+  return client;
+}
+
+export async function query<R = any>(text: string, params?: any[]): Promise<{ rows: R[]; rowCount: number }> {
+  const c = await getClient();
+  try {
+    const res = await c.query(text, params);
+    return { rows: res.rows as R[], rowCount: res.rowCount ?? 0 };
   } finally {
-    client.release();
+    c.release();
   }
+}
+
+export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
+  const c = await getClient();
+  try {
+    await c.query('BEGIN');
+    await c.query("SET LOCAL lock_timeout = '3s'");
+    await c.query("SET LOCAL statement_timeout = '8s'");
+    const out = await fn(c);
+    await c.query('COMMIT');
+    return out;
+  } catch (e) {
+    try {
+      await c.query('ROLLBACK');
+    } catch {}
+    throw e;
+  } finally {
+    c.release();
+  }
+}
+
+// 3. STARTUP: fail closed
+if (guardReason && !process.env.VERCEL) {
+  console.error('[db-guard] refusing to start');
+  process.exit(1);
 }

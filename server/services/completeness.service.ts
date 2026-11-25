@@ -1,3 +1,5 @@
+import { query } from '../db/client';
+
 export interface CompletenessItem {
   key: string;
   label: string;
@@ -160,7 +162,7 @@ export function computeSupplierCompleteness(
   // 11. Directors (100% total ownership)
   const activePeople = (people || []).filter((p) => p.is_active !== false && p.isActive !== false);
   const totalOwnership = activePeople.reduce((sum, p) => {
-    const raw = p.ownership_percent ?? p.shareholdingPercentage ?? 0;
+    const raw = p.ownership_percent ?? p.ownershipPercent ?? p.shareholdingPercentage ?? 0;
     return sum + (parseFloat(raw) || 0);
   }, 0);
   const hasDirectors100 = activePeople.length > 0 && Math.round(totalOwnership) === 100;
@@ -254,3 +256,152 @@ export function computeSupplierCompleteness(
     complianceStatus,
   };
 }
+
+export class CompletenessService {
+  private timer: NodeJS.Timeout | null = null;
+
+  async calculateForSupplier(supplierId: string): Promise<CompletenessResult | null> {
+    try {
+      const [sRes, pRes, dRes] = await Promise.all([
+        query(
+          `SELECT s.legal_name, s.trading_name, s.burs_tin, s.physical_address, s.city, s.district_id,
+                  s.primary_phone, s.email, s.bank_name, s.bank_branch, s.account_number_masked,
+                  s.citizen_owned_percentage, s.has_trading_licence
+           FROM suppliers s
+           WHERE s.id = $1 AND s.deleted_at IS NULL`,
+          [supplierId]
+        ),
+        query(
+          `SELECT ownership_percent, ownership_percent AS "ownershipPercent", is_active FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
+          [supplierId]
+        ),
+        query(
+          `SELECT sd.id, dt.code AS doc_type_code, dt.code, dt.name, sd.title,
+                  sdv.file_name, sdv.verification_status, sdv.expiry_date,
+                  sd.status
+           FROM supplier_documents sd
+           JOIN document_types dt ON dt.id = sd.document_type_id
+           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
+           WHERE sd.supplier_id = $1 AND sd.status = 'active'`,
+          [supplierId]
+        ),
+      ]);
+
+      if (sRes.rows.length === 0) return null;
+      return computeSupplierCompleteness(sRes.rows[0], pRes.rows, dRes.rows);
+    } catch (err) {
+      console.warn(`[COMPLETENESS SERVICE] Failed calculateForSupplier(${supplierId}):`, err);
+      return null;
+    }
+  }
+
+  async auditCompleteness() {
+    try {
+      const res = await query(`
+        SELECT id, legal_name, profile_completeness, compliance_status
+        FROM suppliers
+        WHERE deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 100
+      `);
+
+      const auditResults = [];
+      let matchedCount = 0;
+      let discrepancyCount = 0;
+
+      for (const row of res.rows) {
+        const computed = await this.calculateForSupplier(row.id);
+        const storedScore = Number(row.profile_completeness || 0);
+        const computedScore = computed ? computed.score : 0;
+        const matched = storedScore === computedScore;
+
+        if (matched) matchedCount++;
+        else discrepancyCount++;
+
+        auditResults.push({
+          supplierId: row.id,
+          legalName: row.legal_name,
+          storedScore,
+          computedScore,
+          matched,
+          complianceStatus: computed?.complianceStatus || row.compliance_status,
+        });
+      }
+
+      return {
+        totalAudited: res.rows.length,
+        matchedCount,
+        discrepancyCount,
+        auditTimestamp: new Date().toISOString(),
+        suppliers: auditResults,
+      };
+    } catch (err: any) {
+      console.error('[AUDIT COMPLETENESS ERROR]', err);
+      return { error: err.message, totalAudited: 0, matchedCount: 0, discrepancyCount: 0, suppliers: [] };
+    }
+  }
+
+  async runDailyJob() {
+    try {
+      console.log('[COMPLETENESS SERVICE] Running daily reconciliation job...');
+      const res = await query(`
+        SELECT id FROM suppliers WHERE deleted_at IS NULL
+      `);
+
+      let processedCount = 0;
+      for (const row of res.rows) {
+        const computed = await this.calculateForSupplier(row.id);
+        if (computed) {
+          const missingLabels = computed.missingItems.map((m) => m.label);
+          await query(
+            `UPDATE suppliers
+             SET profile_completeness = $1,
+                 compliance_status = $2,
+                 missing_items = $3,
+                 profile_completeness_updated_at = NOW()
+             WHERE id = $4`,
+            [computed.score, computed.complianceStatus, missingLabels, row.id]
+          );
+          processedCount++;
+        }
+      }
+
+      console.log(`[COMPLETENESS SERVICE] Reconciled ${processedCount} suppliers.`);
+      return {
+        success: true,
+        processedCount,
+        checked: res.rows.length,
+        updated: processedCount,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (err: any) {
+      console.error('[COMPLETENESS SERVICE RUN DAILY JOB ERROR]', err);
+      return {
+        success: false,
+        error: err.message,
+        processedCount: 0,
+        checked: 0,
+        updated: 0,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  startScheduler() {
+    console.log('[COMPLETENESS SERVICE] Daily completeness reconciliation scheduler active (target: 00:05 Africa/Gaborone).');
+    if (this.timer) {
+      clearInterval(this.timer);
+    }
+    this.timer = setInterval(() => {
+      this.runDailyJob().catch((err) => {
+        console.warn('[COMPLETENESS SERVICE CRON ERROR]', err);
+      });
+    }, 24 * 60 * 60 * 1000);
+    if (this.timer.unref) {
+      this.timer.unref();
+    }
+  }
+}
+
+export const completenessService = new CompletenessService();
+

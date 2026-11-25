@@ -1,7 +1,8 @@
 import crypto from 'crypto';
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 import { computeSupplierCompleteness, CompletenessResult } from '../services/completeness.service';
 import { auditRepository } from './audit.repository';
+import { clearReferenceCache } from './reference.repository';
 
 export interface SupplierProfile {
   id: string;
@@ -256,6 +257,7 @@ export async function resolveDistrictId(input?: string | null): Promise<string |
         [cleanName || trimmed]
       );
       if (insertRes.rows[0]?.id) {
+        clearReferenceCache('districts');
         return insertRes.rows[0].id;
       }
     } catch {
@@ -317,7 +319,7 @@ export class SuppliersRepository {
           [supplierId]
         ),
         query(
-          `SELECT ownership_percent, is_active FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
+          `SELECT ownership_percent, ownership_percent AS "ownershipPercent", is_active FROM supplier_people WHERE supplier_id = $1 AND is_active = TRUE`,
           [supplierId]
         ),
         query(
@@ -646,7 +648,9 @@ export class SuppliersRepository {
     const encryptionKey = process.env.ID_ENCRYPTION_KEY || 'bidready360-default-id-encryption-secret-key-2026';
     const res = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
-              person_role AS "personRole", ownership_percent AS "ownershipPercent",
+              person_role AS "personRole", person_role,
+              ownership_percent AS "ownershipPercent", ownership_percent,
+              is_active AS "isActive", is_active,
               identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
               email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
               CASE WHEN national_identity_number_encrypted IS NOT NULL 
@@ -730,7 +734,7 @@ export class SuppliersRepository {
       }
     }
 
-    const newPersonId = await withTransaction(async (client) => {
+    const newPersonId = await tx(async (client) => {
       const insertRes = await client.query(
         `INSERT INTO supplier_people (
            supplier_id, full_name, person_role, ownership_percent, identity_type,
@@ -853,7 +857,7 @@ export class SuppliersRepository {
       }
     }
 
-    return await withTransaction(async (client) => {
+    return await tx(async (client) => {
       await client.query(
         `UPDATE supplier_people
          SET full_name = COALESCE($3, full_name),
@@ -922,7 +926,7 @@ export class SuppliersRepository {
   }
 
   async deletePerson(supplierId: string, personId: string, user?: any): Promise<{ ok: boolean; id?: string; alreadyRemoved?: boolean }> {
-    const result = await withTransaction(async (client) => {
+    const result = await tx(async (client) => {
       const checkRes = await client.query(
         `SELECT id, is_active FROM supplier_people WHERE id = $1 AND supplier_id = $2`,
         [personId, supplierId]

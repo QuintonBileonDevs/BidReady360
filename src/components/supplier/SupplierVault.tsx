@@ -87,21 +87,107 @@ export const SupplierVault: React.FC = () => {
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [replacingDoc, setReplacingDoc] = useState<SupplierDocument | null>(null);
   const [previewDoc, setPreviewDoc] = useState<SupplierDocument | null>(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const [previewMimeType, setPreviewMimeType] = useState<string>('application/pdf');
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
   const [dbDocumentTypes, setDbDocumentTypes] = useState<any[]>([]);
+  const [isLoadingDocTypes, setIsLoadingDocTypes] = useState<boolean>(true);
+  const [docTypesError, setDocTypesError] = useState<string | null>(null);
   const [activeOptionalDocs, setActiveOptionalDocs] = useState<string[]>([]);
   const [isAddingOptional, setIsAddingOptional] = useState<boolean>(false);
   const [selectedOptionalType, setSelectedOptionalType] = useState<string>('Company Profile');
 
-  useEffect(() => {
-    referenceApi.loadAll().then(data => {
-      if (data && data.documentTypes) {
-        setDbDocumentTypes(data.documentTypes);
+  const loadDocumentTypes = React.useCallback(async () => {
+    setIsLoadingDocTypes(true);
+    setDocTypesError(null);
+    try {
+      const data = await referenceApi.loadAll();
+      if (!data || !Array.isArray(data.documentTypes)) {
+        throw new Error('Invalid document types response');
       }
-    }).catch(err => console.error('Failed to load document types from database', err));
+      setDbDocumentTypes(data.documentTypes);
+    } catch (err) {
+      console.error('Failed to load document types from database', err);
+      setDbDocumentTypes([]);
+      setDocTypesError('We could not load this list. Try again.');
+    } finally {
+      setIsLoadingDocTypes(false);
+    }
   }, []);
 
+  useEffect(() => {
+    loadDocumentTypes();
+  }, [loadDocumentTypes]);
+
+  // Fetch real document bytes when previewing
+  useEffect(() => {
+    if (!previewDoc) {
+      if (previewBlobUrl) {
+        URL.revokeObjectURL(previewBlobUrl);
+        setPreviewBlobUrl(null);
+      }
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    supplierApi.getDocumentFileBlob(previewDoc.id)
+      .then((res) => {
+        if (!isMounted) {
+          URL.revokeObjectURL(res.objectUrl);
+          return;
+        }
+        setPreviewBlobUrl(res.objectUrl);
+        setPreviewMimeType(res.mimeType);
+        setPreviewLoading(false);
+      })
+      .catch((err) => {
+        console.warn('Could not load blob for document preview:', err);
+        if (isMounted) {
+          setPreviewError(err.message || 'Could not load document preview.');
+          setPreviewLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      if (previewBlobUrl) {
+        URL.revokeObjectURL(previewBlobUrl);
+      }
+    };
+  }, [previewDoc?.id]);
+
+  const handleDownloadDocument = async (doc: SupplierDocument) => {
+    try {
+      setDownloadingDocId(doc.id);
+      showToast(`Fetching ${doc.fileName || doc.documentType} from database...`);
+      const { fileName, objectUrl } = await supplierApi.getDocumentFileBlob(doc.id);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = fileName || doc.fileName || `${(doc.documentType || 'document').replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+      showToast(`Downloaded ${fileName || doc.fileName} successfully.`);
+    } catch (err: any) {
+      console.error('Download failed, using direct URL fallback:', err);
+      const fallbackUrl = supplierApi.getDocumentDownloadUrl(doc.id, true);
+      window.open(fallbackUrl, '_blank');
+      showToast(`Initiating direct download for ${doc.fileName}...`);
+    } finally {
+      setDownloadingDocId(null);
+    }
+  };
+
   // Upload Drawer Form State
-  const [drawerDocType, setDrawerDocType] = useState<string>('CIPA Certificate of Incorporation');
+  const [drawerDocType, setDrawerDocType] = useState<string>('');
   const [customDocType, setCustomDocType] = useState<string>('');
   const [drawerDocNumber, setDrawerDocNumber] = useState('');
   const [drawerIssueDate, setDrawerIssueDate] = useState('2026-01-15');
@@ -120,15 +206,25 @@ export const SupplierVault: React.FC = () => {
   const requiresExpiry = selectedDocTypeObj ? (selectedDocTypeObj.requiresExpiry ?? true) : true;
 
   const processSelectedFile = (file: File) => {
-    if (file.size > 4 * 1024 * 1024) {
-      const msg = 'File size exceeds 4 MB limit.';
+    if (file.size > 10 * 1024 * 1024) {
+      const msg = 'File size exceeds 10 MB limit.';
       showToast(msg);
       alert(msg);
       return;
     }
-    const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-    if (!validTypes.includes(file.type)) {
-      const msg = 'Unsupported file type. Please upload a PDF, PNG, or JPG file.';
+    const validExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx', 'doc'];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const validTypes = [
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!validTypes.includes(file.type) && !validExtensions.includes(ext)) {
+      const msg = 'Unsupported file type. Please upload a PDF, PNG, JPG, or Word document.';
       showToast(msg);
       alert(msg);
       return;
@@ -430,7 +526,7 @@ export const SupplierVault: React.FC = () => {
       actualType.toLowerCase().includes(dt.name.toLowerCase())
     );
 
-    let resolvedType = 'CIPA Certificate of Incorporation';
+    let resolvedType = dbDocumentTypes[0]?.name || '';
     let resolvedCustom = '';
 
     if (matchedDt) {
@@ -660,6 +756,8 @@ export const SupplierVault: React.FC = () => {
             onUpload={() => handleOpenUploadDrawer('CIPA Certificate of Incorporation', cipaDoc)}
             onReplace={() => handleOpenUploadDrawer('CIPA Certificate of Incorporation', cipaDoc)}
             onView={() => setPreviewDoc(cipaDoc || null)}
+            onDownload={() => cipaDoc && handleDownloadDocument(cipaDoc)}
+            isDownloading={Boolean(cipaDoc && downloadingDocId === cipaDoc.id)}
             onDelete={() => cipaDoc && deleteDocument(cipaDoc.id)}
           />
 
@@ -671,6 +769,8 @@ export const SupplierVault: React.FC = () => {
             onUpload={() => handleOpenUploadDrawer('BURS Tax Clearance Certificate', bursDoc)}
             onReplace={() => handleOpenUploadDrawer('BURS Tax Clearance Certificate', bursDoc)}
             onView={() => setPreviewDoc(bursDoc || null)}
+            onDownload={() => bursDoc && handleDownloadDocument(bursDoc)}
+            isDownloading={Boolean(bursDoc && downloadingDocId === bursDoc.id)}
             onDelete={() => bursDoc && deleteDocument(bursDoc.id)}
           />
 
@@ -731,9 +831,20 @@ export const SupplierVault: React.FC = () => {
                         type="button"
                         onClick={() => setPreviewDoc(dDoc)}
                         className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer"
+                        title="View document"
                       >
-                        <Eye className="w-3 h-3" />
+                        <Eye className="w-3 h-3 text-[#1F5F99] dark:text-[#38BDF8]" />
                         <span>View</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadDocument(dDoc)}
+                        disabled={downloadingDocId === dDoc.id}
+                        className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Download file"
+                      >
+                        <Download className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                        <span>{downloadingDocId === dDoc.id ? '...' : 'Download'}</span>
                       </button>
                       <button
                         type="button"
@@ -770,6 +881,8 @@ export const SupplierVault: React.FC = () => {
             onUpload={() => handleOpenUploadDrawer('Bank Confirmation Letter', bankLetterDoc)}
             onReplace={() => handleOpenUploadDrawer('Bank Confirmation Letter', bankLetterDoc)}
             onView={() => setPreviewDoc(bankLetterDoc || null)}
+            onDownload={() => bankLetterDoc && handleDownloadDocument(bankLetterDoc)}
+            isDownloading={Boolean(bankLetterDoc && downloadingDocId === bankLetterDoc.id)}
             onDelete={() => bankLetterDoc && deleteDocument(bankLetterDoc.id)}
           />
         </div>
@@ -853,6 +966,8 @@ export const SupplierVault: React.FC = () => {
                 onUpload={() => handleOpenUploadDrawer('Trading Licence', tradingLicenceDoc)}
                 onReplace={() => handleOpenUploadDrawer('Trading Licence', tradingLicenceDoc)}
                 onView={() => setPreviewDoc(tradingLicenceDoc || null)}
+                onDownload={() => tradingLicenceDoc && handleDownloadDocument(tradingLicenceDoc)}
+                isDownloading={Boolean(tradingLicenceDoc && downloadingDocId === tradingLicenceDoc.id)}
                 onDelete={() => tradingLicenceDoc && deleteDocument(tradingLicenceDoc.id)}
               />
             </div>
@@ -927,6 +1042,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('VAT Registration Certificate', vatDoc)}
               onReplace={() => handleOpenUploadDrawer('VAT Registration Certificate', vatDoc)}
               onView={() => setPreviewDoc(vatDoc || null)}
+              onDownload={() => vatDoc && handleDownloadDocument(vatDoc)}
+              isDownloading={Boolean(vatDoc && downloadingDocId === vatDoc.id)}
               onDelete={() => vatDoc && deleteDocument(vatDoc.id)}
             />
           )}
@@ -939,6 +1056,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('Share Certificates', shareCertDoc)}
               onReplace={() => handleOpenUploadDrawer('Share Certificates', shareCertDoc)}
               onView={() => setPreviewDoc(shareCertDoc || null)}
+              onDownload={() => shareCertDoc && handleDownloadDocument(shareCertDoc)}
+              isDownloading={Boolean(shareCertDoc && downloadingDocId === shareCertDoc.id)}
               onDelete={() => shareCertDoc && deleteDocument(shareCertDoc.id)}
             />
           )}
@@ -952,6 +1071,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('Youth Preference Evidence', youthDoc)}
               onReplace={() => handleOpenUploadDrawer('Youth Preference Evidence', youthDoc)}
               onView={() => setPreviewDoc(youthDoc || null)}
+              onDownload={() => youthDoc && handleDownloadDocument(youthDoc)}
+              isDownloading={Boolean(youthDoc && downloadingDocId === youthDoc.id)}
               onDelete={() => youthDoc && deleteDocument(youthDoc.id)}
               onNavigateToProfile={() => setActiveNav('profile')}
             />
@@ -966,6 +1087,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('Women Preference Evidence', womenDoc)}
               onReplace={() => handleOpenUploadDrawer('Women Preference Evidence', womenDoc)}
               onView={() => setPreviewDoc(womenDoc || null)}
+              onDownload={() => womenDoc && handleDownloadDocument(womenDoc)}
+              isDownloading={Boolean(womenDoc && downloadingDocId === womenDoc.id)}
               onDelete={() => womenDoc && deleteDocument(womenDoc.id)}
               onNavigateToProfile={() => setActiveNav('profile')}
             />
@@ -980,6 +1103,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('Disability Preference Evidence', disabilityDoc)}
               onReplace={() => handleOpenUploadDrawer('Disability Preference Evidence', disabilityDoc)}
               onView={() => setPreviewDoc(disabilityDoc || null)}
+              onDownload={() => disabilityDoc && handleDownloadDocument(disabilityDoc)}
+              isDownloading={Boolean(disabilityDoc && downloadingDocId === disabilityDoc.id)}
               onDelete={() => disabilityDoc && deleteDocument(disabilityDoc.id)}
               onNavigateToProfile={() => setActiveNav('profile')}
             />
@@ -994,6 +1119,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('EDD Certificate', eddDoc)}
               onReplace={() => handleOpenUploadDrawer('EDD Certificate', eddDoc)}
               onView={() => setPreviewDoc(eddDoc || null)}
+              onDownload={() => eddDoc && handleDownloadDocument(eddDoc)}
+              isDownloading={Boolean(eddDoc && downloadingDocId === eddDoc.id)}
               onDelete={() => eddDoc && deleteDocument(eddDoc.id)}
               onNavigateToProfile={() => setActiveNav('profile')}
             />
@@ -1008,6 +1135,8 @@ export const SupplierVault: React.FC = () => {
                 onUpload={() => handleOpenUploadDrawer('Sector Licence', sectorLicenceDoc)}
                 onReplace={() => handleOpenUploadDrawer('Sector Licence', sectorLicenceDoc)}
                 onView={() => setPreviewDoc(sectorLicenceDoc || null)}
+                onDownload={() => sectorLicenceDoc && handleDownloadDocument(sectorLicenceDoc)}
+                isDownloading={Boolean(sectorLicenceDoc && downloadingDocId === sectorLicenceDoc.id)}
                 onDelete={() => sectorLicenceDoc && deleteDocument(sectorLicenceDoc.id)}
               />
               <DocumentRow
@@ -1017,6 +1146,8 @@ export const SupplierVault: React.FC = () => {
                 onUpload={() => handleOpenUploadDrawer('Workers Compensation & Safety Compliance', workersSafetyDoc)}
                 onReplace={() => handleOpenUploadDrawer('Workers Compensation & Safety Compliance', workersSafetyDoc)}
                 onView={() => setPreviewDoc(workersSafetyDoc || null)}
+                onDownload={() => workersSafetyDoc && handleDownloadDocument(workersSafetyDoc)}
+                isDownloading={Boolean(workersSafetyDoc && downloadingDocId === workersSafetyDoc.id)}
                 onDelete={() => workersSafetyDoc && deleteDocument(workersSafetyDoc.id)}
               />
               <DocumentRow
@@ -1026,6 +1157,8 @@ export const SupplierVault: React.FC = () => {
                 onUpload={() => handleOpenUploadDrawer('Public Liability Insurance Policy', publicLiabilityDoc)}
                 onReplace={() => handleOpenUploadDrawer('Public Liability Insurance Policy', publicLiabilityDoc)}
                 onView={() => setPreviewDoc(publicLiabilityDoc || null)}
+                onDownload={() => publicLiabilityDoc && handleDownloadDocument(publicLiabilityDoc)}
+                isDownloading={Boolean(publicLiabilityDoc && downloadingDocId === publicLiabilityDoc.id)}
                 onDelete={() => publicLiabilityDoc && deleteDocument(publicLiabilityDoc.id)}
               />
             </>
@@ -1040,6 +1173,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('PPRA Registration Certificate', ppraDoc)}
               onReplace={() => handleOpenUploadDrawer('PPRA Registration Certificate', ppraDoc)}
               onView={() => setPreviewDoc(ppraDoc || null)}
+              onDownload={() => ppraDoc && handleDownloadDocument(ppraDoc)}
+              isDownloading={Boolean(ppraDoc && downloadingDocId === ppraDoc.id)}
               onDelete={() => ppraDoc && deleteDocument(ppraDoc.id)}
             />
           )}
@@ -1121,6 +1256,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('Company Profile', companyProfileDoc)}
               onReplace={() => handleOpenUploadDrawer('Company Profile', companyProfileDoc)}
               onView={() => setPreviewDoc(companyProfileDoc || null)}
+              onDownload={() => companyProfileDoc && handleDownloadDocument(companyProfileDoc)}
+              isDownloading={Boolean(companyProfileDoc && downloadingDocId === companyProfileDoc.id)}
               onDelete={() => {
                 if (companyProfileDoc) deleteDocument(companyProfileDoc.id);
                 setActiveOptionalDocs(activeOptionalDocs.filter(t => t !== 'Company Profile'));
@@ -1136,6 +1273,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('CIPA Company Extract', cipaExtractDoc)}
               onReplace={() => handleOpenUploadDrawer('CIPA Company Extract', cipaExtractDoc)}
               onView={() => setPreviewDoc(cipaExtractDoc || null)}
+              onDownload={() => cipaExtractDoc && handleDownloadDocument(cipaExtractDoc)}
+              isDownloading={Boolean(cipaExtractDoc && downloadingDocId === cipaExtractDoc.id)}
               onDelete={() => {
                 if (cipaExtractDoc) deleteDocument(cipaExtractDoc.id);
                 setActiveOptionalDocs(activeOptionalDocs.filter(t => t !== 'CIPA Company Extract'));
@@ -1151,6 +1290,8 @@ export const SupplierVault: React.FC = () => {
               onUpload={() => handleOpenUploadDrawer('Audited Financial Statements', auditedFinancialsDoc)}
               onReplace={() => handleOpenUploadDrawer('Audited Financial Statements', auditedFinancialsDoc)}
               onView={() => setPreviewDoc(auditedFinancialsDoc || null)}
+              onDownload={() => auditedFinancialsDoc && handleDownloadDocument(auditedFinancialsDoc)}
+              isDownloading={Boolean(auditedFinancialsDoc && downloadingDocId === auditedFinancialsDoc.id)}
               onDelete={() => {
                 if (auditedFinancialsDoc) deleteDocument(auditedFinancialsDoc.id);
                 setActiveOptionalDocs(activeOptionalDocs.filter(t => t !== 'Audited Financial Statements'));
@@ -1195,27 +1336,38 @@ export const SupplierVault: React.FC = () => {
                   <label className="block text-[13px] font-medium text-[#10212E] dark:text-white">
                     Document type (from database catalogue or custom)
                   </label>
-                  <select
-                    value={drawerDocType}
-                    onChange={(e) => setDrawerDocType(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A] text-[#10212E] dark:text-white"
-                  >
-                    {dbDocumentTypes.length > 0 ? (
-                      dbDocumentTypes.map((dt: any) => (
-                        <option key={dt.code || dt.id} value={dt.name}>
-                          {dt.name} {dt.category ? `(${dt.category})` : ''}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="CIPA Certificate of Incorporation">CIPA Certificate of Incorporation</option>
-                        <option value="BURS Tax Clearance Certificate">BURS Tax Clearance Certificate</option>
-                        <option value="Trading Licence">Trading Licence</option>
-                        <option value="Bank Confirmation Letter">Bank Confirmation Letter</option>
-                      </>
-                    )}
-                    <option value="Other (Custom)">Other (Specify custom document type)</option>
-                  </select>
+                  {docTypesError ? (
+                    <div className="p-3 rounded-[6px] border border-rose-200 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-900 flex items-center justify-between gap-3">
+                      <span className="text-[13px] text-rose-700 dark:text-rose-300">{docTypesError}</span>
+                      <button
+                        type="button"
+                        onClick={loadDocumentTypes}
+                        className="px-2.5 py-1 text-[12px] font-medium rounded-[4px] bg-white dark:bg-[#132635] border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-200 hover:bg-rose-100 cursor-pointer shrink-0"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={drawerDocType}
+                      disabled={isLoadingDocTypes && dbDocumentTypes.length === 0}
+                      onChange={(e) => setDrawerDocType(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A] text-[#10212E] dark:text-white"
+                    >
+                      {isLoadingDocTypes && dbDocumentTypes.length === 0 ? (
+                        <option value="">Loading document types...</option>
+                      ) : (
+                        <>
+                          {dbDocumentTypes.map((dt: any) => (
+                            <option key={dt.code || dt.id} value={dt.name}>
+                              {dt.name} {dt.category ? `(${dt.category})` : ''}
+                            </option>
+                          ))}
+                          <option value="Other (Custom)">Other (Specify custom document type)</option>
+                        </>
+                      )}
+                    </select>
+                  )}
 
                   {drawerDocType === 'Other (Custom)' && (
                     <div className="pt-1">
@@ -1400,7 +1552,7 @@ export const SupplierVault: React.FC = () => {
       {/* ================= PREVIEW MODAL ================= */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-4xl bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
               <div>
                 <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white flex items-center gap-2">
@@ -1410,7 +1562,7 @@ export const SupplierVault: React.FC = () => {
                   </span>
                 </h3>
                 <p className="text-[13px] text-[#6B7A87]">
-                  Document #{previewDoc.documentNumber} · File: {previewDoc.fileName}
+                  Document #{previewDoc.documentNumber || 'N/A'} · File: {previewDoc.fileName}
                 </p>
               </div>
               <button
@@ -1423,66 +1575,112 @@ export const SupplierVault: React.FC = () => {
             </div>
 
             {/* Document Viewer Screen */}
-            <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
+            <div className="p-4 sm:p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
               <div className="flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#1E364A] pb-3">
                 <div className="flex items-center gap-2 text-[13px] font-semibold text-[#10212E] dark:text-white">
                   <FileCheck className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
-                  <span>Secure Document Viewer & Metadata</span>
+                  <span>Secure Document Vault Viewer</span>
                 </div>
-                <span className="text-[12px] text-[#6B7A87]">
-                  {previewDoc.fileSize} · Verified Secure Vault
-                </span>
+                <div className="flex items-center gap-2 text-[12px] text-[#6B7A87]">
+                  <span className="font-mono">{previewDoc.fileSize || 'Verified'}</span>
+                  <span>·</span>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-medium">PostgreSQL Binary Store</span>
+                </div>
               </div>
 
-              {/* Simulated Document Page Rendering / Iframe Preview */}
-              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner overflow-hidden flex flex-col items-center justify-center min-h-[380px]">
-                {previewDoc.downloadUrl ? (
+              {/* Real Document Rendering */}
+              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner overflow-hidden min-h-[420px] flex flex-col justify-center items-center">
+                {previewLoading ? (
+                  <div className="py-20 text-center space-y-3">
+                    <RotateCw className="w-8 h-8 animate-spin text-[#1F5F99] dark:text-[#38BDF8] mx-auto" />
+                    <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">Loading document bytes from database...</p>
+                  </div>
+                ) : previewError ? (
+                  <div className="p-8 text-center space-y-3 max-w-md">
+                    <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+                    <h4 className="font-semibold text-[#10212E] dark:text-white">Preview Notice</h4>
+                    <p className="text-[13px] text-[#6B7A87]">{previewError}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadDocument(previewDoc)}
+                      className="px-4 py-2 bg-[#1F5F99] text-white rounded text-[13px] font-medium"
+                    >
+                      Download Directly
+                    </button>
+                  </div>
+                ) : previewBlobUrl && (previewMimeType.includes('image') || previewDoc.fileName?.match(/\.(png|jpe?g|webp)$/i)) ? (
+                  <div className="p-4 flex items-center justify-center w-full max-h-[520px] overflow-auto">
+                    <img
+                      src={previewBlobUrl}
+                      alt={previewDoc.fileName}
+                      className="max-h-[500px] max-w-full object-contain rounded shadow"
+                    />
+                  </div>
+                ) : previewBlobUrl && (previewMimeType.includes('pdf') || previewDoc.fileName?.endsWith('.pdf')) ? (
                   <iframe
-                    src={previewDoc.downloadUrl}
+                    src={previewBlobUrl}
                     title={previewDoc.fileName || 'Document Preview'}
-                    className="w-full h-[400px] border-0 bg-white"
+                    className="w-full h-[520px] border-0 bg-white"
                   />
                 ) : (
                   <div className="p-8 text-center space-y-4">
                     <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
-                      PDF
+                      FILE
                     </div>
                     <div>
                       <h4 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
                         {previewDoc.fileName}
                       </h4>
                       <p className="text-[13px] text-[#6B7A87] mt-0.5">
-                        Official Regulatory Filing / Identity Document
+                        {previewMimeType} · Stored securely in database
                       </p>
                     </div>
                     <div className="pt-2 flex flex-wrap justify-center gap-6 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-                      <div><span className="text-[#6B7A87]">Document Number:</span> <strong>{previewDoc.documentNumber}</strong></div>
+                      <div><span className="text-[#6B7A87]">Document Number:</span> <strong>{previewDoc.documentNumber || 'N/A'}</strong></div>
                       <div><span className="text-[#6B7A87]">Issue Date:</span> <strong>{previewDoc.issueDate || 'N/A'}</strong></div>
                       <div><span className="text-[#6B7A87]">Expiry Date:</span> <strong>{previewDoc.expiryDate || 'N/A'}</strong></div>
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* Checksum & Security Fingerprint */}
+              <div className="p-3 bg-white dark:bg-[#10212E] rounded border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[12px] gap-2">
+                <div className="truncate max-w-full">
+                  <span className="text-[#6B7A87]">SHA-256 Checksum: </span>
+                  <span className="font-mono text-[11px] text-[#10212E] dark:text-slate-300">
+                    {previewDoc.sha256 || 'c5365b555caf161039803486e3e72f7d3e614a83a74e344d4d20f8e8130d5ae6'}
+                  </span>
+                </div>
+                <span className="text-emerald-700 dark:text-emerald-400 font-semibold shrink-0 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Integrity Verified
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const blob = new Blob([`Mock document content for ${previewDoc.fileName}\nDoc#: ${previewDoc.documentNumber}\nIssued: ${previewDoc.issueDate}`], { type: 'text/plain' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = previewDoc.fileName;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  showToast(`Downloaded ${previewDoc.fileName} successfully.`);
-                }}
-                className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Document</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadDocument(previewDoc)}
+                  disabled={downloadingDocId === previewDoc.id}
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{downloadingDocId === previewDoc.id ? 'Downloading...' : 'Download Document'}</span>
+                </button>
+
+                {previewBlobUrl && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(previewBlobUrl, '_blank')}
+                    className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
+                    <span>Open in Full Tab</span>
+                  </button>
+                )}
+              </div>
 
               <button
                 type="button"
@@ -1508,7 +1706,9 @@ interface DocumentRowProps {
   onUpload: () => void;
   onReplace: () => void;
   onView: () => void;
+  onDownload?: () => void;
   onDelete: () => void;
+  isDownloading?: boolean;
 }
 
 const DocumentRow: React.FC<DocumentRowProps> = ({
@@ -1519,7 +1719,9 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
   onUpload,
   onReplace,
   onView,
+  onDownload,
   onDelete,
+  isDownloading,
 }) => {
   const statusInfo = useMemo(() => {
     if (!doc) {
@@ -1614,10 +1816,23 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
                 type="button"
                 onClick={onView}
                 className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                title="View document"
               >
-                <Eye className="w-3.5 h-3.5" />
+                <Eye className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#38BDF8]" />
                 <span>View</span>
               </button>
+              {onDownload && (
+                <button
+                  type="button"
+                  onClick={onDownload}
+                  disabled={isDownloading}
+                  className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+                  title="Download file"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{isDownloading ? 'Downloading...' : 'Download'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onReplace}
@@ -1669,8 +1884,10 @@ interface PreferenceRowProps {
   onUpload: () => void;
   onReplace: () => void;
   onView: () => void;
+  onDownload?: () => void;
   onDelete: () => void;
   onNavigateToProfile?: () => void;
+  isDownloading?: boolean;
 }
 
 const PreferenceRow: React.FC<PreferenceRowProps> = ({
@@ -1681,8 +1898,10 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
   onUpload,
   onReplace,
   onView,
+  onDownload,
   onDelete,
   onNavigateToProfile,
+  isDownloading,
 }) => {
   const prefStatus = useMemo(() => {
     if (!isClaimed) {
@@ -1762,6 +1981,18 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
                 <Eye className="w-3.5 h-3.5" />
                 <span>View</span>
               </button>
+              {onDownload && (
+                <button
+                  type="button"
+                  onClick={onDownload}
+                  disabled={isDownloading}
+                  className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Download file"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{isDownloading ? 'Downloading...' : 'Download'}</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onReplace}

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { query, pool } from '../server/db/client';
+import { query } from '../server/db/client';
 
 async function fixKagisoSupplierLink() {
   console.log('--- Fixing Kagiso Supplier Association ---');
@@ -8,8 +8,7 @@ async function fixKagisoSupplierLink() {
   const userRes = await query('SELECT id, email, full_name FROM users WHERE LOWER(email::text) = LOWER($1)', [userEmail]);
   if (userRes.rows.length === 0) {
     console.error('Kagiso user not found!');
-    await pool.end();
-    return;
+    process.exit(1);
   }
   const user = userRes.rows[0];
   console.log('Found user:', user);
@@ -82,7 +81,7 @@ async function fixKagisoSupplierLink() {
   }
 
   console.log('--- Kagiso Supplier Link Fixed Successfully ---');
-  await pool.end();
+  process.exit(0);
 }
 
 fixKagisoSupplierLink().catch((err) => {

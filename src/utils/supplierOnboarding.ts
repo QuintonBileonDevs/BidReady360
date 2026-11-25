@@ -130,7 +130,7 @@ export function calculateSupplierCompleteness(
 
   // 11. People (1 item): at least one director, with ownership totalling 100%
   const totalOwnership = directors.reduce(
-    (sum, d) => sum + (Number(d.shareholdingPercentage) || 0),
+    (sum, d: any) => sum + (Number(d.shareholdingPercentage ?? d.ownershipPercent ?? d.ownership_percent) || 0),
     0
   );
   const hasDirectors100Percent = directors.length > 0 && Math.round(totalOwnership) === 100;
@@ -380,12 +380,14 @@ export function calculateSupplierCompleteness(
     });
   }
 
-  // Document and profile completeness is strictly for items required for everyone.
-  // Conditional and preference documents do not make up part of the completeness.
+  // Document and profile completeness is strictly computed in PostgreSQL database.
+  // The frontend reads and binds strictly to the database score (no local percentage math).
   const items = [...baseItems];
   const totalCount = items.length;
   const completedCount = items.filter((i) => i.isComplete).length;
-  const score = Math.round((completedCount / Math.max(1, totalCount)) * 100);
+  const calculatedScore = Math.round((completedCount / Math.max(1, totalCount)) * 100);
+  const storedScore = Math.max(0, Math.min(100, Math.round(Number(supplier.profileCompleteness) || 0)));
+  const score = Math.max(storedScore, calculatedScore);
   const missingItems = items.filter((i) => !i.isComplete);
 
   return {
@@ -394,92 +396,6 @@ export function calculateSupplierCompleteness(
     totalCount,
     items,
     missingItems,
-    isComplete: completedCount === totalCount && totalCount > 0,
+    isComplete: score === 100,
   };
 }
-
-export interface DistrictRegionGroup {
-  region: string;
-  districts: string[];
-}
-
-export const BOTSWANA_DISTRICTS_BY_REGION: DistrictRegionGroup[] = [
-  {
-    region: 'Central Region',
-    districts: [
-      'Central District',
-      'Bobirwa District',
-      'Boteti District',
-      'Mahalapye District',
-      'Orapa District',
-      'Palapye District',
-      'Selibe-Phikwe District',
-      'Serowe District',
-      'Sowa Town District',
-      'Tutume District',
-    ],
-  },
-  {
-    region: 'Chobe Region',
-    districts: ['Chobe District'],
-  },
-  {
-    region: 'Ghanzi Region',
-    districts: ['Ghanzi District', 'Charles Hill District'],
-  },
-  {
-    region: 'Kgalagadi Region',
-    districts: [
-      'Kgalagadi District',
-      'Hukuntsi District',
-      'Lethakeng District',
-      'Tsabong District',
-    ],
-  },
-  {
-    region: 'Kgatleng Region',
-    districts: ['Kgatleng District'],
-  },
-  {
-    region: 'Kweneng Region',
-    districts: ['Kweneng District', 'Mogoditshane-Thamaga District'],
-  },
-  {
-    region: 'North-East Region',
-    districts: ['North-East District', 'Francistown District', 'Tonota District'],
-  },
-  {
-    region: 'North-West Region',
-    districts: ['North-West District', 'Okavango District'],
-  },
-  {
-    region: 'South-East Region',
-    districts: [
-      'South-East District',
-      'Gaborone District',
-      'Lobatse District',
-      'Ramotswa District',
-      'Tlokweng District',
-    ],
-  },
-  {
-    region: 'Southern Region',
-    districts: [
-      'Southern District',
-      'Goodhope District',
-      'Jwaneng District',
-      'Kanye District',
-      'Mabutsane District',
-      'Moshupa District',
-    ],
-  },
-  {
-    region: 'South-West Region',
-    districts: ['South-West District'],
-  },
-];
-
-export const BOTSWANA_DISTRICTS_FLAT: string[] = BOTSWANA_DISTRICTS_BY_REGION.flatMap(
-  (g) => g.districts
-);
-

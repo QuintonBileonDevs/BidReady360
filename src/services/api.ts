@@ -391,6 +391,46 @@ export const supplierApi = {
     });
   },
 
+  getDocumentDownloadUrl(docId: string, download = false): string {
+    const token = localStorage.getItem('bidready_token');
+    const params = new URLSearchParams();
+    if (download) params.set('download', '1');
+    if (token) params.set('token', token);
+    return `/api/supplier/documents/${encodeURIComponent(docId)}/file?${params.toString()}`;
+  },
+
+  async getDocumentFileBlob(docId: string): Promise<{ blob: Blob; fileName: string; mimeType: string; objectUrl: string }> {
+    const token = localStorage.getItem('bidready_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`/api/supplier/documents/${encodeURIComponent(docId)}/file`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.message || `Failed to fetch document file (${res.status})`);
+    }
+
+    let fileName = 'document.pdf';
+    const disposition = res.headers.get('content-disposition');
+    if (disposition) {
+      const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+      if (match && match[1]) {
+        fileName = decodeURIComponent(match[1].trim());
+      }
+    }
+
+    const blob = await res.blob();
+    const mimeType = blob.type || res.headers.get('content-type') || 'application/pdf';
+    const objectUrl = URL.createObjectURL(blob);
+    return { blob, fileName, mimeType, objectUrl };
+  },
+
   async listPeople() {
     return apiRequest<any[]>('/api/supplier/people');
   },

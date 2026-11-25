@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 import { auditRepository } from './audit.repository';
 
 export interface BidRecordView {
@@ -108,7 +108,7 @@ export class BidsRepository {
     const sealedHash = crypto.createHash('sha256').update(payloadStr).digest('hex');
     const receiptNumber = `BID-${call.reference_no.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-6)}`;
 
-    return withTransaction(async (client) => {
+    return tx(async (client) => {
       // 3. Insert or update bid envelope in 'submitted' state with sealed payload
       const bidRes = await client.query<{ id: string }>(
         `INSERT INTO bids (
@@ -196,7 +196,7 @@ export class BidsRepository {
       throw new Error('Bids cannot be opened before the closing time. The statutory sealing protocol remains active.');
     }
 
-    return withTransaction(async (client) => {
+    return tx(async (client) => {
       // 1. Create opening session
       const sessionRes = await client.query<{ id: string }>(
         `INSERT INTO bid_opening_sessions (

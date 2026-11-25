@@ -4,12 +4,9 @@ import { useReadiness } from '../../context/ReadinessContext';
 import { supplierApi, referenceApi, CategoryTreeNode } from '../../services/api';
 import { DirectorsPanel } from './DirectorsPanel';
 import { Director } from '../../types';
-import { DB_CATEGORIES } from '../../data/dbCategories';
 import {
   calculateSupplierCompleteness,
   OnboardingChecklistItem,
-  BOTSWANA_DISTRICTS_BY_REGION,
-  BOTSWANA_DISTRICTS_FLAT,
 } from '../../utils/supplierOnboarding';
 import {
   Building2,
@@ -93,7 +90,11 @@ interface CategoryNode {
   children?: { id?: string; code: string; name: string }[];
 }
 
-const CATEGORY_TREE: CategoryNode[] = DB_CATEGORIES;
+interface DistrictItem {
+  id: string;
+  name: string;
+  administrativeRegion: string | null;
+}
 
 interface SupplierProfileProps {
   initialSection?: 'details' | 'directors' | 'categories' | 'projects' | 'preferences' | 'team';
@@ -237,7 +238,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
             idType: p.identityType === 'PASSPORT' ? 'Passport' : 'National ID (Omang)',
             nationality: p.nationality || 'Motswana',
             isCitizen: Boolean(p.isCitizen),
-            shareholdingPercentage: Number(p.ownershipPercent) || 0,
+            shareholdingPercentage: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
             role: p.personRole || 'Director',
             verificationStatus: 'Verified',
           }))
@@ -250,8 +251,9 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
   }, [activeSection]);
 
   // Categories State loaded from categories table
-  const [categoriesList, setCategoriesList] = useState<CategoryNode[]>(DB_CATEGORIES);
-  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [categoriesList, setCategoriesList] = useState<CategoryNode[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [expandedCategoryCodes, setExpandedCategoryCodes] = useState<Record<string, boolean>>({});
   const [categorySearch, setCategorySearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
@@ -262,26 +264,52 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       : []
   );
 
-  // Fetch live categories from categories table on mount
-  useEffect(() => {
-    let isMounted = true;
+  // Districts State loaded from geographic_districts table
+  const [districtsList, setDistrictsList] = useState<DistrictItem[]>([]);
+  const [isLoadingDistricts, setIsLoadingDistricts] = useState(true);
+  const [districtsError, setDistrictsError] = useState<string | null>(null);
+
+  const loadCategories = React.useCallback(async () => {
     setIsLoadingCategories(true);
-    referenceApi.getCategories()
-      .then((tree) => {
-        if (isMounted && Array.isArray(tree) && tree.length > 0) {
-          setCategoriesList(tree as CategoryNode[]);
-        }
-      })
-      .catch((err) => {
-        console.warn('Failed to fetch categories from database:', err);
-      })
-      .finally(() => {
-        if (isMounted) setIsLoadingCategories(false);
-      });
-    return () => {
-      isMounted = false;
-    };
+    setCategoriesError(null);
+    try {
+      const tree = await referenceApi.getCategories();
+      if (!Array.isArray(tree)) {
+        throw new Error('Invalid categories response');
+      }
+      setCategoriesList(tree as CategoryNode[]);
+    } catch (err) {
+      console.warn('Failed to fetch categories from database:', err);
+      setCategoriesList([]);
+      setCategoriesError('We could not load this list. Try again.');
+    } finally {
+      setIsLoadingCategories(false);
+    }
   }, []);
+
+  const loadDistricts = React.useCallback(async () => {
+    setIsLoadingDistricts(true);
+    setDistrictsError(null);
+    try {
+      const data = await referenceApi.loadAll();
+      if (!data || !Array.isArray(data.districts)) {
+        throw new Error('Invalid districts response');
+      }
+      setDistrictsList(data.districts);
+    } catch (err) {
+      console.warn('Failed to fetch districts from database:', err);
+      setDistrictsList([]);
+      setDistrictsError('We could not load this list. Try again.');
+    } finally {
+      setIsLoadingDistricts(false);
+    }
+  }, []);
+
+  // Fetch live categories & districts from database on mount
+  useEffect(() => {
+    loadCategories();
+    loadDistricts();
+  }, [loadCategories, loadDistricts]);
 
   const toggleCategoryExpand = (code: string) => {
     setExpandedCategoryCodes((prev) => ({
@@ -445,7 +473,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
   // Total shareholding calculation
   const totalOwnership = directorsList.reduce(
-    (sum, d) => sum + (Number(d.shareholdingPercentage) || 0),
+    (sum, d: any) => sum + (Number(d.shareholdingPercentage ?? d.ownershipPercent ?? d.ownership_percent) || 0),
     0
   );
 
@@ -1405,32 +1433,57 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       <label htmlFor="field-district" className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                         District *
                       </label>
-                      <select
-                        id="field-district"
-                        required
-                        value={detailsForm.district}
-                        onChange={(e) =>
-                          setDetailsForm({ ...detailsForm, district: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                      >
-                        <option value="">Select district...</option>
-                        {BOTSWANA_DISTRICTS_BY_REGION.map((grp) => (
-                          <optgroup key={grp.region} label={grp.region}>
-                            {grp.districts.map((d) => (
-                              <option key={d} value={d}>
-                                {d}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                        {detailsForm.district &&
-                          !BOTSWANA_DISTRICTS_FLAT.includes(detailsForm.district) && (
-                            <optgroup label="Other / Recorded">
-                              <option value={detailsForm.district}>{detailsForm.district}</option>
-                            </optgroup>
-                          )}
-                      </select>
+                      {districtsError ? (
+                        <div className="p-3 rounded-[6px] border border-rose-200 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-900 flex items-center justify-between gap-3">
+                          <span className="text-[13px] text-rose-700 dark:text-rose-300">{districtsError}</span>
+                          <button
+                            type="button"
+                            onClick={loadDistricts}
+                            className="px-2.5 py-1 text-[12px] font-medium rounded-[4px] bg-white dark:bg-[#132635] border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-200 hover:bg-rose-100 cursor-pointer shrink-0"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          id="field-district"
+                          required
+                          disabled={isLoadingDistricts && districtsList.length === 0}
+                          value={detailsForm.district}
+                          onChange={(e) =>
+                            setDetailsForm({ ...detailsForm, district: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        >
+                          <option value="">
+                            {isLoadingDistricts && districtsList.length === 0 ? 'Loading districts...' : 'Select district...'}
+                          </option>
+                          {(() => {
+                            const grouped = new Map<string, string[]>();
+                            districtsList.forEach((d) => {
+                              const region = d.administrativeRegion || 'Botswana';
+                              const list = grouped.get(region) || [];
+                              list.push(d.name);
+                              grouped.set(region, list);
+                            });
+                            return Array.from(grouped.entries()).map(([region, names]) => (
+                              <optgroup key={region} label={region}>
+                                {names.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ));
+                          })()}
+                          {detailsForm.district &&
+                            !districtsList.some((d) => d.name === detailsForm.district) && (
+                              <optgroup label="Other / Recorded">
+                                <option value={detailsForm.district}>{detailsForm.district}</option>
+                              </optgroup>
+                            )}
+                        </select>
+                      )}
                     </div>
                   </div>
 
@@ -2007,6 +2060,17 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     <div className="py-8 text-center text-[#6B7A87] flex flex-col items-center justify-center gap-2">
                       <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
                       <p className="text-[13px]">Loading categories from database...</p>
+                    </div>
+                  ) : categoriesError ? (
+                    <div className="py-8 text-center space-y-3">
+                      <p className="text-[14px] text-rose-600 dark:text-rose-400">{categoriesError}</p>
+                      <button
+                        type="button"
+                        onClick={loadCategories}
+                        className="px-3.5 py-1.5 text-[13px] font-medium rounded-[6px] bg-[#1F5F99] hover:bg-[#184c7a] text-white cursor-pointer"
+                      >
+                        Retry
+                      </button>
                     </div>
                   ) : (() => {
                     const q = categorySearch.trim().toLowerCase();

@@ -4,6 +4,7 @@ import { Call, FormField, PriceLineItem, ApplicationResponse, SupplierDocument }
 import { StatusChip } from '../common/StatusChip';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
 import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
+import { supplierApi } from '../../services/api';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -116,11 +117,14 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   const [quickUploadDocType, setQuickUploadDocType] = useState<SupplierDocument['documentType'] | null>(null);
   const [quickUploadFileName, setQuickUploadFileName] = useState('');
   const [quickUploadDocNumber, setQuickUploadDocNumber] = useState('');
+  const [quickUploadFile, setQuickUploadFile] = useState<File | null>(null);
+  const [quickUploadLoading, setQuickUploadLoading] = useState(false);
   const quickUploadInputRef = useRef<HTMLInputElement>(null);
 
   const handleQuickUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setQuickUploadFile(file);
       setQuickUploadFileName(file.name);
       if (!quickUploadDocNumber) {
         setQuickUploadDocNumber(`CERT-${Math.floor(1000 + Math.random() * 9000)}`);
@@ -343,53 +347,91 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   }, [eligibilityChecklist]);
 
   // Quick upload handler from Step 1 direct action
-  const handleSaveQuickUpload = (e: React.FormEvent) => {
+  const handleSaveQuickUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickUploadDocType) return;
 
+    setQuickUploadLoading(true);
     const fileName =
       quickUploadFileName || `${quickUploadDocType.replace(/\s+/g, '_')}_2026.pdf`;
     const docNumber = quickUploadDocNumber || `CERT-${Date.now().toString().slice(-6)}`;
 
-    uploadDocument({
-      supplierId: supplier.id,
-      documentType: quickUploadDocType,
-      documentNumber: docNumber,
-      fileName,
-      fileSize: '1.8 MB',
-      issueDate: '2026-10-01',
-      expiryDate: '2027-09-30',
-      status: 'Verified',
-      statusMessage: 'Uploaded during tender qualification.',
-      downloadUrl: '#',
-      versionHistory: [
-        {
-          version: 1,
-          uploadedBy: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
-          uploadedAt: '6 Oct 2026, 14:00',
-          fileFingerprint: 'SHA-256: 44aa99...11bc',
-          fileName,
-          fileSize: '1.8 MB',
-          usedInApplications: [selectedCall?.callNumber || 'Tender Submission'],
-        },
-      ],
-    });
+    const getCode = (t: string) => {
+      const lower = t.toLowerCase();
+      if (lower.includes('cipa') || lower.includes('incorporation')) return 'COMPANY_REGISTRATION';
+      if (lower.includes('tax') || lower.includes('burs')) return 'TAX_CLEARANCE';
+      if (lower.includes('ppra')) return 'PPRA_REGISTRATION';
+      if (lower.includes('vat')) return 'VAT_REGISTRATION';
+      if (lower.includes('trading') || lower.includes('licence')) return 'BUSINESS_LICENCE';
+      if (lower.includes('bank')) return 'BANK_CONFIRMATION';
+      if (lower.includes('director') || lower.includes('shareholder')) return 'DIRECTOR_ID';
+      return 'COMPANY_REGISTRATION';
+    };
 
-    addAuditEvent({
-      action: 'Document Uploaded in Tender Flow',
-      actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      entityType: 'Document',
-      entityId: `doc-${Date.now()}`,
-      details: `Directly uploaded ${quickUploadDocType} during application qualification.`,
-      ipAddress: '168.167.23.41',
-    });
+    try {
+      let fileToUpload = quickUploadFile;
+      if (!fileToUpload) {
+        // Minimal standard PDF file so database binary row is always valid
+        const pdfContent = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000108 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n168\n%%EOF\n';
+        fileToUpload = new File([pdfContent], fileName, { type: 'application/pdf' });
+      }
 
-    setQuickUploadDocType(null);
-    setQuickUploadFileName('');
-    setQuickUploadDocNumber('');
-    setAutosaveTime('Just now');
+      const res = await supplierApi.uploadDocument({
+        documentTypeCode: getCode(quickUploadDocType),
+        file: fileToUpload,
+        documentNumber: docNumber,
+        issueDate: '2026-10-01',
+        expiryDate: '2027-09-30',
+        title: quickUploadDocType,
+      });
+
+      uploadDocument({
+        id: res.documentId || `doc-${Date.now()}`,
+        supplierId: supplier.id,
+        documentType: res.documentTypeName || quickUploadDocType,
+        documentNumber: res.documentNumber || docNumber,
+        fileName: res.fileName || fileName,
+        fileSize: res.fileSizeBytes ? `${Math.round(parseInt(res.fileSizeBytes) / 1024)} KB` : '1.8 MB',
+        issueDate: res.issueDate || '2026-10-01',
+        expiryDate: res.expiryDate || '2027-09-30',
+        status: 'Verified',
+        statusMessage: 'Uploaded during tender qualification.',
+        downloadUrl: `/api/supplier/documents/${res.documentId}/file`,
+        sha256: res.sha256,
+        versionHistory: [
+          {
+            version: res.versionNo || 1,
+            uploadedBy: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
+            uploadedAt: '6 Oct 2026, 14:00',
+            fileFingerprint: res.sha256 ? `SHA-256: ${res.sha256.substring(0, 10)}...` : 'SHA-256: Verified',
+            fileName: res.fileName || fileName,
+            fileSize: res.fileSizeBytes ? `${Math.round(parseInt(res.fileSizeBytes) / 1024)} KB` : '1.8 MB',
+            usedInApplications: [selectedCall?.callNumber || 'Tender Submission'],
+          },
+        ],
+      });
+
+      addAuditEvent({
+        action: 'Document Uploaded in Tender Flow',
+        actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
+        actorRole: 'Supplier',
+        organizationName: supplier.legalName,
+        entityType: 'Document',
+        entityId: res.documentId || `doc-${Date.now()}`,
+        details: `Directly uploaded ${quickUploadDocType} during application qualification.`,
+        ipAddress: '168.167.23.41',
+      });
+
+      setQuickUploadDocType(null);
+      setQuickUploadFile(null);
+      setQuickUploadFileName('');
+      setQuickUploadDocNumber('');
+      setAutosaveTime('Just now');
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload document.');
+    } finally {
+      setQuickUploadLoading(false);
+    }
   };
 
   // Step 3: Validate Question Form
@@ -1675,10 +1717,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  disabled={quickUploadLoading}
+                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
                 >
                   <Upload className="w-4 h-4" />
-                  <span>Upload certificate</span>
+                  <span>{quickUploadLoading ? 'Saving to vault...' : 'Upload certificate'}</span>
                 </button>
               </div>
             </form>

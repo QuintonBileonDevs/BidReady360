@@ -1,4 +1,5 @@
 import { query } from './client';
+import { clearReferenceCache } from '../repositories/reference.repository';
 
 export async function seedDatabase() {
   console.log('[DB SEED] Seeding initial database records...');
@@ -87,6 +88,7 @@ export async function seedDatabase() {
         );
         if (res.rows[0]) {
           catMap[c.code] = res.rows[0].id;
+          clearReferenceCache('categories');
         }
       }
     }

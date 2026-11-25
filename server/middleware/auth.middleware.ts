@@ -72,6 +72,8 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     rawToken = req.cookies.session_token;
   } else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
     rawToken = req.headers.authorization.substring(7);
+  } else if (req.query && typeof req.query.token === 'string') {
+    rawToken = req.query.token;
   }
 
   if (!rawToken || !rawToken.trim()) {

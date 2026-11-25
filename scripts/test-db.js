@@ -1,9 +1,7 @@
-import pg from 'pg';
 import dotenv from 'dotenv';
+import { getClient, guardStatus, DbGuardError } from '../server/db/client.ts';
 
 dotenv.config();
-
-const { Client } = pg;
 
 async function testConnection() {
   const connectionString = process.env.DATABASE_URL;
@@ -26,16 +24,16 @@ async function testConnection() {
     console.log('Raw URL provided (failed to parse components)');
   }
 
-  const cleanUrl = connectionString.replace(/(\?|&)sslmode=[^&]*/, '');
-  const client = new Client({
-    connectionString: cleanUrl,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 5000,
-  });
+  const guard = guardStatus();
+  if (!guard.ok) {
+    console.error('❌ Database guard blocked connection:', guard.reason);
+    process.exit(1);
+  }
 
+  let client;
   try {
-    console.log('\nAttempting TCP connection and SSL handshake...');
-    await client.connect();
+    console.log('\nAttempting verified database connection...');
+    client = await getClient();
     console.log('✅ Connected successfully to PostgreSQL!');
 
     const res = await client.query('SELECT NOW() as current_time, version() as version;');
@@ -54,17 +52,19 @@ async function testConnection() {
   } catch (err) {
     console.error('\n❌ Database connection FAILED:');
     console.error('Error Code:', err.code || 'UNKNOWN');
-    console.error('Error Message:', err.message);
+    console.error('Error Message:', err instanceof DbGuardError ? err.reason : err.message);
 
     if (err.code === 'ENOTFOUND') {
-      console.error('\n💡 Diagnosis: The hostname could not be resolved via DNS. This usually means the DATABASE_URL contains placeholder host text (e.g., pg-service-name.aivencloud.com) instead of your real database host.');
+      console.error('\n💡 Diagnosis: The hostname could not be resolved via DNS.');
     } else if (err.code === '28P01') {
       console.error('\n💡 Diagnosis: Authentication failed (invalid username or password).');
     } else if (err.code === 'ECONNREFUSED') {
       console.error('\n💡 Diagnosis: Connection was refused by the host or port.');
     }
+    process.exitCode = 1;
   } finally {
-    await client.end().catch(() => {});
+    if (client) client.release();
+    process.exit(process.exitCode || 0);
   }
 }
 

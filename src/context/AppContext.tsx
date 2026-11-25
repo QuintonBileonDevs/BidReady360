@@ -486,12 +486,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const mappedDirectors: Director[] = (data.people || []).map((p: any) => ({
             id: p.id,
             fullName: p.full_name || p.fullName || '',
-            nationalIdOrPassport: p.national_identity_hash || p.nationalIdOrPassport || '',
-            idType: p.identity_type === 'OMANG' ? 'National ID (Omang)' : (p.identity_type === 'PASSPORT' ? 'Passport' : 'National ID (Omang)'),
+            nationalIdOrPassport: p.idNumber || p.idLast4 || p.national_identity_hash || p.nationalIdOrPassport || '',
+            idType: (p.identity_type === 'PASSPORT' || p.identityType === 'PASSPORT') ? 'Passport' : 'National ID (Omang)',
             nationality: p.nationality || 'Motswana',
-            isCitizen: p.is_citizen ?? true,
-            shareholdingPercentage: parseFloat(p.ownership_percent ?? p.shareholdingPercentage ?? '0') || 0,
-            role: p.person_role === 'shareholder' ? 'Shareholder' : (p.person_role === 'director' ? 'Director' : (p.person_role || 'Director')),
+            isCitizen: p.is_citizen ?? p.isCitizen ?? true,
+            shareholdingPercentage: parseFloat(p.ownership_percent ?? p.ownershipPercent ?? p.shareholdingPercentage ?? '0') || 0,
+            role: p.person_role === 'shareholder' || p.personRole === 'shareholder' ? 'Shareholder' : (p.person_role === 'director' || p.personRole === 'director' ? 'Director' : (p.person_role || p.personRole || 'Director')),
           }));
 
           // 2. Map documents from bootstrap payload with authoritative codes and statuses

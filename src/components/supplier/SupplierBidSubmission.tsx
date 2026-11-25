@@ -4,6 +4,7 @@ import { Call, PriceLineItem, Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
 import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
+import { supplierApi } from '../../services/api';
 import {
   Lock,
   Clock,
@@ -462,32 +463,34 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     showDraftToast(`Attached "${doc.title || doc.documentType}" from Vault`);
   };
 
-  const handleDownloadFile = (file: SupportingFileItem) => {
+  const handleDownloadFile = async (file: SupportingFileItem) => {
+    showDraftToast(`Downloading ${file.fileName}...`);
+    if (file.vaultDocId) {
+      try {
+        const { objectUrl, fileName } = await supplierApi.getDocumentFileBlob(file.vaultDocId);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = fileName || file.fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        return;
+      } catch (e) {
+        console.warn('Vault blob fetch notice, fallback to direct download URL:', e);
+        const url = supplierApi.getDocumentDownloadUrl(file.vaultDocId, true);
+        window.open(url, '_blank');
+        return;
+      }
+    }
     if (file.downloadUrl && file.downloadUrl !== '#') {
       const a = document.createElement('a');
       a.href = file.downloadUrl;
       a.download = file.fileName;
+      document.body.appendChild(a);
       a.click();
-    } else {
-      const blob = new Blob(
-        [
-          `Official Document Archive: ${file.name}\n` +
-            `File: ${file.fileName}\n` +
-            `Document Number: ${file.documentNumber || 'N/A'}\n` +
-            `Integrity Fingerprint: ${file.fingerprint}\n` +
-            `Source: ${file.source === 'vault' ? 'Secure Document Vault' : 'Tender Upload'}\n` +
-            `Timestamp: ${new Date().toISOString()}\n`,
-        ],
-        { type: 'text/plain' }
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.fileName.endsWith('.pdf') ? file.fileName.replace('.pdf', '.txt') : `${file.fileName}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     }
-    showDraftToast(`Downloading ${file.fileName}...`);
   };
 
   // Save tender application draft at current or target step

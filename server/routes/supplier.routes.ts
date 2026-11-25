@@ -11,36 +11,64 @@ import { applicationsRepository } from '../repositories/applications.repository'
 import { bidsRepository } from '../repositories/bids.repository';
 import { translateDbError } from '../db/errors';
 import { extractClientIp } from '../utils/ip';
-import { pool } from '../db/client';
+import { getClient } from '../db/client';
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 4 * 1024 * 1024 }, // 4 MB limit (Vercel request limit)
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB limit
 });
 
-function validateFileBuffer(buffer: Buffer): { isValid: boolean; mimeType: string; error?: string } {
+function validateFileBuffer(buffer: Buffer, originalName?: string): { isValid: boolean; mimeType: string; error?: string } {
   if (!buffer || buffer.length === 0) {
     return { isValid: false, mimeType: '', error: 'Uploaded file is empty or corrupt.' };
   }
-  if (buffer.length > 4 * 1024 * 1024) {
-    return { isValid: false, mimeType: '', error: 'File size exceeds 4 MB limit.' };
+  if (buffer.length > 10 * 1024 * 1024) {
+    return { isValid: false, mimeType: '', error: 'File size exceeds 10 MB limit.' };
   }
 
-  // Check magic bytes from first bytes
-  // PDF: %PDF (25 50 44 46)
-  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+  // Check magic bytes
+  // PDF: %PDF anywhere in first 1024 bytes
+  const headerSlice = buffer.subarray(0, Math.min(1024, buffer.length));
+  if (headerSlice.includes(Buffer.from('%PDF'))) {
     return { isValid: true, mimeType: 'application/pdf' };
   }
+
   // PNG: 89 50 4E 47 0D 0A 1A 0A
   if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
     return { isValid: true, mimeType: 'image/png' };
   }
+
   // JPEG: FF D8 FF
   if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
     return { isValid: true, mimeType: 'image/jpeg' };
   }
 
-  return { isValid: false, mimeType: '', error: 'Unsupported or corrupt file type. Only PDF, PNG, and JPG files are accepted.' };
+  // WebP: RIFF ... WEBP
+  if (buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP') {
+    return { isValid: true, mimeType: 'image/webp' };
+  }
+
+  // DOCX: PK zip 50 4B 03 04
+  if (buffer[0] === 0x50 && buffer[1] === 0x4B && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    return { isValid: true, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  }
+
+  // DOC: D0 CF 11 E0 A1 B1 1A E1
+  if (buffer[0] === 0xD0 && buffer[1] === 0xCF && buffer[2] === 0x11 && buffer[3] === 0xE0) {
+    return { isValid: true, mimeType: 'application/msword' };
+  }
+
+  // Fallback check by file extension for known document extensions
+  if (originalName) {
+    const ext = originalName.split('.').pop()?.toLowerCase();
+    if (ext === 'pdf') return { isValid: true, mimeType: 'application/pdf' };
+    if (ext === 'png') return { isValid: true, mimeType: 'image/png' };
+    if (ext === 'jpg' || ext === 'jpeg') return { isValid: true, mimeType: 'image/jpeg' };
+    if (ext === 'docx') return { isValid: true, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+    if (ext === 'doc') return { isValid: true, mimeType: 'application/msword' };
+  }
+
+  return { isValid: false, mimeType: '', error: 'Unsupported or corrupt file type. Only PDF, PNG, JPG, and Word files are accepted.' };
 }
 
 const ai = new GoogleGenAI({
@@ -181,7 +209,7 @@ router.delete('/people/:id', async (req: Request, res: Response) => {
 
   let client;
   try {
-    client = await pool.connect(); // ONE client for the whole transaction
+    client = await getClient(); // ONE verified client for the whole transaction
     console.log('[remove-director] connection acquired', Math.round(performance.now() - t0));
 
     await client.query('BEGIN');
@@ -298,7 +326,7 @@ router.post('/documents/upload', upload.single('file'), async (req: Request, res
       return;
     }
 
-    const validation = validateFileBuffer(file.buffer);
+    const validation = validateFileBuffer(file.buffer, file.originalname);
     if (!validation.isValid) {
       res.status(400).json({ error: 'INVALID_FILE', message: validation.error || 'Invalid file format.' });
       return;
@@ -349,8 +377,15 @@ router.get('/documents/:id/file', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'NOT_FOUND', message: 'Document file not found or unauthorized.' });
       return;
     }
-    res.setHeader('Content-Type', fileRecord.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${fileRecord.fileName}"`);
+
+    const isDownload = req.query.download === '1' || req.query.download === 'true' || req.query.attachment === 'true';
+    const dispositionType = isDownload ? 'attachment' : 'inline';
+    const safeFileName = (fileRecord.fileName || 'document.pdf').replace(/"/g, '');
+
+    res.setHeader('Content-Type', fileRecord.mimeType || 'application/pdf');
+    res.setHeader('Content-Length', fileRecord.content.length);
+    res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeFileName}"; filename*=UTF-8''${encodeURIComponent(safeFileName)}`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
     res.send(fileRecord.content);
   } catch (err: any) {
     const safe = translateDbError(err);

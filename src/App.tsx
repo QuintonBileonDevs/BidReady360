@@ -122,7 +122,7 @@ const MainContent: React.FC = () => {
         aria-hidden={isBootstrapping}
       >
         <Header />
-        <main className="flex-1 container-1160 w-full py-8 sm:py-12">{renderContent()}</main>
+        <main className="flex-1 container-1160 w-full py-0">{renderContent()}</main>
         <Footer />
         <PWAInstallPrompt />
       </div>

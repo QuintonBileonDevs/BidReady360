@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 
 export interface ConsentGrantRecord {
   id: string;

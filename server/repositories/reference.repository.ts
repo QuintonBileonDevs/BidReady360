@@ -125,110 +125,181 @@ export interface FullReferenceData {
   loadedAt: string;
 }
 
+// Per-instance in-memory cache: 5 minutes, keyed by reference name,
+// ONLY populated for non-empty successful database results. Never caches errors or empty results.
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const referenceCache = new Map<string, { rows: any[]; expiresAt: number }>();
+
+export function clearReferenceCache(key?: string): void {
+  if (key) {
+    referenceCache.delete(key);
+  } else {
+    referenceCache.clear();
+  }
+}
+
+async function cachedReferenceQuery<T>(key: string, fetcher: () => Promise<T[]>): Promise<T[]> {
+  const entry = referenceCache.get(key);
+  if (entry && entry.expiresAt > Date.now()) {
+    console.log('[ref] cache hit', key);
+    return entry.rows as T[];
+  }
+  if (entry) {
+    referenceCache.delete(key);
+  }
+
+  const rows = await fetcher();
+  if (Array.isArray(rows) && rows.length > 0) {
+    referenceCache.set(key, {
+      rows,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+  }
+  return rows;
+}
+
 export class ReferenceRepository {
+  async getDistricts(): Promise<GeographicDistrict[]> {
+    return cachedReferenceQuery<GeographicDistrict>('districts', async () => {
+      const res = await query<GeographicDistrict>(
+        `SELECT id, name, administrative_region AS "administrativeRegion", country_code AS "countryCode", sort_order AS "sortOrder"
+         FROM geographic_districts WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getDocumentTypes(): Promise<DocumentType[]> {
+    return cachedReferenceQuery<DocumentType>('documentTypes', async () => {
+      const res = await query<DocumentType>(
+        `SELECT id, organization_id AS "organizationId", code, name, description, issuing_authority AS "issuingAuthority",
+                requires_expiry AS "requiresExpiry", requires_number AS "requiresNumber", default_validity_days AS "defaultValidityDays",
+                max_file_size_mb AS "maxFileSizeMb", allowed_mime_types AS "allowedMimeTypes",
+                verification_method AS "verificationMethod", is_mandatory_default AS "isMandatoryDefault", sort_order AS "sortOrder"
+         FROM document_types WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getDisciplines(): Promise<ProcurementDiscipline[]> {
+    return cachedReferenceQuery<ProcurementDiscipline>('disciplines', async () => {
+      const res = await query<ProcurementDiscipline>(
+        `SELECT id, code, title, description, sort_order AS "sortOrder"
+         FROM procurement_disciplines WHERE is_active = TRUE ORDER BY sort_order ASC, code ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getCapabilityTiers(): Promise<CapabilityTier[]> {
+    return cachedReferenceQuery<CapabilityTier>('capabilityTiers', async () => {
+      const res = await query<CapabilityTier>(
+        `SELECT id, code, name, description, min_contract_value AS "minContractValue", max_contract_value AS "maxContractValue", sort_order AS "sortOrder"
+         FROM capability_tiers ORDER BY sort_order ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getPlans(): Promise<Plan[]> {
+    return cachedReferenceQuery<Plan>('plans', async () => {
+      const res = await query<Plan>(
+        `SELECT id, code, name, audience, price, currency, billing_interval AS "billingInterval",
+                max_users AS "maxUsers", max_calls_per_year AS "maxCallsPerYear", features, sort_order AS "sortOrder"
+         FROM plans WHERE is_active = TRUE ORDER BY sort_order ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getPermissions(): Promise<Permission[]> {
+    return cachedReferenceQuery<Permission>('permissions', async () => {
+      const res = await query<Permission>(
+        `SELECT id, code, scope, category, description FROM permissions ORDER BY scope ASC, category ASC, code ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getRoles(): Promise<Role[]> {
+    return cachedReferenceQuery<Role>('roles', async () => {
+      const res = await query<Role>(
+        `SELECT id, scope, organization_id AS "organizationId", name, description, color, is_system AS "isSystem", approval_limit_bwp AS "approvalLimitBwp"
+         FROM roles WHERE is_system = TRUE ORDER BY scope ASC, sort_order ASC, name ASC`
+      );
+      return res.rows;
+    });
+  }
+
+  async getFinancialConfigs(): Promise<PlatformFinancialConfig[]> {
+    return cachedReferenceQuery<PlatformFinancialConfig>('financialConfigs', async () => {
+      const res = await query<PlatformFinancialConfig>(
+        `SELECT id, config_key AS "configKey", config_value AS "configValue", description
+         FROM platform_financial_configs`
+      );
+      return res.rows;
+    });
+  }
+
+  async getNotificationTemplates(): Promise<NotificationTemplate[]> {
+    return cachedReferenceQuery<NotificationTemplate>('notificationTemplates', async () => {
+      const res = await query<NotificationTemplate>(
+        `SELECT id, organization_id AS "organizationId", code, channel, locale, subject, body, variables
+         FROM notification_templates WHERE is_active = TRUE`
+      );
+      return res.rows;
+    });
+  }
+
   /**
    * Loads all reference data from PostgreSQL in parallel.
+   * Throws on any database error; never returns fallback or empty cached data.
    */
   async loadAll(): Promise<FullReferenceData> {
-    try {
-      const [
-        districtsRes,
-        docTypesRes,
-        disciplinesRes,
-        tiersRes,
-        plansRes,
-        permsRes,
-        rolesRes,
-        finConfigsRes,
-        notifTemplatesRes,
-      ] = await Promise.all([
-        query<GeographicDistrict>(
-          `SELECT id, name, administrative_region AS "administrativeRegion", country_code AS "countryCode", sort_order AS "sortOrder"
-           FROM geographic_districts WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
-        ),
-        query<DocumentType>(
-          `SELECT id, organization_id AS "organizationId", code, name, description, issuing_authority AS "issuingAuthority",
-                  requires_expiry AS "requiresExpiry", requires_number AS "requiresNumber", default_validity_days AS "defaultValidityDays",
-                  max_file_size_mb AS "maxFileSizeMb", allowed_mime_types AS "allowedMimeTypes",
-                  verification_method AS "verificationMethod", is_mandatory_default AS "isMandatoryDefault", sort_order AS "sortOrder"
-           FROM document_types WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
-        ),
-        query<ProcurementDiscipline>(
-          `SELECT id, code, title, description, sort_order AS "sortOrder"
-           FROM procurement_disciplines WHERE is_active = TRUE ORDER BY sort_order ASC, code ASC`
-        ),
-        query<CapabilityTier>(
-          `SELECT id, code, name, description, min_contract_value AS "minContractValue", max_contract_value AS "maxContractValue", sort_order AS "sortOrder"
-           FROM capability_tiers ORDER BY sort_order ASC`
-        ),
-        query<Plan>(
-          `SELECT id, code, name, audience, price, currency, billing_interval AS "billingInterval",
-                  max_users AS "maxUsers", max_calls_per_year AS "maxCallsPerYear", features, sort_order AS "sortOrder"
-           FROM plans WHERE is_active = TRUE ORDER BY sort_order ASC`
-        ),
-        query<Permission>(
-          `SELECT id, code, scope, category, description FROM permissions ORDER BY scope ASC, category ASC, code ASC`
-        ),
-        query<Role>(
-          `SELECT id, scope, organization_id AS "organizationId", name, description, color, is_system AS "isSystem", approval_limit_bwp AS "approvalLimitBwp"
-           FROM roles WHERE is_system = TRUE ORDER BY scope ASC, sort_order ASC, name ASC`
-        ),
-        query<PlatformFinancialConfig>(
-          `SELECT id, config_key AS "configKey", config_value AS "configValue", description
-           FROM platform_financial_configs`
-        ),
-        query<NotificationTemplate>(
-          `SELECT id, organization_id AS "organizationId", code, channel, locale, subject, body, variables
-           FROM notification_templates WHERE is_active = TRUE`
-        ),
-      ]);
+    const [
+      districts,
+      documentTypes,
+      disciplines,
+      capabilityTiers,
+      plans,
+      permissions,
+      roles,
+      financialConfigs,
+      notificationTemplates,
+    ] = await Promise.all([
+      this.getDistricts(),
+      this.getDocumentTypes(),
+      this.getDisciplines(),
+      this.getCapabilityTiers(),
+      this.getPlans(),
+      this.getPermissions(),
+      this.getRoles(),
+      this.getFinancialConfigs(),
+      this.getNotificationTemplates(),
+    ]);
 
-      return {
-        districts: districtsRes.rows,
-        documentTypes: docTypesRes.rows,
-        disciplines: disciplinesRes.rows,
-        capabilityTiers: tiersRes.rows,
-        plans: plansRes.rows,
-        permissions: permsRes.rows,
-        roles: rolesRes.rows,
-        financialConfigs: finConfigsRes.rows,
-        notificationTemplates: notifTemplatesRes.rows,
-        loadedAt: new Date().toISOString(),
-      };
-    } catch (err: any) {
-      console.warn('[REFERENCE REPOSITORY] Returning cached/fallback reference structure due to DB connection:', err.message);
-      return {
-        districts: [
-          { id: 'd-1', name: 'Gaborone', administrativeRegion: 'South-East', countryCode: 'BW', sortOrder: 1 },
-          { id: 'd-2', name: 'Francistown', administrativeRegion: 'North-East', countryCode: 'BW', sortOrder: 2 },
-          { id: 'd-3', name: 'Kweneng', administrativeRegion: 'Kweneng', countryCode: 'BW', sortOrder: 3 },
-          { id: 'd-4', name: 'Ngamiland', administrativeRegion: 'North-West', countryCode: 'BW', sortOrder: 4 },
-        ],
-        documentTypes: [
-          { id: 'dt-cipa', organizationId: null, code: 'CIPA_CERT', name: 'CIPA Certificate of Incorporation', description: 'Company registration certificate', issuingAuthority: 'CIPA', requiresExpiry: false, defaultValidityDays: null, maxFileSizeMb: 10, allowedMimeTypes: ['application/pdf'], verificationMethod: 'api', isMandatoryDefault: true, sortOrder: 1 },
-          { id: 'dt-burs', organizationId: null, code: 'BURS_TAX', name: 'BURS Tax Clearance Certificate', description: 'Tax compliance certificate', issuingAuthority: 'BURS', requiresExpiry: true, defaultValidityDays: 365, maxFileSizeMb: 10, allowedMimeTypes: ['application/pdf'], verificationMethod: 'manual', isMandatoryDefault: true, sortOrder: 2 },
-        ],
-        disciplines: [
-          { id: 'disc-1', code: '01', title: 'Civil Engineering & Construction', description: 'Public works & infrastructure', sortOrder: 1 },
-          { id: 'disc-2', code: '02', title: 'ICT & Software Solutions', description: 'Technology & communications', sortOrder: 2 },
-        ],
-        capabilityTiers: [],
-        plans: [],
-        permissions: [],
-        roles: [],
-        financialConfigs: [],
-        notificationTemplates: [],
-        loadedAt: new Date().toISOString(),
-      };
-    }
+    return {
+      districts,
+      documentTypes,
+      disciplines,
+      capabilityTiers,
+      plans,
+      permissions,
+      roles,
+      financialConfigs,
+      notificationTemplates,
+      loadedAt: new Date().toISOString(),
+    };
   }
 
   /**
    * Loads category codes and sub-codes from the PostgreSQL categories table
    * structured as hierarchical category tree nodes.
+   * Throws on any database error; never returns hardcoded rows.
    */
   async getCategoriesTree(): Promise<CategoryTreeNode[]> {
-    try {
+    return cachedReferenceQuery<CategoryTreeNode>('categories', async () => {
       const res = await query<{
         id: string;
         parentId: string | null;
@@ -248,7 +319,7 @@ export class ReferenceRepository {
       const level1 = rows.filter((r) => r.level === 1);
       const level2 = rows.filter((r) => r.level === 2);
 
-      const tree: CategoryTreeNode[] = level1.map((parent) => {
+      return level1.map((parent) => {
         const children = level2
           .filter(
             (c) =>
@@ -276,79 +347,7 @@ export class ReferenceRepository {
           children,
         };
       });
-
-      if (tree.length === 0) {
-        return [
-          {
-            id: 'cat-civil',
-            code: 'CAT_CIVIL',
-            name: 'Civil & Infrastructure',
-            description: 'Public works & engineering',
-            level: 1,
-            parentId: null,
-            sortOrder: 1,
-            children: [
-              { id: 'cat-civil-1', code: 'CAT_CIVIL_01', name: 'Building Construction', description: null, level: 2, parentId: 'cat-civil', sortOrder: 1 },
-              { id: 'cat-civil-2', code: 'CAT_CIVIL_02', name: 'Roads & Bridges', description: null, level: 2, parentId: 'cat-civil', sortOrder: 2 },
-            ],
-          },
-          {
-            id: 'cat-ict',
-            code: 'CAT_ICT',
-            name: 'ICT & Software Solutions',
-            description: 'Technology & networks',
-            level: 1,
-            parentId: null,
-            sortOrder: 2,
-            children: [
-              { id: 'cat-ict-1', code: 'CAT_ICT_01', name: 'Software Development', description: null, level: 2, parentId: 'cat-ict', sortOrder: 1 },
-              { id: 'cat-ict-2', code: 'CAT_ICT_02', name: 'Cybersecurity & Infrastructure', description: null, level: 2, parentId: 'cat-ict', sortOrder: 2 },
-            ],
-          },
-          {
-            id: 'cat-re',
-            code: 'CAT_RE',
-            name: 'Renewable Energy',
-            description: 'Solar PV & clean power',
-            level: 1,
-            parentId: null,
-            sortOrder: 3,
-            children: [],
-          },
-        ];
-      }
-
-      return tree;
-    } catch (err: any) {
-      console.warn('[REFERENCE REPOSITORY] Failed to load categories tree from DB, returning defaults:', err.message);
-      return [
-        {
-          id: 'cat-civil',
-          code: 'CAT_CIVIL',
-          name: 'Civil & Infrastructure',
-          description: 'Public works & engineering',
-          level: 1,
-          parentId: null,
-          sortOrder: 1,
-          children: [
-            { id: 'cat-civil-1', code: 'CAT_CIVIL_01', name: 'Building Construction', description: null, level: 2, parentId: 'cat-civil', sortOrder: 1 },
-            { id: 'cat-civil-2', code: 'CAT_CIVIL_02', name: 'Roads & Bridges', description: null, level: 2, parentId: 'cat-civil', sortOrder: 2 },
-          ],
-        },
-        {
-          id: 'cat-ict',
-          code: 'CAT_ICT',
-          name: 'ICT & Software Solutions',
-          description: 'Technology & networks',
-          level: 1,
-          parentId: null,
-          sortOrder: 2,
-          children: [
-            { id: 'cat-ict-1', code: 'CAT_ICT_01', name: 'Software Development', description: null, level: 2, parentId: 'cat-ict', sortOrder: 1 },
-          ],
-        },
-      ];
-    }
+    });
   }
 }
 

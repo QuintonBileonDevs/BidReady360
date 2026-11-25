@@ -1,25 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import pg from 'pg';
-
-const { Client } = pg;
+import { getClient } from '../server/db/client.ts';
 
 async function runMigration() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.error('ERROR: DATABASE_URL is not set.');
-    process.exit(1);
-  }
-
-  const rawUrl = connectionString.replace(/(\?|&)sslmode=[^&]*/, '');
-  const client = new Client({
-    connectionString: rawUrl,
-    ssl: { rejectUnauthorized: false }
-  });
-
+  let client;
   try {
-    console.log('Connecting to Aiven PostgreSQL...');
-    await client.connect();
+    console.log('Connecting to PostgreSQL via fail-closed DB guard...');
+    client = await getClient();
     console.log('Connection established.');
 
     const sqlPath = path.resolve('scripts/schema.sql');
@@ -56,12 +43,13 @@ async function runMigration() {
     const districtsRes = await client.query('SELECT count(*) FROM geographic_districts');
     console.log(`Districts Seeded: ${districtsRes.rows[0].count}`);
 
-    await client.end();
     console.log('\nMigration finished successfully with zero errors.');
   } catch (err) {
     console.error('Migration failed:', err);
-    await client.end();
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    if (client) client.release();
+    process.exit(process.exitCode || 0);
   }
 }
 

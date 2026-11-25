@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { pool, withTransaction, query } from '../server/db/client';
+import { tx, query } from '../server/db/client';
 
 async function seedTestSupplier() {
   console.log('=== Seeding Test Supplier into PostgreSQL ===');
@@ -15,7 +15,7 @@ async function seedTestSupplier() {
     // 1. Generate secure bcrypt password hash (12 salt rounds)
     const passwordHash = await bcrypt.hash(testPasswordPlain, 12);
 
-    await withTransaction(async (client) => {
+    await tx(async (client) => {
       // 2. Check if user already exists; if so, update password and activate
       let userRes = await client.query(
         'SELECT id, email, full_name FROM users WHERE email = $1 LIMIT 1',
@@ -228,7 +228,7 @@ async function seedTestSupplier() {
   } catch (err: any) {
     console.error('❌ Error seeding test supplier:', err);
   } finally {
-    await pool.end();
+    process.exit(0);
   }
 }
 

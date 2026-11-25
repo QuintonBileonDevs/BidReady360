@@ -11,6 +11,8 @@ export interface Director {
   nationality: string;
   isCitizen: boolean;
   shareholdingPercentage: number;
+  ownershipPercent?: number | null;
+  ownership_percent?: any;
   role: string;
 }
 
@@ -46,6 +48,8 @@ export interface SupplierDocument {
   uploadedAt?: string;
   certifiedCopy?: boolean;
   certificationDate?: string;
+  sha256?: string;
+  versionNo?: number;
 }
 
 export interface Supplier {
@@ -77,6 +81,8 @@ export interface Supplier {
   bankName: string;
   bankBranch: string;
   accountNumberMasked: string;
+  accountNumber?: string;
+  employeeCountBand?: string | null;
   directors: Director[];
   profileCompleteness: number; // percentage 0-100
   missingItems: string[];

@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../db/client';
+import { query, tx } from '../db/client';
 
 export interface OpenCallView {
   id: string;
@@ -225,8 +225,20 @@ export class CallsRepository {
       }
     }
 
-    return withTransaction(async (client) => {
-      // 2. Insert call
+    return tx(async (client) => {
+      // 2. Check organization approval status (pending organizations cannot publish calls)
+      const orgCheck = await client.query<{ status: string }>(
+        `SELECT status FROM organizations WHERE id = $1`,
+        [data.organizationId]
+      );
+      if (orgCheck.rows[0]?.status === 'pending') {
+        const err: any = new Error('Your organization is pending verification and approval. You cannot publish tender calls yet.');
+        err.status = 403;
+        err.code = 'ORGANIZATION_PENDING';
+        throw err;
+      }
+
+      // 3. Insert call
       const callRes = await client.query<{ id: string }>(
         `INSERT INTO calls (
           organization_id, reference_no, title, call_type, summary, description,

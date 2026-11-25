@@ -66,13 +66,26 @@ export const DirectorsPanel: React.FC = () => {
       const res = await supplierApi.listPeople();
       if (Array.isArray(res)) {
         setDirectors(res);
+        // Synchronize with AppContext supplier.directors so completeness and checklist update immediately
+        const mapped = res.map((p: any) => ({
+          id: p.id,
+          fullName: p.fullName || p.full_name || '',
+          nationalIdOrPassport: p.idNumber || p.idLast4 || p.nationalIdOrPassport || '',
+          idType: (p.identityType === 'PASSPORT' || p.identity_type === 'PASSPORT') ? 'Passport' as const : 'National ID (Omang)' as const,
+          nationality: p.nationality || 'Motswana',
+          isCitizen: p.isCitizen ?? p.is_citizen ?? true,
+          shareholdingPercentage: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
+          ownershipPercent: Number(p.ownershipPercent ?? p.ownership_percent ?? p.shareholdingPercentage) || 0,
+          role: p.personRole || p.person_role || 'Director',
+        }));
+        updateSupplierProfile({ directors: mapped });
       }
     } catch (err) {
       console.warn('Failed to load directors:', err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [updateSupplierProfile]);
 
   useEffect(() => {
     fetchDirectors();
@@ -80,13 +93,12 @@ export const DirectorsPanel: React.FC = () => {
 
   // Total ownership calculation for directors & shareholders
   const totalOwnership = directors
-    .filter((d) => ['director', 'shareholder', 'owner'].includes((d.personRole || '').toLowerCase()))
-    .reduce((sum, d) => sum + (Number(d.ownershipPercent) || 0), 0);
+    .reduce((sum, d: any) => sum + (Number(d.ownershipPercent ?? d.shareholdingPercentage ?? d.ownership_percent) || 0), 0);
 
   // Remaining equity available excluding the director currently being edited
   const otherDirectorsOwnership = directors
-    .filter((d) => (!editingDirector || d.id !== editingDirector.id) && ['director', 'shareholder', 'owner'].includes((d.personRole || '').toLowerCase()))
-    .reduce((sum, d) => sum + (Number(d.ownershipPercent) || 0), 0);
+    .filter((d: any) => (!editingDirector || d.id !== editingDirector.id))
+    .reduce((sum, d: any) => sum + (Number(d.ownershipPercent ?? d.shareholdingPercentage ?? d.ownership_percent) || 0), 0);
   const remainingEquityAvailable = Math.max(0, parseFloat((100 - otherDirectorsOwnership).toFixed(2)));
 
   const handleOpenAdd = () => {

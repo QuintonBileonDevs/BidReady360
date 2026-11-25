@@ -105,8 +105,11 @@ export function translateDbError(err: any): SafeDbError {
     case 'DATABASE_UNAVAILABLE':
     case 'ECONNREFUSED':
     case 'ETIMEDOUT':
+    case 'ENOTFOUND':
     case '08001':
     case '08006':
+    case '28P01':
+    case '28000':
     case '57P01':
     case '57P02':
     case '57P03': {
