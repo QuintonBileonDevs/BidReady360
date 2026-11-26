@@ -164,7 +164,7 @@ export class DocumentsRepository {
               CASE
                 WHEN v.expiry_date IS NULL THEN 'NO_EXPIRY'
                 WHEN v.expiry_date < CURRENT_DATE THEN 'EXPIRED'
-                WHEN v.expiry_date <= CURRENT_DATE + INTERVAL '60 days' THEN 'EXPIRING_SOON'
+                WHEN v.expiry_date <= CURRENT_DATE + INTERVAL '90 days' THEN 'EXPIRING_SOON'
                 ELSE 'VALID'
               END AS "expiryState"
        FROM supplier_documents d
@@ -295,6 +295,28 @@ export class DocumentsRepository {
         [versionId, fileSizeBytes, docId]
       );
 
+      let computedDaysToExpiry: number | null = null;
+      let computedExpiryState: 'VALID' | 'EXPIRING_SOON' | 'EXPIRED' | 'NO_EXPIRY' = 'NO_EXPIRY';
+      if (dto.expiryDate) {
+        const expStr = String(dto.expiryDate).slice(0, 10);
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expStr);
+        const now = new Date();
+        const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+        const expUtcMs = match
+          ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+          : Date.parse(dto.expiryDate);
+        if (!Number.isNaN(expUtcMs)) {
+          computedDaysToExpiry = Math.ceil((expUtcMs - todayUtcMs) / 86400000);
+          if (computedDaysToExpiry < 0) {
+            computedExpiryState = 'EXPIRED';
+          } else if (computedDaysToExpiry <= 90) {
+            computedExpiryState = 'EXPIRING_SOON';
+          } else {
+            computedExpiryState = 'VALID';
+          }
+        }
+      }
+
       return {
         documentId: docId,
         supplierId: dto.supplierId,
@@ -321,8 +343,8 @@ export class DocumentsRepository {
         verificationNotes: 'File uploaded and verified against canonical SHA-256 checksum rules.',
         rejectionReason: null,
         uploadedAt: new Date().toISOString(),
-        daysToExpiry: dto.expiryDate ? Math.ceil((new Date(dto.expiryDate).getTime() - Date.now()) / 86400000) : null,
-        expiryState: dto.expiryDate ? 'VALID' : 'NO_EXPIRY',
+        daysToExpiry: computedDaysToExpiry,
+        expiryState: computedExpiryState,
         hasFile: true,
         certifiedCopy: dto.certifiedCopy,
       };

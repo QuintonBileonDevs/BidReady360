@@ -129,42 +129,61 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     }
   };
 
-  const isDocVerifiedAndCurrent = (status?: string) =>
-    status === 'Verified' || status === 'Expiring soon';
+  const isDocVerifiedAndCurrent = (doc?: { status?: string; verificationStatus?: string | null; expiryDate?: string }) => {
+    if (!doc) return false;
+    const verUpper = String(doc.verificationStatus || '').toUpperCase();
+    if (verUpper && verUpper !== 'VERIFIED' && verUpper !== 'APPROVED') return false;
+    if (doc.status !== 'Verified' && doc.status !== 'Expiring soon') return false;
+    if (doc.expiryDate) {
+      const expStr = String(doc.expiryDate).slice(0, 10);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expStr);
+      const now = new Date();
+      const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const expUtcMs = match
+        ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        : Date.parse(doc.expiryDate);
+      if (!Number.isNaN(expUtcMs) && expUtcMs < todayUtcMs) return false;
+    }
+    return true;
+  };
 
   const hasCipa = (documents || []).some(
     (d) =>
-      (d.documentType?.toLowerCase().includes('cipa') ||
+      (d.documentTypeCode === 'COMPANY_REGISTRATION' ||
+        d.documentType?.toLowerCase().includes('cipa') ||
         d.title?.toLowerCase().includes('cipa') ||
         d.documentType?.toLowerCase().includes('incorporation')) &&
-      isDocVerifiedAndCurrent(d.status)
+      isDocVerifiedAndCurrent(d)
   );
 
   const hasTax = (documents || []).some(
     (d) =>
-      (d.documentType?.toLowerCase().includes('tax') ||
+      (d.documentTypeCode === 'TAX_CLEARANCE' ||
+        d.documentType?.toLowerCase().includes('tax') ||
         d.title?.toLowerCase().includes('tax') ||
         d.documentType?.toLowerCase().includes('burs')) &&
-      isDocVerifiedAndCurrent(d.status)
+      isDocVerifiedAndCurrent(d)
   );
 
   const hasPpra = (documents || []).some(
     (d) =>
-      (d.documentType?.toLowerCase().includes('ppra') ||
+      (d.documentTypeCode === 'PPRA_REGISTRATION' ||
+        d.documentType?.toLowerCase().includes('ppra') ||
         d.title?.toLowerCase().includes('ppra')) &&
-      isDocVerifiedAndCurrent(d.status)
+      isDocVerifiedAndCurrent(d)
   );
 
   const hasSafety = (documents || []).some(
     (d) =>
-      (d.documentType?.toLowerCase().includes('workers') ||
+      (d.documentTypeCode === 'WORKERS_COMPENSATION' ||
+        d.documentType?.toLowerCase().includes('workers') ||
         d.documentType?.toLowerCase().includes('safety') ||
         d.documentType?.toLowerCase().includes('wca') ||
         d.documentType?.toLowerCase().includes('compensation') ||
         d.title?.toLowerCase().includes('workers') ||
         d.title?.toLowerCase().includes('safety') ||
         d.title?.toLowerCase().includes('compensation')) &&
-      isDocVerifiedAndCurrent(d.status)
+      isDocVerifiedAndCurrent(d)
   );
 
   const getDaysRemaining = (deadlineStr: string) => {

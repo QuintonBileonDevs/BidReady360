@@ -639,7 +639,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     setCurrentStep(1);
   };
 
-  // Download receipt simulated
+  // Download certified electronic receipt as text file
   const handleDownloadReceipt = () => {
     const content = `
 =============================================================

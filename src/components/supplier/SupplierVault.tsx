@@ -38,6 +38,117 @@ interface ExtractedFieldValues {
   authorityName: string;
 }
 
+function computeDerivedDocStatus(doc?: SupplierDocument | null) {
+  if (!doc) {
+    return {
+      label: 'Missing',
+      chipClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
+      isReady: false,
+    };
+  }
+
+  const verUpper = String(doc.verificationStatus || '').toUpperCase();
+
+  if (doc.status === 'Rejected' || verUpper === 'REJECTED') {
+    return {
+      label: 'Rejected',
+      chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
+      isReady: false,
+    };
+  }
+
+  if (doc.status === 'Cannot verify' || verUpper === 'UNVERIFIABLE') {
+    return {
+      label: 'Cannot verify',
+      chipClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
+      isReady: false,
+    };
+  }
+
+  if (doc.status === 'Expired' || verUpper === 'EXPIRED') {
+    return {
+      label: 'Expired',
+      chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
+      isReady: false,
+    };
+  }
+
+  const isVerifiedByServer = verUpper
+    ? verUpper === 'VERIFIED' || verUpper === 'APPROVED'
+    : doc.status === 'Verified' || doc.status === 'Expiring soon';
+
+  if (doc.expiryDate) {
+    try {
+      const expStr = String(doc.expiryDate).slice(0, 10);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expStr);
+      const now = new Date();
+      const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const expUtcMs = match
+        ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        : Date.parse(doc.expiryDate);
+
+      if (!Number.isNaN(expUtcMs)) {
+        if (expUtcMs < todayUtcMs) {
+          return {
+            label: 'Expired',
+            chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
+            isReady: false,
+          };
+        }
+        if (!isVerifiedByServer) {
+          return {
+            label: 'Pending review',
+            chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+            isReady: false,
+          };
+        }
+        const diffDays = Math.ceil((expUtcMs - todayUtcMs) / 86400000);
+        if (diffDays <= 90) {
+          return {
+            label: `Expiring soon (${diffDays}d)`,
+            chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+            isReady: true,
+          };
+        }
+      }
+    } catch {}
+  }
+
+  if (isVerifiedByServer && (doc.status === 'Verified' || doc.status === 'Expiring soon')) {
+    return {
+      label: doc.status === 'Expiring soon' ? 'Expiring soon' : 'Verified',
+      chipClass: doc.status === 'Expiring soon'
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+      isReady: true,
+    };
+  }
+
+  return {
+    label: 'Pending review',
+    chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
+    isReady: false,
+  };
+}
+
+function computePreferenceDocStatus(isClaimed: boolean, doc?: SupplierDocument | null) {
+  if (!isClaimed) {
+    return {
+      label: 'Not claimed',
+      chipClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+      isReady: true,
+    };
+  }
+  if (!doc) {
+    return {
+      label: 'Claimed (evidence missing)',
+      chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+      isReady: false,
+    };
+  }
+  return computeDerivedDocStatus(doc);
+}
+
 export const SupplierVault: React.FC = () => {
   const {
     documents,
@@ -397,127 +508,10 @@ export const SupplierVault: React.FC = () => {
     });
   };
 
-  // Derived Document Status Chip & Readiness
-  const getDerivedStatus = (doc?: SupplierDocument | null) => {
-    if (!doc) {
-      return {
-        label: 'Missing',
-        chipClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
-        isReady: false,
-      };
-    }
+  const getDerivedStatus = computeDerivedDocStatus;
+  const getPreferenceStatus = computePreferenceDocStatus;
 
-    if (doc.status === 'Rejected') {
-      return {
-        label: 'Rejected',
-        chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-        isReady: false,
-      };
-    }
-
-    if (doc.status === 'Cannot verify') {
-      return {
-        label: 'Cannot verify',
-        chipClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
-        isReady: false,
-      };
-    }
-
-    if (doc.expiryDate) {
-      try {
-        const exp = new Date(doc.expiryDate);
-        const now = new Date();
-        now.setUTCHours(0, 0, 0, 0);
-        if (!isNaN(exp.getTime())) {
-          if (exp < now || doc.status === 'Expired') {
-            return {
-              label: 'Expired',
-              chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-              isReady: false,
-            };
-          }
-          if (doc.status !== 'Verified' && doc.status !== 'Expiring soon') {
-            return {
-              label: 'Pending review',
-              chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-              isReady: false,
-            };
-          }
-          const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays <= 90) {
-            return {
-              label: `Expiring soon (${diffDays}d)`,
-              chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-              isReady: true,
-            };
-          }
-        }
-      } catch {}
-    }
-
-    if (doc.status === 'Verified' || doc.status === 'Expiring soon') {
-      return {
-        label: doc.status === 'Expiring soon' ? 'Expiring soon' : 'Verified',
-        chipClass: doc.status === 'Expiring soon'
-          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
-        isReady: true,
-      };
-    }
-
-    return {
-      label: 'Pending review',
-      chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-      isReady: false,
-    };
-  };
-
-  // Preference Claim Status
-  const getPreferenceStatus = (isClaimed: boolean, doc?: SupplierDocument | null) => {
-    if (!isClaimed) {
-      return {
-        label: 'Not claimed',
-        chipClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
-        isReady: true,
-      };
-    }
-    if (!doc) {
-      return {
-        label: 'Claimed (evidence missing)',
-        chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-        isReady: false,
-      };
-    }
-    const derived = getDerivedStatus(doc);
-    if (derived.label === 'Verified' || derived.label.startsWith('Expiring soon')) {
-      return {
-        label: derived.label,
-        chipClass: derived.chipClass,
-        isReady: true,
-      };
-    }
-    if (derived.label === 'Rejected') {
-      return {
-        label: 'Rejected',
-        chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-        isReady: false,
-      };
-    }
-    if (derived.label === 'Expired') {
-      return {
-        label: 'Expired',
-        chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-        isReady: false,
-      };
-    }
-    return {
-      label: 'Pending review',
-      chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-      isReady: false,
-    };
-  };
-
-  // Check Directors' and Shareholders' ID readiness (requires Verified status)
+  // Check Directors' and Shareholders' ID readiness (requires Verified status and valid date)
   const directorsList = supplier.directors || [];
   const directorsCount = directorsList.length;
   const directorDocs = documents.filter((doc) => {
@@ -525,18 +519,19 @@ export const SupplierVault: React.FC = () => {
     const title = (doc.title || '').toLowerCase();
     return t.includes('director') || t.includes('shareholder') || t.includes('identity') || title.includes('director') || title.includes('shareholder');
   });
-  const directorDoc = directorDocs[0];
+  const readyDirectorDoc = directorDocs.find((d) => computeDerivedDocStatus(d).isReady);
+  const directorDoc = readyDirectorDoc || directorDocs[0];
   const isDirectorsReady =
     directorsCount > 0 &&
     directorDocs.length > 0 &&
-    directorDocs.some((d) => d.status === 'Verified' || d.status === 'Expiring soon');
+    Boolean(readyDirectorDoc);
 
   const directorsStatusLabel = directorsCount === 0
     ? 'Missing (No directors registered)'
     : directorDocs.length === 0
     ? 'Missing (Not uploaded)'
     : directorDocs.length >= directorsCount
-    ? (directorDoc?.status || 'Pending review')
+    ? computeDerivedDocStatus(directorDoc).label
     : `Incomplete (${directorDocs.length}/${directorsCount} IDs uploaded)`;
 
   // Documents matching
@@ -746,6 +741,7 @@ export const SupplierVault: React.FC = () => {
         issueDate: res.issueDate || drawerIssueDate,
         expiryDate: res.expiryDate || (requiresExpiry ? drawerExpiryDate : undefined),
         status: 'Pending',
+        verificationStatus: res.verificationStatus || 'PENDING_VERIFICATION',
         statusMessage: 'Pending verification by procurement registry officers.',
         downloadUrl: `/api/supplier/documents/${res.versionId || res.documentId}/file`,
         certifiedCopy: drawerCertifiedCopy,
@@ -937,8 +933,8 @@ export const SupplierVault: React.FC = () => {
                         <span className="text-[11px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-medium">
                           #{dDoc.documentNumber}
                         </span>
-                        <span className="text-[11px] px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded font-medium">
-                          {dDoc.status}
+                        <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${getDerivedStatus(dDoc).chipClass}`}>
+                          {getDerivedStatus(dDoc).label}
                         </span>
                       </div>
                       <p className="text-[12px] text-[#6B7A87]">
@@ -1896,58 +1892,7 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
   onDelete,
   isDownloading,
 }) => {
-  const statusInfo = useMemo(() => {
-    if (!doc) {
-      return {
-        label: 'Missing',
-        chipClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
-      };
-    }
-    if (doc.status === 'Rejected') {
-      return {
-        label: 'Rejected',
-        chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-      };
-    }
-    if (doc.status === 'Cannot verify') {
-      return {
-        label: 'Cannot verify',
-        chipClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800',
-      };
-    }
-    if (doc.expiryDate) {
-      try {
-        const exp = new Date(doc.expiryDate);
-        const now = new Date();
-        now.setUTCHours(0, 0, 0, 0);
-        if (!isNaN(exp.getTime())) {
-          if (exp < now) {
-            return {
-              label: 'Expired',
-              chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-            };
-          }
-          const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          if (diffDays <= 90) {
-            return {
-              label: `Expiring soon (${diffDays}d)`,
-              chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-            };
-          }
-        }
-      } catch {}
-    }
-    if (doc.status === 'Verified') {
-      return {
-        label: 'Verified',
-        chipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
-      };
-    }
-    return {
-      label: 'Pending review',
-      chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-    };
-  }, [doc]);
+  const statusInfo = useMemo(() => computeDerivedDocStatus(doc), [doc]);
 
   return (
     <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">
@@ -2077,36 +2022,7 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
   onNavigateToProfile,
   isDownloading,
 }) => {
-  const prefStatus = useMemo(() => {
-    if (!isClaimed) {
-      return {
-        label: 'Not claimed',
-        chipClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
-      };
-    }
-    if (!doc) {
-      return {
-        label: 'Claimed (evidence missing)',
-        chipClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
-      };
-    }
-    if (doc.status === 'Verified') {
-      return {
-        label: 'Verified',
-        chipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
-      };
-    }
-    if (doc.status === 'Rejected') {
-      return {
-        label: 'Rejected',
-        chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-      };
-    }
-    return {
-      label: 'Pending review',
-      chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-    };
-  }, [isClaimed, doc]);
+  const prefStatus = useMemo(() => computePreferenceDocStatus(isClaimed, doc), [isClaimed, doc]);
 
   return (
     <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">

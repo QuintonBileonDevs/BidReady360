@@ -204,19 +204,44 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
   // Helper: check if a doc in vault is verified and valid
   const getDocStatusInVault = (
-    type: SupplierDocument['documentType']
+    type: SupplierDocument['documentType'],
+    typeCode?: string
   ): { doc?: SupplierDocument; status: 'Passed' | 'Missing' | 'Expired'; isPending?: boolean } => {
-    const matched = documents.find((d) => d.documentType === type);
+    const typeLower = type.toLowerCase();
+    const matched = documents.find(
+      (d) =>
+        d.documentType === type ||
+        (typeCode && d.documentTypeCode?.toUpperCase() === typeCode) ||
+        d.documentType?.toLowerCase() === typeLower
+    );
     if (!matched) return { status: 'Missing' };
 
-    const ref = new Date();
-    ref.setUTCHours(0, 0, 0, 0);
-    const exp = matched.expiryDate ? new Date(matched.expiryDate).getTime() : Infinity;
-    if (exp < ref.getTime() || matched.status === 'Expired') {
+    const now = new Date();
+    const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    let isPastExpiry = false;
+    if (matched.expiryDate) {
+      const expStr = String(matched.expiryDate).slice(0, 10);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expStr);
+      const expUtcMs = match
+        ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        : Date.parse(matched.expiryDate);
+      if (!Number.isNaN(expUtcMs) && expUtcMs < todayUtcMs) {
+        isPastExpiry = true;
+      }
+    }
+    if (isPastExpiry || matched.status === 'Expired') {
       return { doc: matched, status: 'Expired' };
     }
-    if (matched.status !== 'Verified' && matched.status !== 'Expiring soon') {
-      return { doc: matched, status: 'Missing', isPending: matched.status === 'Pending' };
+    const verUpper = String(matched.verificationStatus || '').toUpperCase();
+    const isVerifiedByServer = verUpper
+      ? verUpper === 'VERIFIED' || verUpper === 'APPROVED'
+      : matched.status === 'Verified' || matched.status === 'Expiring soon';
+    if (!isVerifiedByServer || (matched.status !== 'Verified' && matched.status !== 'Expiring soon')) {
+      return {
+        doc: matched,
+        status: 'Missing',
+        isPending: matched.status === 'Pending' || verUpper === 'PENDING_VERIFICATION',
+      };
     }
     return { doc: matched, status: 'Passed' };
   };
@@ -226,7 +251,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     const list: EligibilityItem[] = [];
 
     // 1. Tax clearance
-    const taxCheck = getDocStatusInVault('BURS Tax Clearance Certificate');
+    const taxCheck = getDocStatusInVault('BURS Tax Clearance Certificate', 'TAX_CLEARANCE');
     list.push({
       id: 'tax',
       title: 'BURS tax clearance certificate',
@@ -246,7 +271,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     });
 
     // 2. PPRA registration
-    const ppraCheck = getDocStatusInVault('PPRA Registration Certificate');
+    const ppraCheck = getDocStatusInVault('PPRA Registration Certificate', 'PPRA_REGISTRATION');
     list.push({
       id: 'ppra',
       title: 'PPRA registration certificate',
@@ -262,7 +287,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     });
 
     // 3. CIPA registration
-    const cipaCheck = getDocStatusInVault('CIPA Certificate of Incorporation');
+    const cipaCheck = getDocStatusInVault('CIPA Certificate of Incorporation', 'COMPANY_REGISTRATION');
     list.push({
       id: 'cipa',
       title: 'CIPA certificate of incorporation',
@@ -278,7 +303,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     });
 
     // 4. Workers Compensation & Safety
-    const safetyCheck = getDocStatusInVault('Workers Compensation & Safety Compliance');
+    const safetyCheck = getDocStatusInVault('Workers Compensation & Safety Compliance', 'WORKERS_COMPENSATION');
     list.push({
       id: 'safety',
       title: 'Workers compensation & safety compliance',
@@ -294,7 +319,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     });
 
     // 5. Public Liability Insurance
-    const insurCheck = getDocStatusInVault('Public Liability Insurance Policy');
+    const insurCheck = getDocStatusInVault('Public Liability Insurance Policy', 'PUBLIC_LIABILITY_INSURANCE');
     list.push({
       id: 'insur',
       title: 'Public liability insurance policy',

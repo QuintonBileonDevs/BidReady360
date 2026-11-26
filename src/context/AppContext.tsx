@@ -216,7 +216,7 @@ interface AppContextType {
   respondToInformationRequest: (appId: string, responseMessage: string) => void;
   submitClarificationQuestion: (callId: string, question: string) => void;
   publishClarificationAnswer: (clarId: string, answer: string, answeredBy: string) => void;
-  createCall: (newCall: Omit<Call, 'id' | 'documentsCount' | 'applicationsCount' | 'addenda'>) => string;
+  createCall: (newCall: Omit<Call, 'id' | 'documentsCount' | 'applicationsCount' | 'addenda'> & { id?: string }) => string;
   createFormTemplate: (template: Omit<FormTemplate, 'id' | 'updatedAt'>) => string;
   updateFormTemplate: (id: string, updates: Partial<FormTemplate>) => void;
   saveScore: (scoreData: Omit<Score, 'id' | 'scoredAt'>) => void;
@@ -479,8 +479,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               statusLabel = 'Cannot verify';
             } else if (verUpper === 'VERIFIED' || verUpper === 'APPROVED') {
               statusLabel = expiryUpper === 'EXPIRING_SOON' ? 'Expiring soon' : 'Verified';
-            } else if (expiryUpper === 'EXPIRING_SOON') {
-              statusLabel = 'Expiring soon';
             }
 
             return {
@@ -2000,8 +1998,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const createCall = (newCallData: Omit<Call, 'id' | 'documentsCount' | 'applicationsCount' | 'addenda'>): string => {
-    const newId = `call-${Date.now()}`;
+  const createCall = (newCallData: Omit<Call, 'id' | 'documentsCount' | 'applicationsCount' | 'addenda'> & { id?: string }): string => {
+    const newId = newCallData.id || `call-${Date.now()}`;
     const newCall: Call = {
       ...newCallData,
       id: newId,

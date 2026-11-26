@@ -479,7 +479,7 @@ export const BuyerFormBuilder: React.FC = () => {
 
                       {field.type === 'file_upload' && (
                         <div className="p-2.5 border border-dashed border-slate-300 bg-white rounded-lg text-center text-slate-400">
-                          Upload file attachment simulation
+                          Supplier file attachment field preview
                         </div>
                       )}
 

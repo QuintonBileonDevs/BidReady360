@@ -61,11 +61,10 @@ function isDocumentValid(
     const isExpired = statusLower === 'expired' || verStatusUpper === 'EXPIRED' || expiryStateUpper === 'EXPIRED';
     const isRejected = statusLower === 'rejected' || verStatusUpper === 'REJECTED';
     const isUnverifiable = statusLower === 'cannot verify' || verStatusUpper === 'UNVERIFIABLE';
-    const isVerified =
-      verStatusUpper === 'VERIFIED' ||
-      verStatusUpper === 'APPROVED' ||
-      statusLower === 'verified' ||
-      statusLower === 'expiring soon';
+    const hasVerStatus = verStatusUpper.length > 0;
+    const isVerified = hasVerStatus
+      ? verStatusUpper === 'VERIFIED' || verStatusUpper === 'APPROVED'
+      : statusLower === 'verified' || statusLower === 'expiring soon';
 
     if (!isVerified || isExpired || isRejected || isUnverifiable) {
       return false;

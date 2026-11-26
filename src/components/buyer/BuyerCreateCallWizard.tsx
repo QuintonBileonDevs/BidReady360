@@ -168,6 +168,7 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
 
       const localId = createCall({
         ...callData,
+        id: res.callId,
         status: publishMode === 'draft' ? 'Draft' : 'Open',
       });
       onFinished(res.callId || localId);
