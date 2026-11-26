@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Application } from '../../types';
+import { buyerApi } from '../../services/api';
+import { Application, SupplierDocument } from '../../types';
 import { StatusChip } from '../common/StatusChip';
+import { DocumentVaultPreview } from '../common/DocumentVaultPreview';
 import {
   CheckCircle2,
   XCircle,
@@ -21,8 +23,18 @@ import {
 } from 'lucide-react';
 
 export const BuyerReviewQueue: React.FC = () => {
-  const { applications, supplier, allSuppliers, documents, updateApplicationStatus, calls } = useApp();
-  const [selectedAppId, setSelectedAppId] = useState<string>(applications[0]?.id || '');
+  const {
+    applications: contextApps,
+    supplier,
+    allSuppliers,
+    documents,
+    updateApplicationStatus,
+    calls,
+    currentUser,
+    profileSummary,
+  } = useApp();
+  const [liveApplications, setLiveApplications] = useState<Application[]>([]);
+  const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [filterCallId, setFilterCallId] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,7 +44,113 @@ export const BuyerReviewQueue: React.FC = () => {
   const [infoRequestReason, setInfoRequestReason] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const reviewerDisplayName =
+    currentUser?.fullName || profileSummary?.displayName || 'Procurement Officer';
+
+  useEffect(() => {
+    let active = true;
+    buyerApi
+      .listApplications()
+      .then((rows) => {
+        if (!active || !Array.isArray(rows)) return;
+        const mapped: Application[] = rows.map((r: any) => ({
+          id: r.id,
+          callId: r.callId,
+          callNumber: r.callNumber || '',
+          callTitle: r.callTitle || '',
+          callType: r.callType || 'RFP',
+          supplierId: r.supplierId,
+          supplierName: r.supplierLegalName || r.supplierName || 'Supplier',
+          organizationId: r.organizationId,
+          organizationName: r.organizationName || '',
+          status: r.status || 'Submitted',
+          receiptNumber: r.receiptNumber || undefined,
+          submittedAt: r.submittedAt
+            ? new Date(r.submittedAt).toISOString().slice(0, 16).replace('T', ' ')
+            : '',
+          sharedDocumentIds: Array.isArray(r.documents)
+            ? r.documents.map((d: any) => d.documentVersionId || d.documentTypeId)
+            : [],
+          answers: r.answers || {},
+          responses: Array.isArray(r.responses)
+            ? r.responses
+            : r.answers && typeof r.answers === 'object'
+            ? Object.entries(r.answers).map(([label, value]) => ({
+                questionId: label,
+                label,
+                value: value as string | number | boolean,
+              }))
+            : [],
+          timeline: Array.isArray(r.timeline) ? r.timeline : [],
+        }));
+        setLiveApplications(mapped);
+        if (mapped.length > 0 && !selectedAppId) {
+          setSelectedAppId(mapped[0].id);
+        }
+      })
+      .catch((err) => {
+        console.warn('[BuyerReviewQueue] Could not fetch buyer applications:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const applications = liveApplications.length > 0 ? liveApplications : contextApps;
+
+  // Real inline document preview state
+  const [previewDoc, setPreviewDoc] = useState<{
+    title: string;
+    fileName: string;
+    mimeType: string;
+    blob: Blob;
+    objectUrl: string;
+  } | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  const closePreview = useCallback(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewDoc(null);
+    setPreviewError(null);
+    setIsPreviewLoading(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  const handlePreviewDocument = async (doc: SupplierDocument) => {
+    closePreview();
+    setIsPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const targetId = doc.versionId || doc.id;
+      const res = await buyerApi.fetchDocumentBlob(targetId);
+      previewUrlRef.current = res.objectUrl;
+      setPreviewDoc({
+        title: doc.documentType,
+        fileName: res.fileName || doc.fileName,
+        mimeType: res.mimeType || doc.mimeType || '',
+        blob: res.blob,
+        objectUrl: res.objectUrl,
+      });
+    } catch (err: any) {
+      setPreviewError(err?.message || 'Unable to load uploaded document file.');
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
 
   const selectedApp = applications.find((a) => a.id === selectedAppId) || applications[0];
 
@@ -49,48 +167,55 @@ export const BuyerReviewQueue: React.FC = () => {
     return matchesCall && matchesStatus && matchesSearch;
   });
 
-  const handleApprove = () => {
-    if (!selectedApp) return;
-    updateApplicationStatus(
-      selectedApp.id,
-      'Approved',
-      'Verified all compliance documents, CIPA registry, and questionnaire responses. Approved by procurement committee.',
-      'K. Tau (Lead Procurement Specialist)'
-    );
-    setActionSuccess(`Application for ${selectedApp.supplierName} Approved.`);
-    setTimeout(() => setActionSuccess(null), 4000);
+  const recordDecision = async (
+    decision: 'Approved' | 'Rejected' | 'More information requested',
+    comment: string
+  ) => {
+    if (!selectedApp || isSubmittingDecision) return;
+    setIsSubmittingDecision(true);
+    setActionError(null);
+    try {
+      await buyerApi.reviewApplication(selectedApp.id, decision, comment);
+      setLiveApplications((prev) =>
+        prev.map((a) => (a.id === selectedApp.id ? { ...a, status: decision } : a))
+      );
+      updateApplicationStatus(selectedApp.id, decision, comment, reviewerDisplayName);
+      setActionSuccess(
+        decision === 'Approved'
+          ? `Application for ${selectedApp.supplierName} Approved.`
+          : decision === 'Rejected'
+          ? `Application rejected: ${selectedApp.supplierName}.`
+          : `Requested supplementary details from ${selectedApp.supplierName}.`
+      );
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      setActionError(err?.message || 'Unable to save review decision.');
+    } finally {
+      setIsSubmittingDecision(false);
+    }
   };
 
-  const handleRequestInfoSubmit = (e: React.FormEvent) => {
+  const handleApprove = async () => {
+    await recordDecision(
+      'Approved',
+      'Verified compliance documents and questionnaire responses. Approved by procurement officer.'
+    );
+  };
+
+  const handleRequestInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApp || !infoRequestReason.trim()) return;
-
-    updateApplicationStatus(
-      selectedApp.id,
-      'More information requested',
-      infoRequestReason.trim(),
-      'K. Tau (Lead Procurement Specialist)'
-    );
+    await recordDecision('More information requested', infoRequestReason.trim());
     setIsRequestingInfo(false);
     setInfoRequestReason('');
-    setActionSuccess(`Requested supplementary details from ${selectedApp.supplierName}.`);
-    setTimeout(() => setActionSuccess(null), 4000);
   };
 
-  const handleRejectSubmit = (e: React.FormEvent) => {
+  const handleRejectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedApp || !rejectReason.trim()) return;
-
-    updateApplicationStatus(
-      selectedApp.id,
-      'Rejected',
-      rejectReason.trim(),
-      'K. Tau (Lead Procurement Specialist)'
-    );
+    await recordDecision('Rejected', rejectReason.trim());
     setIsRejecting(false);
     setRejectReason('');
-    setActionSuccess(`Application rejected: ${selectedApp.supplierName}.`);
-    setTimeout(() => setActionSuccess(null), 4000);
   };
 
   return (
@@ -100,6 +225,12 @@ export const BuyerReviewQueue: React.FC = () => {
         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs flex items-center gap-2 shadow-xs">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{actionSuccess}</span>
+        </div>
+      )}
+      {actionError && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 text-[#C2412D] dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-xl text-xs flex items-center gap-2 shadow-xs">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
         </div>
       )}
 
@@ -292,9 +423,10 @@ export const BuyerReviewQueue: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <StatusChip status={doc.status} />
                       <button
-                        onClick={() => alert(`Simulated document view: ${doc.fileName}`)}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100"
-                        title="View File"
+                        type="button"
+                        onClick={() => handlePreviewDocument(doc)}
+                        className="p-1.5 text-slate-500 hover:text-[#1F5F99] rounded hover:bg-slate-100 cursor-pointer"
+                        title="Preview document"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -302,6 +434,34 @@ export const BuyerReviewQueue: React.FC = () => {
                   </div>
                 ))}
               </div>
+
+              {(isPreviewLoading || previewError || previewDoc) && (
+                <div className="border border-slate-200 rounded-xl overflow-hidden mt-3">
+                  <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-800 truncate">
+                      {previewDoc ? `${previewDoc.title} — ${previewDoc.fileName}` : 'Loading document preview...'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={closePreview}
+                      className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                      title="Close preview"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <DocumentVaultPreview
+                    blob={previewDoc?.blob || null}
+                    objectUrl={previewDoc?.objectUrl || null}
+                    fileName={previewDoc?.fileName || 'document'}
+                    mimeType={previewDoc?.mimeType || ''}
+                    title={previewDoc?.title}
+                    isLoading={isPreviewLoading}
+                    error={previewError}
+                    maxHeightClass="h-[420px]"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Questionnaire Responses (if any) */}

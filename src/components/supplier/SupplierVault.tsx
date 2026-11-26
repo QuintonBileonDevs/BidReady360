@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { referenceApi, apiRequest, supplierApi } from '../../services/api';
 import { SupplierDocument } from '../../types';
 import { normaliseOmang, validateOmang } from '../../../shared/omang';
+import { DocumentVaultPreview } from '../common/DocumentVaultPreview';
 import {
   FileText,
   Upload,
@@ -88,10 +89,14 @@ export const SupplierVault: React.FC = () => {
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [replacingDoc, setReplacingDoc] = useState<SupplierDocument | null>(null);
   const [previewDoc, setPreviewDoc] = useState<SupplierDocument | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
-  const [previewMimeType, setPreviewMimeType] = useState<string>('application/pdf');
+  const [previewFileName, setPreviewFileName] = useState<string>('');
+  const [previewMimeType, setPreviewMimeType] = useState<string>('');
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewReloadKey, setPreviewReloadKey] = useState<number>(0);
+  const previewUrlRef = useRef<string | null>(null);
   const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
   const [dbDocumentTypes, setDbDocumentTypes] = useState<any[]>([]);
   const [isLoadingDocTypes, setIsLoadingDocTypes] = useState<boolean>(true);
@@ -122,30 +127,47 @@ export const SupplierVault: React.FC = () => {
     loadDocumentTypes();
   }, [loadDocumentTypes]);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
+  }, []);
+
   // Fetch real document bytes when previewing
   useEffect(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewBlob(null);
+    setPreviewBlobUrl(null);
+    setPreviewError(null);
+
     if (!previewDoc) {
-      if (previewBlobUrl) {
-        URL.revokeObjectURL(previewBlobUrl);
-        setPreviewBlobUrl(null);
-      }
-      setPreviewError(null);
       setPreviewLoading(false);
+      setPreviewFileName('');
+      setPreviewMimeType('');
       return;
     }
 
     let isMounted = true;
     setPreviewLoading(true);
-    setPreviewError(null);
+    const targetFileId = previewDoc.versionId || previewDoc.id;
 
-    supplierApi.getDocumentFileBlob(previewDoc.id)
+    supplierApi.getDocumentFileBlob(targetFileId)
       .then((res) => {
         if (!isMounted) {
           URL.revokeObjectURL(res.objectUrl);
           return;
         }
+        previewUrlRef.current = res.objectUrl;
+        setPreviewBlob(res.blob);
         setPreviewBlobUrl(res.objectUrl);
-        setPreviewMimeType(res.mimeType);
+        setPreviewFileName(res.fileName || previewDoc.fileName || 'document');
+        setPreviewMimeType(res.mimeType || previewDoc.mimeType || '');
         setPreviewLoading(false);
       })
       .catch((err) => {
@@ -158,17 +180,15 @@ export const SupplierVault: React.FC = () => {
 
     return () => {
       isMounted = false;
-      if (previewBlobUrl) {
-        URL.revokeObjectURL(previewBlobUrl);
-      }
     };
-  }, [previewDoc?.id]);
+  }, [previewDoc?.id, previewDoc?.versionId, previewReloadKey]);
 
   const handleDownloadDocument = async (doc: SupplierDocument) => {
     try {
       setDownloadingDocId(doc.id);
-      showToast(`Fetching ${doc.fileName || doc.documentType} from database...`);
-      const { fileName, objectUrl } = await supplierApi.getDocumentFileBlob(doc.id);
+      showToast(`Fetching ${doc.fileName || doc.documentType} from vault...`);
+      const targetFileId = doc.versionId || doc.id;
+      const { fileName, objectUrl } = await supplierApi.getDocumentFileBlob(targetFileId);
       const a = document.createElement('a');
       a.href = objectUrl;
       a.download = fileName || doc.fileName || `${(doc.documentType || 'document').replace(/\s+/g, '_')}.pdf`;
@@ -178,13 +198,18 @@ export const SupplierVault: React.FC = () => {
       setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
       showToast(`Downloaded ${fileName || doc.fileName} successfully.`);
     } catch (err: any) {
-      console.error('Download failed, using direct URL fallback:', err);
-      const fallbackUrl = supplierApi.getDocumentDownloadUrl(doc.id, true);
-      window.open(fallbackUrl, '_blank');
-      showToast(`Initiating direct download for ${doc.fileName}...`);
+      console.error('Download failed:', err);
+      showToast(err?.message || `Unable to download ${doc.fileName || 'document'}.`);
     } finally {
       setDownloadingDocId(null);
     }
+  };
+
+  const todayUtcStr = () => new Date().toISOString().slice(0, 10);
+  const nextYearUtcStr = () => {
+    const d = new Date();
+    d.setUTCFullYear(d.getUTCFullYear() + 1);
+    return d.toISOString().slice(0, 10);
   };
 
   // Upload Drawer Form State
@@ -195,12 +220,12 @@ export const SupplierVault: React.FC = () => {
   const [drawerDocNumberError, setDrawerDocNumberError] = useState<string | null>(null);
   const [drawerReadStatus, setDrawerReadStatus] = useState<{ status: string; error?: string | null; extractedNumber?: string | null } | null>(null);
   const [isReadingDocument, setIsReadingDocument] = useState(false);
-  const [drawerIssueDate, setDrawerIssueDate] = useState('2026-01-15');
-  const [drawerExpiryDate, setDrawerExpiryDate] = useState('2027-01-15');
+  const [drawerIssueDate, setDrawerIssueDate] = useState(() => todayUtcStr());
+  const [drawerExpiryDate, setDrawerExpiryDate] = useState(() => nextYearUtcStr());
   const [drawerFileName, setDrawerFileName] = useState('');
   const [drawerFileSize, setDrawerFileSize] = useState('');
   const [drawerCertifiedCopy, setDrawerCertifiedCopy] = useState(false);
-  const [drawerCertificationDate, setDrawerCertificationDate] = useState('2026-09-20');
+  const [drawerCertificationDate, setDrawerCertificationDate] = useState(() => todayUtcStr());
   const [isFileUploaded, setIsFileUploaded] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -216,12 +241,10 @@ export const SupplierVault: React.FC = () => {
 
   const processSelectedFile = (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
-      const msg = 'File size exceeds 10 MB limit.';
-      showToast(msg);
-      alert(msg);
+      showToast('File size exceeds 10 MB limit.');
       return;
     }
-    const validExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx', 'doc'];
+    const validExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'docx', 'doc', 'txt'];
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     const validTypes = [
       'application/pdf',
@@ -229,13 +252,13 @@ export const SupplierVault: React.FC = () => {
       'image/jpeg',
       'image/jpg',
       'image/webp',
+      'image/gif',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
     ];
     if (!validTypes.includes(file.type) && !validExtensions.includes(ext)) {
-      const msg = 'Unsupported file type. Please upload a PDF, PNG, JPG, or Word document.';
-      showToast(msg);
-      alert(msg);
+      showToast('Unsupported file type. Please upload a PDF, PNG, JPG, WebP, Word, or TXT document.');
       return;
     }
 
@@ -309,8 +332,8 @@ export const SupplierVault: React.FC = () => {
   // "Check the values we read before saving" AI readout
   const [extractedFields, setExtractedFields] = useState<ExtractedFieldValues>({
     documentNumber: '',
-    issueDate: '2026-01-15',
-    expiryDate: '2027-01-15',
+    issueDate: todayUtcStr(),
+    expiryDate: nextYearUtcStr(),
     authorityName: 'Botswana Regulatory Authority',
   });
 
@@ -403,12 +426,20 @@ export const SupplierVault: React.FC = () => {
     if (doc.expiryDate) {
       try {
         const exp = new Date(doc.expiryDate);
-        const now = new Date('2026-10-05');
+        const now = new Date();
+        now.setUTCHours(0, 0, 0, 0);
         if (!isNaN(exp.getTime())) {
-          if (exp < now) {
+          if (exp < now || doc.status === 'Expired') {
             return {
               label: 'Expired',
               chipClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
+              isReady: false,
+            };
+          }
+          if (doc.status !== 'Verified' && doc.status !== 'Expiring soon') {
+            return {
+              label: 'Pending review',
+              chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
               isReady: false,
             };
           }
@@ -424,10 +455,12 @@ export const SupplierVault: React.FC = () => {
       } catch {}
     }
 
-    if (doc.status === 'Verified') {
+    if (doc.status === 'Verified' || doc.status === 'Expiring soon') {
       return {
-        label: 'Verified',
-        chipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+        label: doc.status === 'Expiring soon' ? 'Expiring soon' : 'Verified',
+        chipClass: doc.status === 'Expiring soon'
+          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
         isReady: true,
       };
     }
@@ -435,7 +468,7 @@ export const SupplierVault: React.FC = () => {
     return {
       label: 'Pending review',
       chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-      isReady: true,
+      isReady: false,
     };
   };
 
@@ -456,10 +489,10 @@ export const SupplierVault: React.FC = () => {
       };
     }
     const derived = getDerivedStatus(doc);
-    if (derived.label === 'Verified') {
+    if (derived.label === 'Verified' || derived.label.startsWith('Expiring soon')) {
       return {
-        label: 'Verified',
-        chipClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+        label: derived.label,
+        chipClass: derived.chipClass,
         isReady: true,
       };
     }
@@ -480,11 +513,11 @@ export const SupplierVault: React.FC = () => {
     return {
       label: 'Pending review',
       chipClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800',
-      isReady: true,
+      isReady: false,
     };
   };
 
-  // Check Directors' and Shareholders' ID readiness (Smart Logic with Actual Uploads & Multiple Directors)
+  // Check Directors' and Shareholders' ID readiness (requires Verified status)
   const directorsList = supplier.directors || [];
   const directorsCount = directorsList.length;
   const directorDocs = documents.filter((doc) => {
@@ -493,14 +526,17 @@ export const SupplierVault: React.FC = () => {
     return t.includes('director') || t.includes('shareholder') || t.includes('identity') || title.includes('director') || title.includes('shareholder');
   });
   const directorDoc = directorDocs[0];
-  const isDirectorsReady = directorsCount > 0 && directorDocs.length > 0 && (directorDoc?.status === 'Verified' || directorDoc?.status === 'Pending' || directorDoc?.status === 'Expiring soon');
+  const isDirectorsReady =
+    directorsCount > 0 &&
+    directorDocs.length > 0 &&
+    directorDocs.some((d) => d.status === 'Verified' || d.status === 'Expiring soon');
 
   const directorsStatusLabel = directorsCount === 0
     ? 'Missing (No directors registered)'
     : directorDocs.length === 0
     ? 'Missing (Not uploaded)'
     : directorDocs.length >= directorsCount
-    ? (directorDoc?.status || 'Verified')
+    ? (directorDoc?.status || 'Pending review')
     : `Incomplete (${directorDocs.length}/${directorsCount} IDs uploaded)`;
 
   // Documents matching
@@ -611,18 +647,18 @@ export const SupplierVault: React.FC = () => {
     setDrawerIdentityType('OMANG');
     setDrawerDocNumberError(null);
     setDrawerReadStatus(null);
-    setDrawerIssueDate(existingDoc?.issueDate || '2026-01-15');
-    setDrawerExpiryDate(existingDoc?.expiryDate || '2027-01-15');
+    setDrawerIssueDate(existingDoc?.issueDate || todayUtcStr());
+    setDrawerExpiryDate(existingDoc?.expiryDate || nextYearUtcStr());
     setDrawerFileName(existingDoc ? existingDoc.fileName : '');
     setDrawerFileSize(existingDoc ? existingDoc.fileSize : '');
     setDrawerCertifiedCopy(existingDoc?.certifiedCopy || false);
-    setDrawerCertificationDate(existingDoc?.certificationDate || '2026-09-20');
+    setDrawerCertificationDate(existingDoc?.certificationDate || todayUtcStr());
     setIsFileUploaded(Boolean(existingDoc));
 
     setExtractedFields({
       documentNumber: existingDoc?.documentNumber || '',
-      issueDate: existingDoc?.issueDate || '2026-01-15',
-      expiryDate: existingDoc?.expiryDate || '2027-01-15',
+      issueDate: existingDoc?.issueDate || todayUtcStr(),
+      expiryDate: existingDoc?.expiryDate || nextYearUtcStr(),
       authorityName: getAuthorityForType(resolvedType === 'Other (Custom)' ? resolvedCustom : resolvedType),
     });
 
@@ -660,11 +696,11 @@ export const SupplierVault: React.FC = () => {
     e.preventDefault();
 
     if (!drawerIssueDate) {
-      alert('Please fill out issue date.');
+      showToast('Please fill out the issue date before saving.');
       return;
     }
     if (!selectedFile) {
-      alert('Please select a valid PDF, PNG, or JPG file to upload.');
+      showToast('Please select a valid PDF, PNG, JPG, or Word file to upload.');
       return;
     }
 
@@ -696,16 +732,22 @@ export const SupplierVault: React.FC = () => {
 
       uploadDocument({
         id: res.documentId || `doc-${Date.now()}`,
+        versionId: res.versionId || null,
+        versionNo: res.versionNo || undefined,
         supplierId: supplier.id,
         documentType: res.documentTypeName || finalDocType,
+        documentTypeCode: res.documentTypeCode || docTypeCode,
+        title: res.title || finalDocType,
         documentNumber: res.documentNumber || drawerDocNumber || undefined,
         fileName: res.fileName || selectedFile.name,
-        fileSize: res.fileSizeBytes ? `${(Number(res.fileSizeBytes) / (1024 * 1024)).toFixed(1)} MB` : `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB`,
+        mimeType: res.mimeType || selectedFile.type || undefined,
+        hasFile: true,
+        fileSize: res.fileSizeBytes ? `${Math.max(1, Math.round(Number(res.fileSizeBytes) / 1024))} KB` : `${Math.max(1, Math.round(selectedFile.size / 1024))} KB`,
         issueDate: res.issueDate || drawerIssueDate,
         expiryDate: res.expiryDate || (requiresExpiry ? drawerExpiryDate : undefined),
         status: 'Pending',
         statusMessage: 'Pending verification by procurement registry officers.',
-        downloadUrl: `/api/supplier/documents/${res.documentId}/file`,
+        downloadUrl: `/api/supplier/documents/${res.versionId || res.documentId}/file`,
         certifiedCopy: drawerCertifiedCopy,
         certificationDate: drawerCertifiedCopy ? drawerCertificationDate : undefined,
         sha256: res.sha256,
@@ -725,7 +767,6 @@ export const SupplierVault: React.FC = () => {
       setDrawerFileSize('');
     } catch (err: any) {
       const errMsg = err.message || 'Upload failed due to network or server error.';
-      alert(errMsg);
       showToast(errMsg);
     }
   };
@@ -1770,73 +1811,35 @@ export const SupplierVault: React.FC = () => {
               </div>
 
               {/* Real Document Rendering */}
-              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner overflow-hidden min-h-[420px] flex flex-col justify-center items-center">
-                {previewLoading ? (
-                  <div className="py-20 text-center space-y-3">
-                    <RotateCw className="w-8 h-8 animate-spin text-[#1F5F99] dark:text-[#38BDF8] mx-auto" />
-                    <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">Loading document bytes from database...</p>
-                  </div>
-                ) : previewError ? (
-                  <div className="p-8 text-center space-y-3 max-w-md">
-                    <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
-                    <h4 className="font-semibold text-[#10212E] dark:text-white">Preview Notice</h4>
-                    <p className="text-[13px] text-[#6B7A87]">{previewError}</p>
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadDocument(previewDoc)}
-                      className="px-4 py-2 bg-[#1F5F99] text-white rounded text-[13px] font-medium"
-                    >
-                      Download Directly
-                    </button>
-                  </div>
-                ) : previewBlobUrl && (previewMimeType.includes('image') || previewDoc.fileName?.match(/\.(png|jpe?g|webp)$/i)) ? (
-                  <div className="p-4 flex items-center justify-center w-full max-h-[520px] overflow-auto">
-                    <img
-                      src={previewBlobUrl}
-                      alt={previewDoc.fileName}
-                      className="max-h-[500px] max-w-full object-contain rounded shadow"
-                    />
-                  </div>
-                ) : previewBlobUrl && (previewMimeType.includes('pdf') || previewDoc.fileName?.endsWith('.pdf')) ? (
-                  <iframe
-                    src={previewBlobUrl}
-                    title={previewDoc.fileName || 'Document Preview'}
-                    className="w-full h-[520px] border-0 bg-white"
-                  />
-                ) : (
-                  <div className="p-8 text-center space-y-4">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
-                      FILE
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
-                        {previewDoc.fileName}
-                      </h4>
-                      <p className="text-[13px] text-[#6B7A87] mt-0.5">
-                        {previewMimeType} · Stored securely in database
-                      </p>
-                    </div>
-                    <div className="pt-2 flex flex-wrap justify-center gap-6 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
-                      <div><span className="text-[#6B7A87]">Document Number:</span> <strong>{previewDoc.documentNumber || 'N/A'}</strong></div>
-                      <div><span className="text-[#6B7A87]">Issue Date:</span> <strong>{previewDoc.issueDate || 'N/A'}</strong></div>
-                      <div><span className="text-[#6B7A87]">Expiry Date:</span> <strong>{previewDoc.expiryDate || 'N/A'}</strong></div>
-                    </div>
-                  </div>
-                )}
+              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner overflow-hidden">
+                <DocumentVaultPreview
+                  blob={previewBlob}
+                  objectUrl={previewBlobUrl}
+                  fileName={previewFileName || previewDoc.fileName}
+                  mimeType={previewMimeType || previewDoc.mimeType}
+                  title={previewDoc.documentType}
+                  isLoading={previewLoading}
+                  error={previewError}
+                  onRetry={() => setPreviewReloadKey((k) => k + 1)}
+                  onDownload={() => handleDownloadDocument(previewDoc)}
+                  maxHeightClass="h-[520px]"
+                />
               </div>
 
               {/* Checksum & Security Fingerprint */}
-              <div className="p-3 bg-white dark:bg-[#10212E] rounded border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[12px] gap-2">
-                <div className="truncate max-w-full">
-                  <span className="text-[#6B7A87]">SHA-256 Checksum: </span>
-                  <span className="font-mono text-[11px] text-[#10212E] dark:text-slate-300">
-                    {previewDoc.sha256 || 'c5365b555caf161039803486e3e72f7d3e614a83a74e344d4d20f8e8130d5ae6'}
+              {previewDoc.sha256 && (
+                <div className="p-3 bg-white dark:bg-[#10212E] rounded border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[12px] gap-2">
+                  <div className="truncate max-w-full">
+                    <span className="text-[#6B7A87]">SHA-256 Checksum: </span>
+                    <span className="font-mono text-[11px] text-[#10212E] dark:text-slate-300">
+                      {previewDoc.sha256}
+                    </span>
+                  </div>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold shrink-0 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Integrity Verified
                   </span>
                 </div>
-                <span className="text-emerald-700 dark:text-emerald-400 font-semibold shrink-0 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Integrity Verified
-                </span>
-              </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
@@ -1850,17 +1853,6 @@ export const SupplierVault: React.FC = () => {
                   <Download className="w-4 h-4" />
                   <span>{downloadingDocId === previewDoc.id ? 'Downloading...' : 'Download Document'}</span>
                 </button>
-
-                {previewBlobUrl && (
-                  <button
-                    type="button"
-                    onClick={() => window.open(previewBlobUrl, '_blank')}
-                    className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-2 cursor-pointer"
-                  >
-                    <ExternalLink className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
-                    <span>Open in Full Tab</span>
-                  </button>
-                )}
               </div>
 
               <button
@@ -1926,7 +1918,8 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
     if (doc.expiryDate) {
       try {
         const exp = new Date(doc.expiryDate);
-        const now = new Date('2026-10-05');
+        const now = new Date();
+        now.setUTCHours(0, 0, 0, 0);
         if (!isNaN(exp.getTime())) {
           if (exp < now) {
             return {

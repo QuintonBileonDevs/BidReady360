@@ -84,29 +84,11 @@ const ROLES_INFO = [
 ];
 
 export const BuyerTeamRoles: React.FC = () => {
-  const { addAuditEvent } = useApp();
+  const { addAuditEvent, currentUser, profileSummary, registeredBuyerOrgName } = useApp();
+  const actorDisplayName = currentUser?.fullName || profileSummary?.displayName || 'Org Admin';
+  const orgDisplayName = profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization';
 
-  // Load members from localStorage or defaults
-  const [members, setMembers] = useState<TeamMember[]>(() => {
-    try {
-      const saved = localStorage.getItem('bidready_buyer_team_members');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch {
-      // Fallback
-    }
-    return [];
-  });
-
-  // Save to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('bidready_buyer_team_members', JSON.stringify(members));
-    } catch {
-      // Ignore
-    }
-  }, [members]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
 
   // Tab switch: 'members' vs 'roles'
   const [activeTab, setActiveTab] = useState<'members' | 'roles'>('members');
@@ -125,6 +107,7 @@ export const BuyerTeamRoles: React.FC = () => {
   const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // New Member Form State
   const [newFullName, setNewFullName] = useState('');
@@ -166,8 +149,9 @@ export const BuyerTeamRoles: React.FC = () => {
   // Add Member Submission
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!newFullName.trim() || !newEmail.trim() || !newJobTitle.trim()) {
-      alert('Please fill in all required fields.');
+      setFormError('Please fill in all required fields.');
       return;
     }
 
@@ -175,7 +159,7 @@ export const BuyerTeamRoles: React.FC = () => {
       id: `tm-${Date.now()}`,
       fullName: newFullName.trim(),
       email: newEmail.trim().toLowerCase(),
-      phone: newPhone.trim() || '+267 71 000 000',
+      phone: newPhone.trim() || '',
       department: newDept,
       jobTitle: newJobTitle.trim(),
       role: newRole,
@@ -197,13 +181,12 @@ export const BuyerTeamRoles: React.FC = () => {
 
     addAuditEvent({
       action: 'Team Member Invited',
-      actorName: 'Tumelo Sekgoma (Org Admin)',
+      actorName: actorDisplayName,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: orgDisplayName,
       entityType: 'Organization',
       entityId: newMemberRecord.id,
       details: `Invited ${newMemberRecord.fullName} (${newMemberRecord.email}) as ${newMemberRecord.role} in ${newMemberRecord.department}.`,
-      ipAddress: '168.167.24.11',
     });
 
     setIsAddModalOpen(false);
@@ -221,6 +204,7 @@ export const BuyerTeamRoles: React.FC = () => {
     setNewApprovalLimit(5000000);
     setRequireConflictDeclaration(true);
     setEnforceMfa(true);
+    setFormError(null);
   };
 
   // Save Edit Member
@@ -234,13 +218,12 @@ export const BuyerTeamRoles: React.FC = () => {
 
     addAuditEvent({
       action: 'Team Member Profile Updated',
-      actorName: 'Tumelo Sekgoma (Org Admin)',
+      actorName: actorDisplayName,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: orgDisplayName,
       entityType: 'Organization',
       entityId: editingMember.id,
       details: `Updated profile for ${editingMember.fullName}: Role=${editingMember.role}, Dept=${editingMember.department}, Limit=${editingMember.approvalLimitBWP ? 'BWP ' + editingMember.approvalLimitBWP.toLocaleString() : 'N/A'}.`,
-      ipAddress: '168.167.24.11',
     });
 
     showNotification(`Profile for ${editingMember.fullName} updated successfully.`);
@@ -261,13 +244,12 @@ export const BuyerTeamRoles: React.FC = () => {
 
     addAuditEvent({
       action: 'Team Member Access Suspended',
-      actorName: 'Tumelo Sekgoma (Org Admin)',
+      actorName: actorDisplayName,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: orgDisplayName,
       entityType: 'Organization',
       entityId: suspendingMember.id,
       details: `Suspended access for ${suspendingMember.fullName}. Reason: ${suspensionReason || 'Administrative decision'}.`,
-      ipAddress: '168.167.24.11',
     });
 
     showNotification(`Access for ${suspendingMember.fullName} has been suspended.`);
@@ -285,13 +267,12 @@ export const BuyerTeamRoles: React.FC = () => {
 
     addAuditEvent({
       action: 'Team Member Access Restored',
-      actorName: 'Tumelo Sekgoma (Org Admin)',
+      actorName: actorDisplayName,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: orgDisplayName,
       entityType: 'Organization',
       entityId: member.id,
       details: `Restored active access for ${member.fullName}.`,
-      ipAddress: '168.167.24.11',
     });
 
     showNotification(`Access for ${member.fullName} has been restored to active status.`);
@@ -312,16 +293,15 @@ export const BuyerTeamRoles: React.FC = () => {
 
     addAuditEvent({
       action: 'Team Member Removed',
-      actorName: 'Tumelo Sekgoma (Org Admin)',
+      actorName: actorDisplayName,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: orgDisplayName,
       entityType: 'Organization',
       entityId: removingMember.id,
-      details: `Removed ${removingMember.fullName} (${removingMember.role}) from council team roster.`,
-      ipAddress: '168.167.24.11',
+      details: `Removed ${removingMember.fullName} (${removingMember.role}) from organization team roster.`,
     });
 
-    showNotification(`${removingMember.fullName} removed from council team roster.`);
+    showNotification(`${removingMember.fullName} removed from organization team roster.`);
     setRemovingMember(null);
   };
 
@@ -340,7 +320,7 @@ export const BuyerTeamRoles: React.FC = () => {
             Team members & governance roles
           </h1>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Manage procurement officers, certified evaluators, and statutory approvers for Gaborone Regional Council.
+            Manage procurement officers, certified evaluators, and statutory approvers for {orgDisplayName}.
           </p>
         </div>
 
@@ -886,6 +866,11 @@ export const BuyerTeamRoles: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddMember} className="space-y-4">
+              {formError && (
+                <div className="p-3 rounded-[6px] bg-rose-50 border border-rose-200 text-[#C2412D] text-[13px] font-medium">
+                  {formError}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Full Name */}
                 <div className="space-y-1.5">
@@ -1341,7 +1326,7 @@ export const BuyerTeamRoles: React.FC = () => {
             </div>
 
             <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-              Are you sure you want to remove <strong>{removingMember.fullName}</strong> from the Gaborone Regional Council team roster?
+              Are you sure you want to remove <strong>{removingMember.fullName}</strong> from the {orgDisplayName} team roster?
               This will free up 1 license seat. Historical score sheets and signed audit events will continue to reference their name.
             </p>
 

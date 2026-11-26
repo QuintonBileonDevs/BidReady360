@@ -34,6 +34,8 @@ export interface ProfileSummary {
   emailVerified?: boolean;
   complianceStatus?: string;
   profileCompleteness?: number;
+  organizationStatus?: string;
+  rejectionReason?: string | null;
 }
 
 export interface AuthSession {
@@ -100,9 +102,10 @@ export async function apiRequest<T = any>(endpoint: string, options: RequestInit
       const errorMsg = data.message || `Request failed with status ${res.status}`;
       const err = new Error(errorMsg) as any;
       err.status = res.status;
-      err.code = data.code || 'API_ERROR';
+      err.code = data.code || data.error || 'API_ERROR';
       err.field = data.field;
       err.email = data.email;
+      err.lockedUntil = data.lockedUntil || null;
       throw err;
     }
 
@@ -188,7 +191,7 @@ export const authApi = {
   },
 
   async login(email: string, password: string) {
-    const res = await apiRequest<{ requiresMfa?: boolean; mfaUserId?: string; token?: string; user?: any }>('/api/auth/login', {
+    const res = await apiRequest<{ requiresMfa?: boolean; mfaUserId?: string; token?: string; user?: any; activeTenant?: any; profileSummary?: any }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -197,7 +200,7 @@ export const authApi = {
   },
 
   async verifyMfa(userId: string, totpCode: string) {
-    const res = await apiRequest<{ token?: string; user?: any }>('/api/auth/verify-mfa', {
+    const res = await apiRequest<{ token?: string; user?: any; activeTenant?: any; profileSummary?: any }>('/api/auth/verify-mfa', {
       method: 'POST',
       body: JSON.stringify({ userId, totpCode }),
     });
@@ -253,6 +256,32 @@ export const authApi = {
 
   async bootstrap(signal?: AbortSignal) {
     return await apiRequest<any>('/api/bootstrap', { signal });
+  },
+
+  async getInvitation(token: string) {
+    return apiRequest<{
+      id: string;
+      email: string;
+      tenantType: 'supplier' | 'organization';
+      tenantId: string;
+      tenantName: string;
+      roleId: string;
+      roleName: string;
+      inviterName: string;
+      expiresAt: string;
+    }>(`/api/auth/invitations/${encodeURIComponent(token)}`);
+  },
+
+  async acceptInvite(payload: { token: string; password: string; fullName?: string }) {
+    const res = await apiRequest<{ token?: string; user?: any; activeTenant?: any; profileSummary?: any }>(
+      '/api/auth/accept-invite',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+    if (res.token) localStorage.setItem('bidready_token', res.token);
+    return res;
   },
 
   async logout() {
@@ -319,10 +348,6 @@ export const callsApi = {
       body: JSON.stringify({ question, topic }),
     });
   },
-
-  async getSupplierPreview() {
-    return apiRequest<any>('/api/calls/supplier-preview');
-  },
 };
 
 // ---------------------------------------------------------------------
@@ -374,6 +399,7 @@ export const supplierApi = {
 
     const res = await fetch('/api/supplier/documents/upload', {
       method: 'POST',
+      credentials: 'include',
       headers,
       body: formData,
     });
@@ -422,11 +448,10 @@ export const supplierApi = {
   },
 
   getDocumentDownloadUrl(docId: string, download = false): string {
-    const token = localStorage.getItem('bidready_token');
     const params = new URLSearchParams();
     if (download) params.set('download', '1');
-    if (token) params.set('token', token);
-    return `/api/supplier/documents/${encodeURIComponent(docId)}/file?${params.toString()}`;
+    const qs = params.toString();
+    return `/api/supplier/documents/${encodeURIComponent(docId)}/file${qs ? `?${qs}` : ''}`;
   },
 
   async getDocumentFileBlob(docId: string): Promise<{ blob: Blob; fileName: string; mimeType: string; objectUrl: string }> {
@@ -438,6 +463,8 @@ export const supplierApi = {
 
     const res = await fetch(`/api/supplier/documents/${encodeURIComponent(docId)}/file`, {
       method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
       headers,
     });
 
@@ -446,17 +473,26 @@ export const supplierApi = {
       throw new Error(errJson.message || `Failed to fetch document file (${res.status})`);
     }
 
-    let fileName = 'document.pdf';
+    let fileName = 'document';
     const disposition = res.headers.get('content-disposition');
     if (disposition) {
-      const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-      if (match && match[1]) {
-        fileName = decodeURIComponent(match[1].trim());
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const asciiMatch = disposition.match(/filename="([^"]+)"/i) || disposition.match(/filename=([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          fileName = decodeURIComponent(utf8Match[1].trim());
+        } catch {
+          fileName = utf8Match[1].trim();
+        }
+      } else if (asciiMatch && asciiMatch[1]) {
+        fileName = asciiMatch[1].trim().replace(/^"|"$/g, '');
       }
     }
 
-    const blob = await res.blob();
-    const mimeType = blob.type || res.headers.get('content-type') || 'application/pdf';
+    const headerMime = (res.headers.get('content-type') || '').split(';')[0].trim();
+    const rawBlob = await res.blob();
+    const mimeType = headerMime || rawBlob.type || 'application/octet-stream';
+    const blob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
     const objectUrl = URL.createObjectURL(blob);
     return { blob, fileName, mimeType, objectUrl };
   },
@@ -493,6 +529,36 @@ export const supplierApi = {
     return apiRequest('/api/supplier/projects', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  async updateProject(id: string, data: any) {
+    return apiRequest(`/api/supplier/projects/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteProject(id: string) {
+    return apiRequest(`/api/supplier/projects/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async listTeam() {
+    return apiRequest<{ members: any[]; invitations: any[] }>('/api/supplier/team', { cache: 'no-store' });
+  },
+
+  async inviteTeamMember(payload: { email: string; role: string }) {
+    return apiRequest<any>('/api/supplier/team/invite', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async revokeInvitation(id: string) {
+    return apiRequest(`/api/supplier/team/invite/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   },
 
@@ -541,10 +607,32 @@ export const supplierApi = {
 // Buyer API
 // ---------------------------------------------------------------------
 export const buyerApi = {
+  async listCalls() {
+    return apiRequest<any[]>('/api/buyer/calls', { cache: 'no-store' });
+  },
+
   async createCall(payload: any) {
     return apiRequest('/api/buyer/calls/create', {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  },
+
+  async updateCall(callId: string, payload: any) {
+    return apiRequest(`/api/buyer/calls/${encodeURIComponent(callId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async createAddendum(callId: string, payload: { title: string; body?: string; summary?: string; newClosesAt?: string }) {
+    return apiRequest(`/api/buyer/calls/${encodeURIComponent(callId)}/addenda`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: payload.title,
+        body: payload.body ?? payload.summary ?? '',
+        newClosesAt: payload.newClosesAt,
+      }),
     });
   },
 
@@ -557,6 +645,10 @@ export const buyerApi = {
       method: 'POST',
       body: JSON.stringify({ decision, comment }),
     });
+  },
+
+  async listClarifications() {
+    return apiRequest<any[]>('/api/buyer/clarifications', { cache: 'no-store' });
   },
 
   async answerClarification(clarificationId: string, answer: string, responderTitle?: string) {
@@ -622,6 +714,49 @@ export const buyerApi = {
   async listContracts() {
     return apiRequest<any[]>('/api/buyer/contracts');
   },
+
+  async fetchDocumentBlob(docOrVersionId: string): Promise<{ blob: Blob; fileName: string; mimeType: string; objectUrl: string }> {
+    const token = localStorage.getItem('bidready_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`/api/buyer/documents/${encodeURIComponent(docOrVersionId)}/file`, {
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      headers,
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || `Failed to load document preview (HTTP ${res.status})`);
+    }
+
+    let fileName = 'document';
+    const disposition = res.headers.get('content-disposition');
+    if (disposition) {
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const asciiMatch = disposition.match(/filename="([^"]+)"/i) || disposition.match(/filename=([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          fileName = decodeURIComponent(utf8Match[1].trim());
+        } catch {
+          fileName = utf8Match[1].trim();
+        }
+      } else if (asciiMatch && asciiMatch[1]) {
+        fileName = asciiMatch[1].trim().replace(/^"|"$/g, '');
+      }
+    }
+
+    const headerMime = (res.headers.get('content-type') || '').split(';')[0].trim();
+    const rawBlob = await res.blob();
+    const mimeType = headerMime || rawBlob.type || 'application/octet-stream';
+    const blob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
+    const objectUrl = URL.createObjectURL(blob);
+    return { blob, fileName, mimeType, objectUrl };
+  },
 };
 
 // ---------------------------------------------------------------------
@@ -642,7 +777,7 @@ export const auditApi = {
 };
 
 // ---------------------------------------------------------------------
-// Platform Admin Verification API
+// Platform Admin API
 // ---------------------------------------------------------------------
 export interface AdminSupportingDoc {
   documentId: string;
@@ -654,6 +789,8 @@ export interface AdminSupportingDoc {
   mimeType: string;
   documentNumber: string | null;
   verificationStatus: string;
+  sha256?: string | null;
+  hasFile?: boolean;
   uploadedAt: string;
 }
 
@@ -674,6 +811,8 @@ export interface AdminQueuePerson {
   kycReference: string | null;
   idLast4: string | null;
   hasId: boolean;
+  omangValid?: boolean | null;
+  omangMessage?: string | null;
   createdAt: string;
   updatedAt: string;
   supportingDocuments: AdminSupportingDoc[];
@@ -701,10 +840,360 @@ export interface AdminQueueDocument {
   verificationNotes: string | null;
   rejectionReason: string | null;
   extractionConfidence: number | null;
+  sha256?: string | null;
+  hasFile?: boolean;
   uploadedAt: string;
 }
 
+export interface AdminOverviewKpis {
+  pendingOrgsCount: number;
+  activeOrgsCount: number;
+  suspendedOrgsCount: number;
+  totalSuppliersCount: number;
+  pendingSuppliersCount: number;
+  verifiedSuppliersCount: number;
+  pendingPeopleCount: number;
+  pendingDocumentsCount: number;
+  verificationQueueCount: number;
+  activeCallsCount: number;
+  totalBidsCount: number;
+  totalUsersCount: number;
+  lockedUsersCount: number;
+  openRiskFlagsCount: number;
+  activeDebarmentsCount: number;
+  failedDeliveriesCount: number;
+  overdueInvoicesCount: number;
+  monthlyMrrBwp: number;
+  complianceRatePercent: number;
+}
+
+export interface AdminOverviewResponse {
+  kpis: AdminOverviewKpis;
+  pendingOrgs: {
+    id: string;
+    name: string;
+    type: string | null;
+    gazetteRef: string | null;
+    email: string | null;
+    status: string;
+    verificationStatus: string;
+    createdAt: string;
+  }[];
+  openRiskFlags: {
+    id: string;
+    flagType: string;
+    severity: string;
+    status: string;
+    details: any;
+    createdAt: string;
+    supplierName: string;
+  }[];
+  recentAuditEvents: AdminAuditEventRecord[];
+  monthlyGrowth: { month: string; suppliers: number; organizations: number }[];
+  monthlyRevenue: { month: string; paid: number; outstanding: number; total: number }[];
+  generatedAt: string;
+}
+
+export interface AdminOrganizationRecord {
+  id: string;
+  name: string;
+  slug: string;
+  organizationType: string | null;
+  registrationNumber: string | null;
+  status: 'pending' | 'active' | 'suspended' | 'closed';
+  verificationStatus: 'pending_review' | 'verified' | 'rejected';
+  contactEmail: string | null;
+  contactPhone: string | null;
+  city: string | null;
+  district: string | null;
+  rejectionReason: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  membersCount: number;
+  contactPerson: string | null;
+  leadEmail: string | null;
+  planName: string;
+}
+
+export interface AdminSupplierRecord {
+  id: string;
+  legalName: string;
+  tradingName: string | null;
+  cipaNumber: string;
+  tinNumber: string | null;
+  ppraCode: string | null;
+  companyType: string | null;
+  city: string | null;
+  district: string | null;
+  email: string | null;
+  primaryPhone: string | null;
+  citizenOwnedPercentage: number;
+  status: string;
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected';
+  complianceStatus: 'Fully compliant' | 'Action required' | 'Non-compliant';
+  profileCompleteness: number;
+  verifiedAt: string | null;
+  createdAt: string;
+  totalDocs: number;
+  verifiedDocs: number;
+  pendingDocs: number;
+  expiredDocs: number;
+  peopleCount: number;
+  verifiedPeopleCount: number;
+  activeDebarments: number;
+}
+
+export interface AdminSupplierDetail {
+  supplier: AdminSupplierRecord & { physicalAddress?: string | null };
+  directors: {
+    id: string;
+    fullName: string;
+    personRole: string;
+    ownershipPercent: number | null;
+    identityType: string | null;
+    gender: 'male' | 'female' | null;
+    nationality: string | null;
+    isCitizen: boolean;
+    kycStatus: 'not_started' | 'pending' | 'verified' | 'failed';
+    kycVerifiedAt: string | null;
+    kycReference: string | null;
+    hasId: boolean;
+    idLast4: string | null;
+    omangValid: boolean | null;
+    omangMessage: string | null;
+  }[];
+  documents: {
+    documentId: string;
+    versionId: string;
+    documentTypeCode: string;
+    documentTypeName: string;
+    title: string;
+    versionNo: number;
+    fileName: string;
+    mimeType: string;
+    documentNumber: string | null;
+    issueDate: string | null;
+    expiryDate: string | null;
+    verificationStatus: string;
+    verifiedAt: string | null;
+    verificationNotes: string | null;
+    rejectionReason: string | null;
+    sha256?: string | null;
+    hasFile?: boolean;
+    uploadedAt: string;
+  }[];
+  debarments: {
+    id: string;
+    reason: string;
+    startsOn: string;
+    endsOn: string | null;
+    liftedAt: string | null;
+    evidenceRef: string | null;
+    organizationName: string | null;
+  }[];
+}
+
+export interface AdminManagedUser {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  status: string;
+  isPlatformAdmin: boolean;
+  emailVerifiedAt: string | null;
+  mfaEnabled: boolean;
+  mfaType: string | null;
+  lastLoginAt: string | null;
+  failedLoginAttempts: number;
+  lockedUntil: string | null;
+  isLocked: boolean;
+  createdAt: string;
+  activeSessionsCount: number;
+  tenantName: string;
+  roleLabel: string;
+  tenantType: 'platform' | 'organization' | 'supplier' | 'none';
+}
+
+export interface AdminRiskFlagRecord {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  supplierCipa: string | null;
+  callId: string | null;
+  callRef: string | null;
+  organizationName: string | null;
+  flagType: string;
+  severity: 'low' | 'medium' | 'high';
+  details: any;
+  status: 'open' | 'reviewed' | 'dismissed' | 'resolved';
+  reviewedAt: string | null;
+  reviewedByName: string | null;
+  createdAt: string;
+}
+
+export interface AdminDebarmentRecord {
+  id: string;
+  supplierId: string;
+  entityName: string;
+  cipaNumber: string | null;
+  organizationId: string | null;
+  scope: string;
+  reason: string;
+  startsOn: string;
+  endsOn: string | null;
+  evidenceRef: string | null;
+  liftedAt: string | null;
+  isActive: boolean;
+  issuedBy: string | null;
+  createdAt: string;
+}
+
+export interface AdminCategoryRecord {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  level: number;
+  parentId: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface AdminDocumentTypeRecord {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  issuingAuthority: string | null;
+  requiresExpiry: boolean;
+  requiresNumber: boolean;
+  defaultValidityDays: number | null;
+  verificationMethod: string | null;
+  isMandatoryDefault: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface AdminPlanRecord {
+  id: string;
+  code: string;
+  name: string;
+  audience: string;
+  price: number;
+  currency: string;
+  billingInterval: string;
+  maxUsers: number | null;
+  maxCallsPerYear: number | null;
+  features: any;
+  sortOrder: number;
+  subscribersCount: number;
+}
+
+export interface AdminInvoiceRecord {
+  id: string;
+  invoiceNumber: string;
+  orgName: string;
+  amountBWP: number;
+  currency: string;
+  status: string;
+  issuedAt: string | null;
+  dueDate: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminNotificationRecord {
+  id: string;
+  channel: string;
+  recipient: string;
+  templateCode: string;
+  status: string;
+  errorMessage: string | null;
+  retryCount: number;
+  sentAt: string | null;
+}
+
+export interface AdminAuditEventRecord {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  actorRole: string;
+  organizationName: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  details: string;
+  ipAddress: string;
+}
+
+export interface AdminPlatformSettings {
+  cipaEndpoint: string;
+  bursEndpoint: string;
+  retentionYears: string;
+}
+
 export const adminApi = {
+  // Overview KPIs
+  async getOverview(): Promise<AdminOverviewResponse> {
+    return apiRequest('/api/admin/overview', { cache: 'no-store' });
+  },
+
+  // Organizations
+  async listOrganizations(params?: { status?: string; search?: string }): Promise<AdminOrganizationRecord[]> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.search) qs.set('search', params.search);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/admin/organizations${suffix}`, { cache: 'no-store' });
+  },
+
+  async approveOrganization(id: string) {
+    return apiRequest(`/api/admin/organizations/${id}/approve`, { method: 'POST' });
+  },
+
+  async rejectOrganization(id: string, reason: string) {
+    return apiRequest(`/api/admin/organizations/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async suspendOrganization(id: string, reason?: string) {
+    return apiRequest(`/api/admin/organizations/${id}/suspend`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  // Suppliers
+  async listSuppliers(params?: { search?: string; verificationStatus?: string }): Promise<AdminSupplierRecord[]> {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set('search', params.search);
+    if (params?.verificationStatus) qs.set('verificationStatus', params.verificationStatus);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/admin/suppliers${suffix}`, { cache: 'no-store' });
+  },
+
+  async getSupplierDetail(id: string): Promise<AdminSupplierDetail> {
+    return apiRequest(`/api/admin/suppliers/${id}`, { cache: 'no-store' });
+  },
+
+  async updateSupplierVerification(
+    id: string,
+    payload: {
+      verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected';
+      complianceStatus?: 'Fully compliant' | 'Action required' | 'Non-compliant';
+      status?: 'draft' | 'active' | 'suspended' | 'closed';
+      notes?: string;
+    }
+  ) {
+    return apiRequest(`/api/admin/suppliers/${id}/verification`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Verification Queue
   async getVerificationQueue(): Promise<{ people: AdminQueuePerson[]; documents: AdminQueueDocument[] }> {
     return apiRequest('/api/admin/verification/queue', { cache: 'no-store' });
   },
@@ -748,19 +1237,239 @@ export const adminApi = {
       throw new Error(data.message || `Failed to load document preview (HTTP ${res.status})`);
     }
 
-    const contentDisposition = res.headers.get('content-disposition');
     let fileName = 'document';
+    const contentDisposition = res.headers.get('content-disposition');
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
-      if (match && match[1]) {
-        fileName = match[1];
+      const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const asciiMatch = contentDisposition.match(/filename="([^"]+)"/i) || contentDisposition.match(/filename=([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          fileName = decodeURIComponent(utf8Match[1].trim());
+        } catch {
+          fileName = utf8Match[1].trim();
+        }
+      } else if (asciiMatch && asciiMatch[1]) {
+        fileName = asciiMatch[1].trim().replace(/^"|"$/g, '');
       }
     }
 
-    const blob = await res.blob();
-    const mimeType = blob.type || res.headers.get('content-type') || 'application/octet-stream';
+    const headerMime = (res.headers.get('content-type') || '').split(';')[0].trim();
+    const rawBlob = await res.blob();
+    const mimeType = headerMime || rawBlob.type || 'application/octet-stream';
+    const blob = rawBlob.type === mimeType ? rawBlob : new Blob([rawBlob], { type: mimeType });
     const objectUrl = URL.createObjectURL(blob);
     return { blob, fileName, mimeType, objectUrl };
   },
+
+  // Users & Security
+  async listUsers(params?: { search?: string; filter?: 'all' | 'locked' | 'admins' | 'suspended' }): Promise<AdminManagedUser[]> {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set('search', params.search);
+    if (params?.filter) qs.set('filter', params.filter);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/admin/users${suffix}`, { cache: 'no-store' });
+  },
+
+  async unlockUser(id: string) {
+    return apiRequest(`/api/admin/users/${id}/unlock`, { method: 'POST' });
+  },
+
+  async updateUserStatus(id: string, status: 'active' | 'suspended') {
+    return apiRequest(`/api/admin/users/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  async revokeUserSessions(id: string) {
+    return apiRequest(`/api/admin/users/${id}/revoke-sessions`, { method: 'POST' });
+  },
+
+  // Risk & Debarments
+  async getRiskAndDebarments(): Promise<{ flags: AdminRiskFlagRecord[]; debarments: AdminDebarmentRecord[] }> {
+    return apiRequest('/api/admin/risk', { cache: 'no-store' });
+  },
+
+  async createRiskFlag(payload: {
+    supplierId: string;
+    flagType: 'shared_director' | 'shared_address' | 'shared_phone' | 'duplicate_document' | 'price_pattern' | 'other';
+    severity: 'low' | 'medium' | 'high';
+    description: string;
+    callId?: string;
+  }) {
+    return apiRequest('/api/admin/risk/flags', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateRiskFlagStatus(id: string, status: 'open' | 'reviewed' | 'dismissed' | 'resolved') {
+    return apiRequest(`/api/admin/risk/flags/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  async createDebarment(payload: {
+    supplierId: string;
+    organizationId?: string | null;
+    reason: string;
+    startsOn?: string;
+    endsOn?: string | null;
+    evidenceRef?: string;
+  }) {
+    return apiRequest('/api/admin/debarments', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async liftDebarment(id: string, reason?: string) {
+    return apiRequest(`/api/admin/debarments/${id}/lift`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  // Master Catalogues
+  async getCatalogues(): Promise<{ categories: AdminCategoryRecord[]; documentTypes: AdminDocumentTypeRecord[] }> {
+    return apiRequest('/api/admin/catalogues', { cache: 'no-store' });
+  },
+
+  async createCategory(payload: {
+    code: string;
+    name: string;
+    description?: string;
+    parentId?: string | null;
+    level?: number;
+    sortOrder?: number;
+  }): Promise<AdminCategoryRecord> {
+    return apiRequest('/api/admin/catalogues/categories', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateCategory(
+    id: string,
+    payload: { code?: string; name?: string; description?: string | null; isActive?: boolean; sortOrder?: number }
+  ): Promise<AdminCategoryRecord> {
+    return apiRequest(`/api/admin/catalogues/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async createDocumentType(payload: {
+    code: string;
+    name: string;
+    description?: string;
+    issuingAuthority?: string;
+    requiresExpiry?: boolean;
+    requiresNumber?: boolean;
+    defaultValidityDays?: number | null;
+    verificationMethod?: string;
+    isMandatoryDefault?: boolean;
+    sortOrder?: number;
+  }): Promise<AdminDocumentTypeRecord> {
+    return apiRequest('/api/admin/catalogues/document-types', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateDocumentType(
+    id: string,
+    payload: {
+      name?: string;
+      description?: string | null;
+      issuingAuthority?: string | null;
+      requiresExpiry?: boolean;
+      requiresNumber?: boolean;
+      defaultValidityDays?: number | null;
+      verificationMethod?: string | null;
+      isMandatoryDefault?: boolean;
+      isActive?: boolean;
+      sortOrder?: number;
+    }
+  ): Promise<AdminDocumentTypeRecord> {
+    return apiRequest(`/api/admin/catalogues/document-types/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Billing
+  async getBilling(): Promise<{ plans: AdminPlanRecord[]; invoices: AdminInvoiceRecord[] }> {
+    return apiRequest('/api/admin/billing', { cache: 'no-store' });
+  },
+
+  async updatePlan(
+    id: string,
+    payload: { price?: number; maxCallsPerYear?: number | null; description?: string; reason?: string }
+  ) {
+    return apiRequest(`/api/admin/billing/plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Notifications
+  async listNotifications(): Promise<AdminNotificationRecord[]> {
+    return apiRequest('/api/admin/notifications', { cache: 'no-store' });
+  },
+
+  async retryNotification(id: string): Promise<AdminNotificationRecord> {
+    return apiRequest(`/api/admin/notifications/${id}/retry`, { method: 'POST' });
+  },
+
+  // Audit Log
+  async listAuditLogs(filters?: {
+    entityType?: string;
+    actor?: string;
+    action?: string;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
+    limit?: number;
+  }): Promise<AdminAuditEventRecord[]> {
+    const qs = new URLSearchParams();
+    if (filters?.entityType) qs.set('entityType', filters.entityType);
+    if (filters?.actor) qs.set('actor', filters.actor);
+    if (filters?.action) qs.set('action', filters.action);
+    if (filters?.search) qs.set('search', filters.search);
+    if (filters?.fromDate) qs.set('fromDate', filters.fromDate);
+    if (filters?.toDate) qs.set('toDate', filters.toDate);
+    if (filters?.limit) qs.set('limit', String(filters.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiRequest(`/api/admin/audit-log${suffix}`, { cache: 'no-store' });
+  },
+
+  // Support Sessions
+  async startSupportSession(payload: {
+    targetType: string;
+    targetId?: string | null;
+    targetName: string;
+    ticketRef: string;
+    justification: string;
+  }) {
+    return apiRequest('/api/admin/support/sessions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  // Settings
+  async getSettings(): Promise<AdminPlatformSettings> {
+    return apiRequest('/api/admin/settings', { cache: 'no-store' });
+  },
+
+  async updateSettings(payload: AdminPlatformSettings): Promise<AdminPlatformSettings> {
+    return apiRequest('/api/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
+
 

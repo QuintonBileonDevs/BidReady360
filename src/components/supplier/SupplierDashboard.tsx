@@ -22,7 +22,6 @@ import {
   AlertCircle,
   Sparkles,
   ShieldAlert,
-  ExternalLink,
   Lock,
 } from 'lucide-react';
 
@@ -46,10 +45,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
     documents,
     applications,
     calls,
-    replaceDocument,
-    resetDemoData,
     setActiveNav,
-    updateSupplierProfile,
   } = useApp();
 
   const { setReady } = useReadiness('dashboard.summary');
@@ -63,7 +59,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
   };
 
   const [isChecklistExpanded, setIsChecklistExpanded] = useState(true);
-  const [quickRenewSuccess, setQuickRenewSuccess] = useState(false);
 
   // Compute 15-item completeness dynamically from real memory state
   const completeness = calculateSupplierCompleteness(supplier, documents);
@@ -117,20 +112,6 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
     applications.map((a) => a.organizationId || a.organizationName)
   ).size;
 
-  const handleQuickRenew = () => {
-    if (activeAlertDoc) {
-      replaceDocument(activeAlertDoc.id, {
-        documentNumber: `RENEW-${Math.floor(1000 + Math.random() * 9000)}`,
-        fileName: `Renewed_${activeAlertDoc.documentType.replace(/\s+/g, '_')}_2026.pdf`,
-        issueDate: new Date().toISOString().split('T')[0],
-        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        status: 'Verified',
-      });
-      setQuickRenewSuccess(true);
-      setTimeout(() => setQuickRenewSuccess(false), 5000);
-    }
-  };
-
   return (
     <div className="space-y-10">
       {/* Safeguard: Email Verification Mandatory */}
@@ -153,15 +134,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               onClick={() => setActiveNav('supplier-verify-email')}
               className="flex-1 sm:flex-none px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-[6px] text-[13px] font-semibold text-center cursor-pointer transition-colors"
             >
-              Enter code
-            </button>
-            <button
-              type="button"
-              onClick={() => updateSupplierProfile({ emailVerified: true })}
-              className="flex-1 sm:flex-none px-3.5 py-2 border border-amber-400 dark:border-amber-700 bg-white dark:bg-[#132635] text-amber-900 dark:text-amber-200 hover:bg-amber-100/50 rounded-[6px] text-[13px] font-medium text-center cursor-pointer transition-colors inline-flex items-center justify-center gap-1.5"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Simulate email link click</span>
+              Verify email
             </button>
           </div>
         </div>
@@ -393,7 +366,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
       </div>
 
       {/* 3. Compliance Alert (Shows ONLY when an uploaded document is expired or expiring soon) */}
-      {activeAlertDoc && !quickRenewSuccess && (
+      {activeAlertDoc && (
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 border-l-[#C2412D] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="text-[#C2412D] shrink-0 mt-0.5">
@@ -414,21 +387,12 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           <div className="flex items-center gap-3 shrink-0">
             <button
               type="button"
-              onClick={handleQuickRenew}
+              onClick={onNavigateToVault}
               className="px-4 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[15px] font-medium transition-colors whitespace-nowrap cursor-pointer"
             >
               Upload replacement
             </button>
           </div>
-        </div>
-      )}
-
-      {quickRenewSuccess && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 border-l-[#2F8F5B] p-6 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
-          <p className="text-[15px] text-[#10212E] dark:text-white">
-            Document replaced and compliance status updated successfully.
-          </p>
         </div>
       )}
 
@@ -713,7 +677,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               No open tenders currently match your selected categories.
             </p>
             <p className="text-[14px] text-[#6B7A87]">
-              New calls are published regularly by Gaborone Regional Council, BURS, and other procuring authorities.
+              New calls are published regularly by participating town councils, parastatals, and commercial buyers.
             </p>
             <div className="pt-2">
               <button

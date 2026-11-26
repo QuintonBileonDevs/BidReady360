@@ -36,14 +36,14 @@ export const AccountLocked: React.FC<AccountLockedProps> = ({
             Account temporarily locked
           </h2>
           <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-            We detected five unsuccessful sign-in attempts. Your account has been temporarily locked to prevent unauthorized access.
+            Your account has been locked after multiple unsuccessful sign-in attempts. Wait 15 minutes for the lockout to expire, or contact a platform administrator to unlock your account immediately.
           </p>
         </div>
 
         <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-          <span className="text-[13px] text-[#6B7A87] block">Unlock cooldown</span>
-          <div className="text-[20px] font-heading font-semibold text-[#10212E] dark:text-white tabular-nums">
-            {countdown > 0 ? `Retry available in ${countdown}s` : 'Cooldown completed'}
+          <span className="text-[13px] text-[#6B7A87] block">Server lockout protection active</span>
+          <div className="text-[18px] font-heading font-semibold text-[#10212E] dark:text-white tabular-nums">
+            {countdown > 0 ? `Wait ${countdown}s or ask an admin to unlock` : 'Ready to retry sign in'}
           </div>
         </div>
 
@@ -53,10 +53,9 @@ export const AccountLocked: React.FC<AccountLockedProps> = ({
             variant="primary"
             size="lg"
             className="w-full"
-            disabled={countdown > 0}
             onClick={() => onNavigate('supplier-login')}
           >
-            {countdown > 0 ? `Locked (${countdown}s)` : 'Return to sign in'}
+            {countdown > 0 ? 'Unlocked by an admin? Try signing in' : 'Return to sign in'}
           </Button>
 
           <div className="text-[14px] text-[#6B7A87]">

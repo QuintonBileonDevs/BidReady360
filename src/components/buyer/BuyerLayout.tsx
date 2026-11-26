@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useApp, BuyerSubRole } from '../../context/AppContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../../context/AppContext';
+import { Logo } from '../common/Logo';
 import {
   LayoutDashboard,
   FileText,
@@ -17,13 +18,11 @@ import {
   CreditCard,
   ScrollText,
   Settings,
-  Search,
   Menu,
   X,
   ChevronDown,
   LogOut,
   Bell,
-  Sparkles,
 } from 'lucide-react';
 
 import { BuyerDashboard } from './BuyerDashboard';
@@ -47,12 +46,60 @@ import { BuyerSettings } from './BuyerSettings';
 import { NotificationDrawer } from '../common/NotificationDrawer';
 
 export const BuyerLayout: React.FC = () => {
-  const { setRole, setActiveNav, buyerSubRole, setBuyerSubRole, setSelectedCallId } = useApp();
+  const {
+    currentUser,
+    profileSummary,
+    registeredBuyerOrgName,
+    registeredBuyerEmail,
+    notifications,
+    logout,
+    setRole,
+    setActiveNav,
+    buyerSubRole,
+    setSelectedCallId,
+  } = useApp();
+
   const [currentTab, setCurrentTab] = useState<string>('overview');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState('');
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isUserMenuOpen]);
+
+  const orgDisplayName =
+    registeredBuyerOrgName ||
+    profileSummary?.supplierOrOrgName ||
+    'Procuring Organization';
+  const buyerName = currentUser?.fullName || profileSummary?.displayName || 'Procurement Officer';
+  const buyerEmail = currentUser?.email || registeredBuyerEmail || '';
+  const buyerInitials =
+    buyerName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0].toUpperCase())
+      .join('') || 'PO';
+
+  const unreadNotifs = notifications.filter(
+    (n) => !n.read && n.recipientRole === 'Buyer'
+  ).length;
 
   const navGroups = [
     {
@@ -100,9 +147,21 @@ export const BuyerLayout: React.FC = () => {
     },
   ];
 
-  const handleSignOut = () => {
-    setRole('public');
-    setActiveNav('about');
+  const allNavItems = navGroups.flatMap((g) => g.items);
+  const activeTabLabel =
+    currentTab === 'create-call'
+      ? 'Publish call'
+      : allNavItems.find((item) => item.id === currentTab)?.label || 'Dashboard';
+
+  const handleSignOut = async () => {
+    setIsUserMenuOpen(false);
+    setIsMobileNavOpen(false);
+    try {
+      await logout('user_initiated');
+    } catch {
+      setRole('public');
+      setActiveNav('about');
+    }
   };
 
   const renderActiveContent = () => {
@@ -165,113 +224,132 @@ export const BuyerLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-white flex flex-col">
-      {/* 1. Dedicated Header */}
-      <header className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] h-16 flex items-center px-4 sm:px-6 justify-between gap-4">
-        {/* Left: Organization Branding */}
-        <div className="flex items-center gap-3">
+      {/* 1. Unified Buyer Workspace Header */}
+      <header className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] h-16 flex items-center px-4 sm:px-6 justify-between gap-6">
+        {/* Left: Brand Wordmark + Organization Breadcrumb */}
+        <div className="flex items-center gap-4 min-w-0">
           <button
             type="button"
             onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-            className="md:hidden p-1.5 text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] hover:bg-[#F7FAFD]"
+            className="md:hidden min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] cursor-pointer shrink-0"
+            aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
             {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-[8px] bg-[#1F5F99] text-white flex items-center justify-center font-heading font-bold text-[14px]">
-              GR
-            </div>
-            <div className="leading-tight">
-              <span className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white block">
-                Gaborone Regional Council
-              </span>
-              <span className="text-[12px] text-[#6B7A87] block">
-                Procuring entity console
-              </span>
-            </div>
-          </div>
-        </div>
+          <button
+            type="button"
+            onClick={() => setCurrentTab('overview')}
+            className="text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5F99] rounded-[4px] cursor-pointer shrink-0"
+            aria-label="BidReady360 Buyer Dashboard"
+          >
+            <Logo size="md" />
+          </button>
 
-        {/* Center: Global Search */}
-        <div className="flex-1 max-w-md hidden md:block">
-          <div className="relative">
-            <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search tenders, bids, supplier dossiers, evaluation matrices..."
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-[#F7FAFD] dark:bg-[#132635] text-[13px] text-[#10212E] dark:text-white focus:bg-white"
-            />
-          </div>
+          <span
+            aria-hidden="true"
+            className="hidden sm:block h-5 w-px bg-[#D5E0EA] dark:bg-[#1E364A] shrink-0"
+          />
+
+          <nav aria-label="Workspace breadcrumb" className="hidden sm:flex items-center gap-2 text-[13px] min-w-0">
+            <button
+              type="button"
+              onClick={() => setCurrentTab('overview')}
+              className="text-[#6B7A87] dark:text-[#8DA2B5] hover:text-[#10212E] dark:hover:text-white transition-colors truncate max-w-[240px] cursor-pointer"
+              title={orgDisplayName}
+            >
+              {orgDisplayName}
+            </button>
+            <span aria-hidden="true" className="text-[#94A3B8] dark:text-[#4B6378] shrink-0">
+              /
+            </span>
+            <span className="font-medium text-[#10212E] dark:text-white whitespace-nowrap truncate">
+              {activeTabLabel}
+            </span>
+          </nav>
         </div>
 
         {/* Right: Notifications & Buyer User Menu */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
             onClick={() => setIsNotifOpen(true)}
-            className="p-2 text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] rounded-[6px] hover:bg-[#F7FAFD] transition-colors cursor-pointer"
+            className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer shrink-0"
             aria-label="Open notifications"
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-4 h-4" strokeWidth={1.75} />
+            {unreadNotifs > 0 && (
+              <span className="absolute top-2 right-2 w-2 h-2 bg-[#C2412D] rounded-full" />
+            )}
           </button>
 
           {/* User Menu */}
-          <div className="relative">
+          <div className="relative" ref={userMenuRef}>
             <button
               type="button"
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center gap-2 pl-2 pr-1.5 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer"
+              aria-expanded={isUserMenuOpen}
+              aria-haspopup="menu"
+              className="min-h-[40px] flex items-center gap-2.5 pl-2 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5F99]"
             >
-              <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] text-[#1F5F99] flex items-center justify-center font-semibold text-[13px]">
-                KT
+              <div className="w-8 h-8 rounded-[6px] bg-[#1F5F99] text-white flex items-center justify-center font-semibold text-[13px] shrink-0">
+                {buyerInitials}
               </div>
               <div className="hidden sm:block text-left leading-tight">
-                <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
-                  Kgosi Tau
+                <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[180px] truncate">
+                  {buyerName}
                 </span>
-                <span className="text-[12px] text-[#6B7A87] block">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] block whitespace-nowrap">
                   {buyerSubRole}
                 </span>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-[#6B7A87]" />
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-[#6B7A87] transition-transform duration-150 shrink-0 ${
+                  isUserMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
             </button>
 
             {isUserMenuOpen && (
-              <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-2 z-50 text-[13px] space-y-1 shadow-sm">
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] p-1.5 z-50 text-[13px] space-y-1 shadow-sm"
+              >
                 <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                  <div className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                    Kgosi Tau
+                  <div className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
+                    {buyerName}
                   </div>
-                  <div className="text-[12px] text-[#6B7A87]">
-                    k.tau@grc.gov.bw · {buyerSubRole}
+                  <div className="text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] truncate">
+                    {buyerEmail ? `${buyerEmail} · ${buyerSubRole}` : buyerSubRole}
                   </div>
                 </div>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setCurrentTab('team');
                     setIsUserMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white transition-colors"
+                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                 >
-                  Team profile & roles
+                  Team profile &amp; roles
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setCurrentTab('settings');
                     setIsUserMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white transition-colors"
+                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                 >
                   Procurement settings
                 </button>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={handleSignOut}
-                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-[#C2412D] dark:text-rose-400 transition-colors font-medium flex items-center justify-between cursor-pointer"
                 >
                   <span>Sign out</span>
                   <LogOut className="w-3.5 h-3.5" />
@@ -284,16 +362,24 @@ export const BuyerLayout: React.FC = () => {
 
       {/* 2. Main Body with Grouped Sidebar */}
       <div className="flex-1 flex overflow-hidden">
+        {isMobileNavOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 z-40 md:hidden"
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Left Sidebar */}
         <aside
           className={`w-64 bg-white dark:bg-[#10212E] border-r border-[#D5E0EA] dark:border-[#1E364A] p-4 flex flex-col justify-between shrink-0 overflow-y-auto ${
-            isMobileNavOpen ? 'block fixed inset-y-0 left-0 z-50 pt-20' : 'hidden md:flex'
+            isMobileNavOpen ? 'flex fixed inset-y-0 left-0 z-50 pt-20' : 'hidden md:flex'
           }`}
         >
           <div className="space-y-4">
             {navGroups.map((group, gIdx) => (
               <div key={gIdx} className="space-y-1">
-                <span className="text-[11px] font-semibold text-[#6B7A87] uppercase tracking-wider px-3 block">
+                <span className="text-[11px] font-semibold text-[#6B7A87] dark:text-[#8DA2B5] uppercase tracking-wider px-3 block">
                   {group.groupTitle}
                 </span>
                 {group.items.map((item) => {
@@ -307,14 +393,19 @@ export const BuyerLayout: React.FC = () => {
                         setCurrentTab(item.id);
                         setIsMobileNavOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer ${
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                         isActive
-                          ? 'bg-[#EAF2FA] text-[#1F5F99] font-semibold'
-                          : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] hover:text-[#10212E]'
+                          ? 'bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] font-semibold'
+                          : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] hover:text-[#10212E] dark:hover:text-white'
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-[#1F5F99]' : 'text-[#6B7A87]'}`} strokeWidth={1.5} />
-                      <span>{item.label}</span>
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${
+                          isActive ? 'text-[#1F5F99] dark:text-[#6FAEE0]' : 'text-[#6B7A87]'
+                        }`}
+                        strokeWidth={1.5}
+                      />
+                      <span className="truncate">{item.label}</span>
                     </button>
                   );
                 })}
@@ -322,9 +413,9 @@ export const BuyerLayout: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-4 mt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[12px] text-[#6B7A87] space-y-1">
-            <div>Gaborone Regional Council</div>
-            <div className="text-[11px]">Audit Ledger Sync · Active</div>
+          <div className="pt-4 mt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] space-y-0.5">
+            <div className="truncate font-medium text-[#43525F] dark:text-[#B2C3D2]">{orgDisplayName}</div>
+            <div className="text-[11px]">Procuring entity workspace</div>
           </div>
         </aside>
 
@@ -335,9 +426,13 @@ export const BuyerLayout: React.FC = () => {
               <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3E] border border-[#C9D9E8] dark:border-[#1E364A] text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <ScrollText className="w-4 h-4 shrink-0" />
-                  <span><strong>Auditor mode (Read-only):</strong> You have inspection access across tender calls, scorecards, submissions, and cryptographic receipts. Mutating actions and publishing are restricted.</span>
+                  <span>
+                    <strong>Auditor mode (Read-only):</strong> You have inspection access across tender calls, scorecards, submissions, and cryptographic receipts. Mutating actions and publishing are restricted.
+                  </span>
                 </div>
-                <span className="text-[11px] font-semibold bg-white/60 dark:bg-black/20 px-2 py-0.5 rounded border border-[#C9D9E8] shrink-0">Read-Only</span>
+                <span className="text-[11px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0] shrink-0">
+                  Read-only
+                </span>
               </div>
             )}
             {renderActiveContent()}

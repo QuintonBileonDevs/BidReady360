@@ -53,6 +53,9 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
     let apps: any[] = [];
     let people: any[] = [];
     let consent: any[] = [];
+    let pastProjects: any[] = [];
+    let teamMembers: any[] = [];
+    let pendingInvitations: any[] = [];
     let completeness: CompletenessResult | null = null;
 
     if ((activeTenant.tenantType as string) === 'platform' || activeTenant.tenantId === 'platform') {
@@ -64,12 +67,14 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
       };
     } else if (activeTenant.tenantType === 'supplier') {
       // Parallel coordinated fetch of all domain datasets with pure read-only snapshot
-      const [profData, docsData, appsData, peopleData, consentData] = await Promise.all([
+      const [profData, docsData, appsData, peopleData, consentData, projectsData, teamData] = await Promise.all([
         suppliersRepository.getById(activeTenant.tenantId).catch(() => null),
         documentsRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
         applicationsRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
         suppliersRepository.listPeople(activeTenant.tenantId).catch(() => []),
         consentRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
+        suppliersRepository.listProjects(activeTenant.tenantId).catch(() => []),
+        suppliersRepository.listTeam(activeTenant.tenantId).catch(() => ({ teamMembers: [], pendingInvitations: [] })),
       ]);
 
       profile = profData;
@@ -77,6 +82,9 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
       apps = appsData || [];
       people = peopleData || [];
       consent = consentData || [];
+      pastProjects = projectsData || [];
+      teamMembers = teamData?.teamMembers || [];
+      pendingInvitations = teamData?.pendingInvitations || [];
 
       if (!profile) {
         // Fallback to raw query if repository had any error
@@ -117,39 +125,61 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
 
       // Compute pure completeness from current rows without database mutation
       if (profile) {
+        const debarRes = await query<{ id: string; reason: string; startsOn: string; endsOn: string | null; organizationId: string | null }>(
+          `SELECT id, reason, starts_on AS "startsOn", ends_on AS "endsOn", organization_id AS "organizationId"
+           FROM debarments
+           WHERE supplier_id = $1
+             AND lifted_at IS NULL
+             AND starts_on <= CURRENT_DATE
+             AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [activeTenant.tenantId]
+        ).catch(() => ({ rows: [] as any[] }));
+
         completeness = computeSupplierCompleteness(profile, people, docs);
         profile.profileCompleteness = completeness.score;
         profile.complianceStatus = completeness.complianceStatus;
         profile.missingItems = completeness.missingItems.map((m) => m.label);
+        profile.activeDebarment = debarRes.rows[0] || null;
+        profile.pastProjects = pastProjects;
+        profile.teamMembers = teamMembers;
+        profile.pendingInvitations = pendingInvitations;
       }
     } else if (activeTenant.tenantType === 'organization') {
-      // Buyer organization
+      // Buyer organization — strictly reflect live database status & verification state
       const orgRes = await query(
-        `SELECT id, name, slug, organization_type AS "organizationType", status, verification_status AS "verificationStatus"
-         FROM organizations WHERE id = $1 LIMIT 1`,
+        `SELECT id, name, slug, organization_type AS "organizationType",
+                status, verification_status AS "verificationStatus",
+                rejection_reason AS "rejectionReason", updated_at AS "updatedAt"
+         FROM organizations
+         WHERE id = $1 AND deleted_at IS NULL
+         LIMIT 1`,
         [activeTenant.tenantId]
       ).catch(() => ({ rows: [] }));
 
-      profile = orgRes.rows[0] || {
-        id: activeTenant.tenantId,
-        name: activeTenant.tenantName,
-        status: 'active',
-      };
+      profile = orgRes.rows[0] || null;
     }
 
-    // Server truth fingerprint computed over the rows just read
+    // Server truth fingerprint computed over the rows just read (includes live admin statuses)
     const fingerprintRaw = [
       activeTenant.tenantId,
       profile?.updated_at || profile?.updatedAt || profile?.created_at || '',
+      profile?.status || '',
+      profile?.verificationStatus || profile?.verification_status || '',
+      profile?.activeDebarment?.id || '',
       completeness?.score ?? profile?.profileCompleteness ?? 0,
       people.length,
       docs.length,
       apps.length,
+      pastProjects.length,
+      teamMembers.length,
     ].join('|');
     const serverFingerprint = crypto.createHash('sha256').update(fingerprintRaw).digest('hex');
 
     res.json({
       activeTenant,
+      profileSummary: req.profileSummary || null,
       memberships: allMemberships,
       resolvedSupplierId: activeTenant.tenantId,
       serverFingerprint,
@@ -159,6 +189,9 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
       applications: apps,
       people: people,
       consent: consent,
+      pastProjects,
+      teamMembers,
+      pendingInvitations,
       user: {
         id: user.id,
         email: user.email,

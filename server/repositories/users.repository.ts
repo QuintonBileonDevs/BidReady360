@@ -28,6 +28,10 @@ export interface UserTenantMembership {
   roleName: string;
   isOwner: boolean;
   status: string;
+  organizationStatus?: string;
+  supplierStatus?: string;
+  verificationStatus?: string;
+  rejectionReason?: string | null;
   permissions: string[];
 }
 
@@ -119,6 +123,9 @@ export class UsersRepository {
       `SELECT 'organization' AS "tenantType",
               o.id AS "tenantId",
               o.name AS "tenantName",
+              o.status AS "organizationStatus",
+              o.verification_status AS "verificationStatus",
+              o.rejection_reason AS "rejectionReason",
               r.id AS "roleId",
               r.name AS "roleName",
               om.is_owner AS "isOwner",
@@ -142,6 +149,8 @@ export class UsersRepository {
       `SELECT 'supplier' AS "tenantType",
               s.id AS "tenantId",
               s.legal_name AS "tenantName",
+              s.status AS "supplierStatus",
+              s.verification_status AS "verificationStatus",
               r.id AS "roleId",
               r.name AS "roleName",
               sm.is_owner AS "isOwner",

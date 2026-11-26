@@ -1,78 +1,85 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Lock, Unlock, ShieldAlert, CheckCircle2, UserCheck, AlertTriangle, FileText, ArrowRight } from 'lucide-react';
+import { buyerApi } from '../../services/api';
+import { Lock, Unlock, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const BuyerBidsOpening: React.FC = () => {
-  const { calls, buyerSubRole, addAuditEvent } = useApp();
+  const { calls, buyerSubRole, addAuditEvent, registeredBuyerOrgName, profileSummary, currentUser } = useApp();
 
-  // Find closed or open tenders with sealed envelopes
   const sealedCalls = calls.filter((c) => c.type === 'RFP');
-
   const [selectedCallId, setSelectedCallId] = useState<string>(sealedCalls[0]?.id || '');
   const [isOpeningSessionOpen, setIsOpeningSessionOpen] = useState(false);
   const [witnesses, setWitnesses] = useState<string>('');
-  const [openedCallIds, setOpenedCallIds] = useState<string[]>([]);
+  const [bids, setBids] = useState<any[]>([]);
+  const [isLoadingBids, setIsLoadingBids] = useState(false);
+  const [isSubmittingOpening, setIsSubmittingOpening] = useState(false);
   const [openingSuccess, setOpeningSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const selectedCall = calls.find((c) => c.id === selectedCallId) || sealedCalls[0];
-  const isOpened = openedCallIds.includes(selectedCall?.id || '');
+  const officerName = currentUser?.fullName || profileSummary?.displayName || 'Procurement Officer';
+  const orgName = profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization';
 
+  const loadBids = useCallback(async (callId: string) => {
+    if (!callId) {
+      setBids([]);
+      return;
+    }
+    setIsLoadingBids(true);
+    try {
+      const list = await buyerApi.listBids(callId);
+      setBids(Array.isArray(list) ? list : []);
+    } catch {
+      setBids([]);
+    } finally {
+      setIsLoadingBids(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedCall?.id) {
+      loadBids(selectedCall.id);
+    }
+  }, [selectedCall?.id, loadBids]);
+
+  const isOpened = bids.length > 0 && bids.some((b) => b.status === 'opened');
   const hasOpeningPermission = buyerSubRole === 'Org admin' || buyerSubRole === 'Procurement officer';
+  const urgentSealedCallsCount = sealedCalls.filter((c) => c.status === 'Open' && c.daysRemaining <= 3).length;
 
-  // Sealed bidder envelopes for this tender
-  const bidders = [
-    {
-      id: 'bid-1',
-      supplierName: 'Kopano Building Supplies (Pty) Ltd',
-      cipa: 'BW00001234567',
-      submittedAt: '3 Oct 2026, 14:22 CAT',
-      envelopeHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      priceProposalBWP: isOpened ? 2340000 : null,
-      technicalScore: isOpened ? '92 / 100' : 'Awaiting unseal',
-      status: isOpened ? 'Unsealed' : 'Sealed & Locked',
-    },
-    {
-      id: 'bid-2',
-      supplierName: 'Tsodilo Civil Engineering (Pty) Ltd',
-      cipa: 'BW00009876543',
-      submittedAt: '4 Oct 2026, 09:15 CAT',
-      envelopeHash: 'cca2908f51a814234033ec094e9f7831f28b4d8ecb1649987dc3dd317e089d0b',
-      priceProposalBWP: isOpened ? 2450000 : null,
-      technicalScore: isOpened ? '88 / 100' : 'Awaiting unseal',
-      status: isOpened ? 'Unsealed' : 'Sealed & Locked',
-    },
-    {
-      id: 'bid-3',
-      supplierName: 'Kalahari Infrastructure JV',
-      cipa: 'BW00004561234',
-      submittedAt: '4 Oct 2026, 16:40 CAT',
-      envelopeHash: '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-      priceProposalBWP: isOpened ? 2180000 : null,
-      technicalScore: isOpened ? '84 / 100' : 'Awaiting unseal',
-      status: isOpened ? 'Unsealed' : 'Sealed & Locked',
-    },
-  ];
-
-  const handleStartOpeningSession = (e: React.FormEvent) => {
+  const handleStartOpeningSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCall) return;
+    if (!selectedCall || isSubmittingOpening) return;
 
-    setOpenedCallIds((prev) => [...prev, selectedCall.id]);
-    setIsOpeningSessionOpen(false);
-    setOpeningSuccess(true);
+    setIsSubmittingOpening(true);
+    setErrorMsg(null);
+    try {
+      const witnessEntries = witnesses
+        .split(',')
+        .map((w) => w.trim())
+        .filter(Boolean)
+        .map((w) => ({ name: w, witnessRole: 'Witness' }));
 
-    addAuditEvent({
-      action: 'Sealed Bid Opening Session Executed',
-      actorName: 'Kgosi Tau (Procurement Lead)',
-      actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
-      entityType: 'Call',
-      entityId: selectedCall.callNumber,
-      details: `Formal unsealing session conducted for ${selectedCall.callNumber} (${selectedCall.title}). Recorded witnesses: ${witnesses}. Price proposals revealed.`,
-      ipAddress: '168.167.24.11',
-    });
+      await buyerApi.conductOpeningSession(selectedCall.id, witnessEntries.length ? witnessEntries : undefined);
+      await loadBids(selectedCall.id);
+      setIsOpeningSessionOpen(false);
+      setOpeningSuccess(true);
 
-    setTimeout(() => setOpeningSuccess(false), 5000);
+      addAuditEvent({
+        action: 'Sealed Bid Opening Session Executed',
+        actorName: officerName,
+        actorRole: 'Procurement Officer',
+        organizationName: orgName,
+        entityType: 'Call',
+        entityId: selectedCall.callNumber,
+        details: `Formal unsealing session conducted for ${selectedCall.callNumber} (${selectedCall.title}). Recorded witnesses: ${witnesses}.`,
+      });
+
+      setTimeout(() => setOpeningSuccess(false), 5000);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Unable to execute bid opening session.');
+    } finally {
+      setIsSubmittingOpening(false);
+    }
   };
 
   return (
@@ -97,7 +104,9 @@ export const BuyerBidsOpening: React.FC = () => {
           </div>
           <div className="space-y-1">
             <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
-              1 sealed tender closes in 3 days
+              {urgentSealedCallsCount > 0
+                ? `${urgentSealedCallsCount} sealed tender${urgentSealedCallsCount === 1 ? '' : 's'} closing within 3 days`
+                : `${sealedCalls.length} sealed tender${sealedCalls.length === 1 ? '' : 's'} tracked in vault`}
             </h2>
             <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
               Bids stay sealed until an authorised opening session is held after the closing time. Bids never open automatically.
@@ -110,8 +119,15 @@ export const BuyerBidsOpening: React.FC = () => {
         <div className="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-[12px] text-[#065F46] text-[14px] flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-[#2F8F5B]" />
           <span>
-            Opening session executed successfully. Bids have been unsealed, witness register committed to audit log, and financial proposals are now visible to evaluation committee.
+            Opening session executed successfully. Bids have been unsealed, witness register committed to audit log, and financial proposals are now visible to the evaluation committee.
           </span>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="p-4 bg-[#FEF2F2] border border-[#FCA5A5] rounded-[12px] text-[#8E2A1B] text-[14px] flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-[#C2412D]" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
@@ -127,6 +143,7 @@ export const BuyerBidsOpening: React.FC = () => {
               onChange={(e) => setSelectedCallId(e.target.value)}
               className="p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] text-[14px] font-semibold text-[#10212E] dark:text-white"
             >
+              {sealedCalls.length === 0 && <option value="">No sealed RFPs found</option>}
               {sealedCalls.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.callNumber} — {c.title}
@@ -148,7 +165,7 @@ export const BuyerBidsOpening: React.FC = () => {
               </span>
             )}
 
-            {!isOpened && hasOpeningPermission && (
+            {!isOpened && hasOpeningPermission && bids.length > 0 && (
               <button
                 type="button"
                 onClick={() => setIsOpeningSessionOpen(true)}
@@ -180,38 +197,54 @@ export const BuyerBidsOpening: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
-              {bidders.map((b) => (
-                <tr key={b.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
-                  <td className="p-4 font-semibold">{b.supplierName}</td>
-                  <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] font-sans">{b.cipa}</td>
-                  <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] text-[13px]">{b.submittedAt}</td>
-                  <td className="p-4 text-[12px] text-[#6B7A87] font-sans truncate max-w-[140px]" title={b.envelopeHash}>
-                    {b.envelopeHash.slice(0, 16)}...
-                  </td>
-                  <td className="p-4 text-right font-semibold tabular-nums">
-                    {b.priceProposalBWP ? (
-                      <span className="text-[#10212E] dark:text-white">
-                        BWP {b.priceProposalBWP.toLocaleString()}
-                      </span>
-                    ) : (
-                      <span className="text-[#6B7A87] italic">
-                        [Asymmetrically Sealed]
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
-                        isOpened
-                          ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                          : 'bg-[#FEF2F2] text-[#C2412D]'
-                      }`}
-                    >
-                      {b.status}
-                    </span>
+              {isLoadingBids ? (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-[#6B7A87]">
+                    Loading bid envelopes...
                   </td>
                 </tr>
-              ))}
+              ) : bids.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-[#6B7A87]">
+                    No sealed bid envelopes submitted for this tender call yet.
+                  </td>
+                </tr>
+              ) : (
+                bids.map((b) => (
+                  <tr key={b.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
+                    <td className="p-4 font-semibold">{b.supplierName}</td>
+                    <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] font-sans">{b.cipaNumber || '—'}</td>
+                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] text-[13px]">
+                      {b.submittedAt ? new Date(b.submittedAt).toLocaleString() : '—'}
+                    </td>
+                    <td className="p-4 text-[12px] text-[#6B7A87] font-sans truncate max-w-[140px]" title={b.payloadSha256 || ''}>
+                      {b.payloadSha256 ? `${String(b.payloadSha256).slice(0, 16)}...` : 'Recorded'}
+                    </td>
+                    <td className="p-4 text-right font-semibold tabular-nums">
+                      {b.status === 'opened' && b.totalPrice != null ? (
+                        <span className="text-[#10212E] dark:text-white">
+                          {b.currency || 'BWP'} {Number(b.totalPrice).toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-[#6B7A87] italic">
+                          [Asymmetrically Sealed]
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <span
+                        className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
+                          b.status === 'opened'
+                            ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+                            : 'bg-[#FEF2F2] text-[#C2412D]'
+                        }`}
+                      >
+                        {b.status === 'opened' ? 'Unsealed' : 'Sealed & Locked'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -229,7 +262,7 @@ export const BuyerBidsOpening: React.FC = () => {
             </div>
 
             <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-              Executing this session decrypts the sealed financial proposals submitted for <strong>{selectedCall?.callNumber}</strong>. Per statutory requirements, at least two official opening witnesses must be recorded in the audit log.
+              Executing this session decrypts the sealed financial proposals submitted for <strong>{selectedCall?.callNumber}</strong>. Official opening witnesses must be recorded in the audit log.
             </p>
 
             <form onSubmit={handleStartOpeningSession} className="space-y-4 text-[14px]">
@@ -239,7 +272,7 @@ export const BuyerBidsOpening: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value="Kgosi Tau (Supply Chain Lead)"
+                  value={officerName}
                   disabled
                   className="w-full p-2.5 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#6B7A87]"
                 />
@@ -268,9 +301,10 @@ export const BuyerBidsOpening: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[14px] font-medium rounded-[6px]"
+                  disabled={isSubmittingOpening}
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white text-[14px] font-medium rounded-[6px]"
                 >
-                  Unseal bids & log opening
+                  {isSubmittingOpening ? 'Unsealing...' : 'Unseal bids & log opening'}
                 </button>
               </div>
             </form>

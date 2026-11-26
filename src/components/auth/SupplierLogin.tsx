@@ -89,11 +89,12 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
       const memberships = res.user?.memberships || [];
       const orgMembership = memberships.find((m: any) => m.tenantType === 'organization');
       const supplierMembership = memberships.find((m: any) => m.tenantType === 'supplier');
-      const activeTenant = orgMembership || supplierMembership || memberships[0] || {
-        tenantType: 'supplier',
-        tenantId: 'sup-1',
-        tenantName: res.user?.fullName || 'User Account',
-      };
+      const activeTenant = res.activeTenant || supplierMembership || orgMembership || memberships[0];
+      if (!activeTenant && !res.user?.isPlatformAdmin) {
+        setErrors({ general: 'No active workspace membership was found for this account.' });
+        return;
+      }
+
       const determinedRole = res.user?.isPlatformAdmin
         ? 'admin'
         : activeTenant?.tenantType === 'organization'
@@ -110,8 +111,12 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
         determinedRole
       );
     } catch (err: any) {
+      if (err?.status === 423 || err?.status === 429 || err?.code === 'ACCOUNT_LOCKED' || err?.code === 'RATE_LIMIT_EXCEEDED') {
+        onNavigate('account-locked');
+        return;
+      }
       const msg = err.message || '';
-      if (msg.toLowerCase().includes('verify') || err.code === 'UNVERIFIED_EMAIL') {
+      if (msg.toLowerCase().includes('verify') || err.code === 'EMAIL_NOT_VERIFIED' || err.code === 'UNVERIFIED_EMAIL') {
         setIsUnverified(true);
         setErrors({ general: 'Please verify your email address before signing in.' });
       } else {
@@ -131,11 +136,12 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
       const memberships = res.user?.memberships || [];
       const orgMembership = memberships.find((m: any) => m.tenantType === 'organization');
       const supplierMembership = memberships.find((m: any) => m.tenantType === 'supplier');
-      const activeTenant = orgMembership || supplierMembership || memberships[0] || {
-        tenantType: 'supplier',
-        tenantId: 'sup-1',
-        tenantName: res.user?.fullName || 'User Account',
-      };
+      const activeTenant = res.activeTenant || supplierMembership || orgMembership || memberships[0];
+      if (!activeTenant && !res.user?.isPlatformAdmin) {
+        setErrors({ general: 'No active workspace membership was found for this account.' });
+        return;
+      }
+
       const determinedRole = res.user?.isPlatformAdmin
         ? 'admin'
         : activeTenant?.tenantType === 'organization'

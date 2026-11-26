@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   settings              JSONB NOT NULL DEFAULT '{}'::jsonb,
   
   approved_by_user_id   UUID REFERENCES users(id),
+  approved_by           UUID REFERENCES users(id),
   approved_at           TIMESTAMPTZ,
   rejection_reason      VARCHAR(1000),
   
@@ -149,7 +150,12 @@ CREATE TABLE IF NOT EXISTS suppliers (
   trading_name          VARCHAR(255),
   cipa_uin              VARCHAR(32) NOT NULL,
   burs_tin              VARCHAR(32),
+  vat_registered        BOOLEAN NOT NULL DEFAULT FALSE,
   ppra_registration_no  VARCHAR(100),
+  ppra_subcodes         TEXT[] NOT NULL DEFAULT '{}'::text[],
+  ppra_grade            VARCHAR(50),
+  secondary_categories  TEXT[] NOT NULL DEFAULT '{}'::text[],
+  bidding_public_tenders BOOLEAN NOT NULL DEFAULT TRUE,
   company_type          VARCHAR(50) NOT NULL DEFAULT 'private_company'
                         CHECK (company_type IN (
                           'sole_proprietor', 'partnership', 'private_company',
@@ -167,6 +173,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
   website               VARCHAR(255),
   employee_count_band   VARCHAR(20) CHECK (employee_count_band IN ('1-5', '6-20', '21-50', '51-200', '201+')),
   citizen_owned_percentage NUMERIC(5,2) CHECK (citizen_owned_percentage BETWEEN 0 AND 100),
+  citizen_ownership_set BOOLEAN NOT NULL DEFAULT FALSE,
   youth_owned           BOOLEAN NOT NULL DEFAULT FALSE,
   women_owned           BOOLEAN NOT NULL DEFAULT FALSE,
   disability_owned      BOOLEAN NOT NULL DEFAULT FALSE,
@@ -186,6 +193,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
   compliance_status     VARCHAR(20) NOT NULL DEFAULT 'Non-compliant'
                         CHECK (compliance_status IN ('Fully compliant', 'Action required', 'Non-compliant')),
   profile_completeness  SMALLINT NOT NULL DEFAULT 0 CHECK (profile_completeness BETWEEN 0 AND 100),
+  profile_completeness_updated_at TIMESTAMPTZ,
   missing_items         TEXT[],
   verified_at           TIMESTAMPTZ,
   verified_by_user_id   UUID REFERENCES users(id),
@@ -410,6 +418,7 @@ CREATE TABLE IF NOT EXISTS document_types (
   requires_expiry       BOOLEAN NOT NULL DEFAULT FALSE,
   requires_number       BOOLEAN NOT NULL DEFAULT TRUE,
   default_validity_days INTEGER,
+  validity_days         INTEGER,
   max_file_size_mb      SMALLINT NOT NULL DEFAULT 10,
   allowed_mime_types    TEXT[],
   verification_method   VARCHAR(30) DEFAULT 'manual'
@@ -429,6 +438,9 @@ CREATE TABLE IF NOT EXISTS supplier_documents (
   document_type_id      UUID NOT NULL REFERENCES document_types(id),
   title                 VARCHAR(255) NOT NULL,
   current_version_id    UUID,
+  extracted_fields      JSONB,
+  ocr_confidence        NUMERIC(5,2) CHECK (ocr_confidence BETWEEN 0 AND 100),
+  file_size_bytes       BIGINT,
   status                VARCHAR(20) NOT NULL DEFAULT 'active'
                         CHECK (status IN ('active', 'archived', 'deleted')),
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1011,6 +1023,7 @@ CREATE TABLE IF NOT EXISTS bids (
                         CHECK (status IN ('draft', 'submitted', 'withdrawn', 'opened', 'disqualified')),
   receipt_number        VARCHAR(40),
   sealed_payload_key    VARCHAR(512),
+  sealed_payload_hash   CHAR(64),
   envelope_key_ref      VARCHAR(255),
   payload_sha256        CHAR(64),
   total_price           NUMERIC(15,2),
@@ -1180,6 +1193,8 @@ CREATE TABLE IF NOT EXISTS awards (
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_awards_bid_id ON awards (bid_id);
 
 CREATE TABLE IF NOT EXISTS award_approvals (
   id                    UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
@@ -1625,6 +1640,58 @@ INSERT INTO roles (scope, organization_id, name, description, is_system, approva
 ('organization', NULL, 'Auditor', 'Read-only access to records and audit log', TRUE, NULL),
 ('supplier', NULL, 'Supplier Admin', 'Full control of the supplier account', TRUE, NULL),
 ('supplier', NULL, 'Supplier Staff', 'Prepares profile, documents and applications', TRUE, NULL)
+ON CONFLICT DO NOTHING;
+
+-- Map system roles to their baseline permissions
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.scope = 'organization'
+WHERE r.scope = 'organization' AND r.name = 'Org Admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+  'calls.create', 'calls.publish', 'calls.manage',
+  'applications.view', 'applications.review',
+  'suppliers.view', 'bids.view', 'bids.open',
+  'evaluation.assign', 'evaluation.consolidate',
+  'awards.recommend', 'contracts.manage', 'performance.review',
+  'reports.view', 'audit.view'
+)
+WHERE r.scope = 'organization' AND r.name = 'Procurement Officer'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+  'applications.view', 'bids.view', 'evaluation.score'
+)
+WHERE r.scope = 'organization' AND r.name = 'Evaluator'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+  'applications.view', 'applications.approve', 'suppliers.view',
+  'bids.view', 'awards.approve', 'reports.view', 'audit.view'
+)
+WHERE r.scope = 'organization' AND r.name = 'Approver'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+  'applications.view', 'suppliers.view', 'bids.view', 'reports.view', 'audit.view'
+)
+WHERE r.scope = 'organization' AND r.name = 'Auditor'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.scope = 'supplier'
+WHERE r.scope = 'supplier' AND r.name = 'Supplier Admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+  'supplier.profile.edit', 'supplier.documents.manage', 'supplier.apply', 'supplier.bid.submit'
+)
+WHERE r.scope = 'supplier' AND r.name = 'Supplier Staff'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO geographic_districts (name, administrative_region, country_code, sort_order) VALUES

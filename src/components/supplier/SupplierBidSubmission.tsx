@@ -77,11 +77,13 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     setActiveNav,
   } = useApp();
 
-  const activeCallId = initialCallId || selectedCallId || 'call-grc-rfp-08';
+  const activeCallId = initialCallId || selectedCallId || calls[0]?.id;
   const call = useMemo(
     () => calls.find((c) => c.id === activeCallId) || calls.find((c) => c.type === 'RFP') || calls[0],
     [calls, activeCallId]
   );
+
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const completeness = calculateSupplierCompleteness(supplier, documents);
   if (completeness.score < 100) {
@@ -100,10 +102,21 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   // Check if call is closed
   const isCallClosed = useMemo(() => {
     if (!call) return false;
-    const now = new Date('2026-10-06T00:45:00').getTime();
     const close = new Date(`${call.closingDate}T14:00:00`).getTime();
-    return close < now || call.status === 'Closed';
+    return (!isNaN(close) && close < Date.now()) || call.status === 'Closed';
   }, [call]);
+
+  const timeRemainingLabel = useMemo(() => {
+    if (!call) return '';
+    if (isCallClosed) return 'Closed';
+    const close = new Date(`${call.closingDate}T14:00:00`).getTime();
+    if (isNaN(close)) return `${call.daysRemaining} days remaining`;
+    const diffMs = Math.max(0, close - Date.now());
+    const days = Math.floor(diffMs / 86400000);
+    const hours = Math.floor((diffMs % 86400000) / 3600000);
+    const mins = Math.floor((diffMs % 3600000) / 60000);
+    return `${days}d ${String(hours).padStart(2, '0')}h ${String(mins).padStart(2, '0')}m`;
+  }, [call, isCallClosed]);
 
   // Check if buyer specifically mandates a trading licence for this call
   const callRequiresTradingLicence = useMemo(() => {
@@ -128,16 +141,6 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
 
   const isCallTradingLicenceBlocked = callRequiresTradingLicence && !verifiedTradingLicenceDoc;
 
-  // Saved local draft cache
-  const localDraft = useMemo(() => {
-    if (!call?.id || !supplier.id) return null;
-    try {
-      const saved = localStorage.getItem(`bidready_draft_tender_${supplier.id}_${call.id}`);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return null;
-  }, [call?.id, supplier.id]);
-
   // Existing draft application for this call
   const existingDraftApp = useMemo(() => {
     return applications.find((a) => a.callId === call?.id && a.supplierId === supplier.id && a.status === 'Draft');
@@ -149,7 +152,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   }, [applications, call?.id, supplier.id]);
 
   const [isDraftRestored, setIsDraftRestored] = useState<boolean>(() => {
-    return !existingSubmittedApp && (!!existingDraftApp || !!localDraft);
+    return !existingSubmittedApp && !!existingDraftApp;
   });
   const [draftToast, setDraftToast] = useState<string | null>(null);
   const showDraftToast = (msg: string) => {
@@ -158,7 +161,6 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   };
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(() => {
     if (existingDraftApp?.lastSavedAt) return `Restored from ${existingDraftApp.lastSavedAt}`;
-    if (localDraft?.savedAt) return `Restored from ${localDraft.savedAt}`;
     return null;
   });
   const [isSavingDraft, setIsSavingDraft] = useState<boolean>(false);
@@ -167,7 +169,6 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   const [currentStep, setCurrentStep] = useState<number>(() => {
     if (existingSubmittedApp) return 5;
     if (existingDraftApp?.currentStep) return existingDraftApp.currentStep;
-    if (localDraft?.currentStep) return localDraft.currentStep;
     return 1;
   });
 
@@ -182,58 +183,31 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     if (existingDraftApp?.draftData?.lineItems) {
       return JSON.parse(JSON.stringify(existingDraftApp.draftData.lineItems));
     }
-    if (localDraft?.lineItems) {
-      return JSON.parse(JSON.stringify(localDraft.lineItems));
-    }
     if (call?.lineItems) {
       return JSON.parse(JSON.stringify(call.lineItems));
     }
-    return [
-      { id: 'li-1', itemNumber: 1, description: 'Treated Structural Timber (Pine 38x114mm x 6.0m SABS 1460)', unit: 'Length (6m)', quantity: 1200, unitPriceBWP: 175, totalPriceBWP: 210000 },
-      { id: 'li-2', itemNumber: 2, description: 'Treated Structural Timber (Pine 50x228mm x 6.0m SABS 1460)', unit: 'Length (6m)', quantity: 650, unitPriceBWP: 390, totalPriceBWP: 253500 },
-      { id: 'li-3', itemNumber: 3, description: 'Ordinary Portland Cement CEM II 42.5N (50kg Bags)', unit: 'Bag (50kg)', quantity: 4500, unitPriceBWP: 108, totalPriceBWP: 486000 },
-      { id: 'li-4', itemNumber: 4, description: 'High Tensile Deformed Steel Rebar (Y12 x 12.0m)', unit: 'Bundle (10 bars)', quantity: 300, unitPriceBWP: 1390, totalPriceBWP: 417000 },
-      { id: 'li-5', itemNumber: 5, description: 'IBR Galvanized Corrugated Roofing Sheets 0.5mm x 6.0m', unit: 'Sheet', quantity: 800, unitPriceBWP: 380, totalPriceBWP: 304000 },
-      { id: 'li-6', itemNumber: 6, description: 'Transport, Offloading & Stacking to Designated GRC Depots', unit: 'Lump Sum', quantity: 1, unitPriceBWP: 90000, totalPriceBWP: 90000 },
-    ];
+    return [];
   });
 
   // Step 2: Technical Response State
   const [technicalMethodology, setTechnicalMethodology] = useState<string>(() => {
-    if (existingDraftApp?.draftData?.technicalMethodology) {
-      return existingDraftApp.draftData.technicalMethodology;
-    }
-    if (localDraft?.technicalMethodology) {
-      return localDraft.technicalMethodology;
-    }
-    if (supplier.isDemoAccount) {
-      return 'Kopano Building Supplies operates an established logistics and warehousing network in G-West Industrial, maintaining dedicated strategic buffer inventory under SABS 1460 timber standards. Delivery to all municipal depots will be serviced within 5 business days utilizing our dedicated Euro-5 fleet.';
-    }
-    return `${supplier.legalName || 'Our company'} operates an established operational footprint in Botswana. We maintain dedicated capacity and statutory compliance to fulfill this procurement contract in full accordance with all authority specifications.`;
+    return existingDraftApp?.draftData?.technicalMethodology || '';
   });
   const [deliveryLeadTimeDays, setDeliveryLeadTimeDays] = useState<number>(() => {
-    return existingDraftApp?.draftData?.deliveryLeadTimeDays ?? localDraft?.deliveryLeadTimeDays ?? 5;
+    return existingDraftApp?.draftData?.deliveryLeadTimeDays ?? 14;
   });
   const [qualityAssurancePlan, setQualityAssurancePlan] = useState<string>(() => {
-    return (
-      existingDraftApp?.draftData?.qualityAssurancePlan ||
-      localDraft?.qualityAssurancePlan ||
-      'All shipments undergo statutory quality verification and testing prior to dispatch. Material test certificates are delivered with each consignment.'
-    );
+    return existingDraftApp?.draftData?.qualityAssurancePlan || '';
   });
   const [warrantyMonths, setWarrantyMonths] = useState<number>(() => {
-    return existingDraftApp?.draftData?.warrantyMonths ?? localDraft?.warrantyMonths ?? 24;
+    return existingDraftApp?.draftData?.warrantyMonths ?? 12;
   });
 
   // Step 3: Supporting Files from Document Vault & Uploads
   const [supportingFiles, setSupportingFiles] = useState<SupportingFileItem[]>(() => {
-    // Helper to build items from Document Vault
     const vaultItems: SupportingFileItem[] = (documents || [])
-      .filter((d) => d.status !== 'Expired' && d.status !== 'Rejected')
+      .filter((d) => d.status === 'Verified' || d.status === 'Expiring soon')
       .map((d) => {
-        const docCode = (d.documentNumber || d.id || d.fileName).replace(/[^a-zA-Z0-9]/g, '');
-        const hash1 = docCode.toLowerCase().padEnd(8, '0').substring(0, 8);
-        const hash2 = d.id.replace(/[^a-zA-Z0-9]/g, '').padEnd(4, 'a').substring(0, 4);
         const isMandatory =
           d.documentType.toLowerCase().includes('cipa') ||
           d.documentType.toLowerCase().includes('tax') ||
@@ -245,8 +219,8 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
           id: `vault-${d.id}`,
           name: d.title || d.documentType,
           type: 'PDF',
-          size: d.fileSize || '1.1 MB',
-          fingerprint: `SHA-256: ${hash1}4b...${hash2}9e`,
+          size: d.fileSize || 'Recorded',
+          fingerprint: d.sha256 ? `SHA-256: ${d.sha256.substring(0, 14)}...` : 'Checksum recorded server-side',
           mandatory: isMandatory,
           uploadedAt: d.uploadedAt ? d.uploadedAt : 'Verified in Vault',
           fileName: d.fileName || `${d.documentType.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
@@ -260,31 +234,27 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
         };
       });
 
-    // 1. Check existing draft app
-    const saved = existingDraftApp?.draftData?.supportingFiles || localDraft?.supportingFiles;
+    const saved = existingDraftApp?.draftData?.supportingFiles;
     if (saved && Array.isArray(saved) && saved.length > 0) {
-      // Purge any legacy simulated mock files (e.g. ids like file-tech, file-fin, file-timber, file-fleet)
       const hasLegacyMock = saved.some(
         (f) => f.id === 'file-tech' || f.id === 'file-fin' || f.id === 'file-timber' || f.id === 'file-fleet'
       );
       if (!hasLegacyMock) {
         return saved;
       }
-      // If legacy mock files were saved, keep custom user-uploaded files and use real vault docs
       const customUploaded = saved.filter((f) => f.source === 'uploaded');
       return [...vaultItems, ...customUploaded];
     }
 
-    // 2. Default: All verified Document Vault documents
     return vaultItems;
   });
 
   // Step 4: Declarations
   const [declarationAgreed, setDeclarationAgreed] = useState<boolean>(() => {
-    return existingDraftApp?.draftData?.declarationAgreed ?? localDraft?.declarationAgreed ?? true;
+    return existingDraftApp?.draftData?.declarationAgreed ?? false;
   });
   const [nonCollusionAgreed, setNonCollusionAgreed] = useState<boolean>(() => {
-    return existingDraftApp?.draftData?.nonCollusionAgreed ?? localDraft?.nonCollusionAgreed ?? true;
+    return existingDraftApp?.draftData?.nonCollusionAgreed ?? false;
   });
 
   // Receipt data after submission
@@ -298,14 +268,10 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     if (existingSubmittedApp) {
       return {
         appId: existingSubmittedApp.id,
-        receiptNumber: existingSubmittedApp.receiptNumber || 'B360-GRC-2026-0929-8812',
-        timestamp: existingSubmittedApp.submittedAt || '2026-09-29 15:40 CAT',
-        sealedHash: existingSubmittedApp.bid?.sealedHash || 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-        fileFingerprints: [
-          { fileName: 'Kopano_Signed_Financial_BOQ.pdf', hash: 'SHA256:e82d334c891f7a02c5e4210998a0b12' },
-          { fileName: 'Kopano_Technical_Compliance_Schedule_GRC.pdf', hash: 'SHA256:7f83b1657ff1fc53b92dc18148a1d65' },
-          { fileName: 'FSC_Sawmill_Timber_Treatment_Cert.pdf', hash: 'SHA256:b109ff8203c9da5587ef00192841cca' },
-        ],
+        receiptNumber: existingSubmittedApp.receiptNumber || existingSubmittedApp.id,
+        timestamp: existingSubmittedApp.submittedAt || new Date().toISOString(),
+        sealedHash: existingSubmittedApp.bid?.sealedHash || 'Recorded on server seal',
+        fileFingerprints: [],
       };
     }
     return null;
@@ -379,15 +345,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
           : `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
 
       const ext = file.name.split('.').pop()?.toUpperCase() || 'PDF';
-
-      let seed = 0;
-      for (let i = 0; i < file.name.length; i++) {
-        seed = ((seed << 5) - seed) + file.name.charCodeAt(i) + file.size;
-        seed |= 0;
-      }
-      const hex = Math.abs(seed).toString(16).padStart(8, '0');
-      const fingerprint = `SHA-256: ${hex.substring(0, 6)}fa...${hex.substring(2, 6)}c1`;
-
+      const fingerprint = 'Computed on server seal';
       const objectUrl = URL.createObjectURL(file);
 
       newItems.push({
@@ -424,10 +382,6 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   };
 
   const handleAttachVaultDoc = (doc: (typeof documents)[0]) => {
-    const docCode = (doc.documentNumber || doc.id || doc.fileName).replace(/[^a-zA-Z0-9]/g, '');
-    const hash1 = docCode.toLowerCase().padEnd(8, '0').substring(0, 8);
-    const hash2 = doc.id.replace(/[^a-zA-Z0-9]/g, '').padEnd(4, 'a').substring(0, 4);
-
     const isMandatory =
       doc.documentType.toLowerCase().includes('cipa') ||
       doc.documentType.toLowerCase().includes('tax') ||
@@ -439,8 +393,8 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
       id: `vault-${doc.id}`,
       name: doc.title || doc.documentType,
       type: 'PDF',
-      size: doc.fileSize || '1.1 MB',
-      fingerprint: `SHA-256: ${hash1}4b...${hash2}9e`,
+      size: doc.fileSize || 'Recorded',
+      fingerprint: doc.sha256 ? `SHA-256: ${doc.sha256.substring(0, 14)}...` : 'Checksum recorded server-side',
       mandatory: isMandatory,
       uploadedAt: doc.uploadedAt || 'Verified in Vault',
       fileName: doc.fileName || `${doc.documentType.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
@@ -476,10 +430,8 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
         return;
-      } catch (e) {
-        console.warn('Vault blob fetch notice, fallback to direct download URL:', e);
-        const url = supplierApi.getDocumentDownloadUrl(file.vaultDocId, true);
-        window.open(url, '_blank');
+      } catch (e: any) {
+        showDraftToast(e?.message || 'Unable to download document from Vault. Please try again.');
         return;
       }
     }
@@ -542,7 +494,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
         { fieldId: 'warranty', label: 'Warranty coverage (months)', value: warrantyMonths },
         { fieldId: 'methodology', label: 'Methodology statement', value: technicalMethodology },
       ],
-      sharedDocumentIds: ['doc-cipa-01', 'doc-tax-02', 'doc-ppra-03', 'doc-insur-05', 'doc-fin-06', 'doc-bank-07'],
+      sharedDocumentIds: supportingFiles.map((f) => f.vaultDocId).filter(Boolean) as string[],
       draftData: draftDataPayload,
       initialTimelineNote: `Draft saved at Step ${stepToSave} (${
         stepToSave === 1 ? 'Price schedule' : stepToSave === 2 ? 'Technical response' : stepToSave === 3 ? 'Supporting files' : 'Review and seal'
@@ -562,12 +514,6 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     if (existingDraftApp) {
       deleteApplicationDraft(existingDraftApp.id);
     }
-    if (call?.id && supplier.id) {
-      try {
-        localStorage.removeItem(`bidready_draft_tender_${supplier.id}_${call.id}`);
-        localStorage.removeItem(`bidready_draft_bid_${supplier.id}_${call.id}`);
-      } catch {}
-    }
     if (call?.lineItems) {
       setLineItems(JSON.parse(JSON.stringify(call.lineItems)));
     }
@@ -577,83 +523,103 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
     setTimeout(() => setDraftToast(null), 3500);
   };
 
-  // Handle final sealing & submit
-  const handleSubmitAndSeal = () => {
+  // Handle final sealing & submit (authoritative server-side enforcement)
+  const handleSubmitAndSeal = async () => {
     if (!call || isCallClosed) return;
+    setSubmitError(null);
+
     if (isCallTradingLicenceBlocked) {
-      alert('This buyer requires a trading licence. Please upload and verify your trading licence before submitting this bid.');
+      setSubmitError('This buyer requires a trading licence. Please upload and verify your trading licence before submitting this bid.');
       return;
     }
     if (!supplier.emailVerified) {
-      alert('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
+      setSubmitError('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
       return;
     }
+
     setIsSubmitting(true);
 
-    const now = '2026-10-06 12:30 CAT';
-    const generatedReceipt = `B360-SEAL-${call.callNumber.replace(/\//g, '-')}-${Date.now().toString().slice(-4)}`;
-    const sealedHash = `SHA256:${Math.random().toString(36).substring(2, 12)}${Math.random().toString(36).substring(2, 12)}${Math.random().toString(36).substring(2, 12)}`;
+    try {
+      const financialSchedule = lineItems.map((li, idx) => ({
+        lineNo: li.itemNumber || idx + 1,
+        description: li.description,
+        quantity: Number(li.quantity || 0),
+        unitPrice: Number(li.unitPriceBWP || 0),
+      }));
 
-    const fingerprints = supportingFiles.map((f) => ({
-      fileName: f.fileName,
-      hash: f.fingerprint,
-    }));
-
-    const newAppId = submitApplication({
-      callId: call.id,
-      callNumber: call.callNumber,
-      callTitle: call.title,
-      callType: 'RFP',
-      organizationId: call.organizationId,
-      organizationName: call.organizationName,
-      supplierId: supplier.id,
-      supplierName: supplier.legalName,
-      receiptNumber: generatedReceipt,
-      status: 'Submitted',
-      sharedDocumentIds: ['doc-cipa-01', 'doc-tax-02', 'doc-ppra-03', 'doc-insur-05', 'doc-fin-06', 'doc-bank-07'],
-      responses: [
-        { fieldId: 'lead_time', label: 'Delivery lead time (calendar days)', value: deliveryLeadTimeDays },
-        { fieldId: 'warranty', label: 'Warranty coverage (months)', value: warrantyMonths },
-        { fieldId: 'methodology', label: 'Methodology statement', value: technicalMethodology },
-      ],
-      bid: {
-        id: `bid-${Date.now()}`,
-        applicationId: '',
+      const sealRes = await supplierApi.sealBid({
         callId: call.id,
+        financialSchedule,
+      });
+
+      const now = new Date().toLocaleString('en-BW', { timeZone: 'Africa/Gaborone' }) + ' CAT';
+      const generatedReceipt = sealRes.receiptNumber;
+      const sealedHash = sealRes.sealedHash;
+
+      const fingerprints = supportingFiles.map((f) => ({
+        fileName: f.fileName,
+        hash: f.fingerprint,
+      }));
+
+      const sharedIds = documents.map((d) => d.versionId || d.id).filter(Boolean);
+
+      const newAppId = submitApplication({
+        callId: call.id,
+        callNumber: call.callNumber,
+        callTitle: call.title,
+        callType: 'RFP',
+        organizationId: call.organizationId,
+        organizationName: call.organizationName,
         supplierId: supplier.id,
         supplierName: supplier.legalName,
-        currency: 'BWP',
-        pricingLineItems: lineItems,
-        totalAmountBWP: grandTotalBWP,
-        technicalProposalFileName: supportingFiles[0]?.fileName || 'Technical_Proposal.pdf',
-        financialProposalFileName: supportingFiles[1]?.fileName || 'Financial_Schedule.pdf',
-        isSealed: true,
-        sealedHash: sealedHash,
-      },
-      initialTimelineNote: `Sealed commercial bid (BWP ${grandTotalBWP.toLocaleString()}) and statutory schedules submitted. Receipt #${generatedReceipt}.`,
-    });
+        receiptNumber: generatedReceipt,
+        status: 'Submitted',
+        sharedDocumentIds: sharedIds,
+        responses: [
+          { fieldId: 'lead_time', label: 'Delivery lead time (calendar days)', value: deliveryLeadTimeDays },
+          { fieldId: 'warranty', label: 'Warranty coverage (months)', value: warrantyMonths },
+          { fieldId: 'methodology', label: 'Methodology statement', value: technicalMethodology },
+        ],
+        bid: {
+          id: sealRes.bidId,
+          applicationId: '',
+          callId: call.id,
+          supplierId: supplier.id,
+          supplierName: supplier.legalName,
+          currency: 'BWP',
+          pricingLineItems: lineItems,
+          totalAmountBWP: grandTotalBWP,
+          technicalProposalFileName: supportingFiles[0]?.fileName || 'Technical_Proposal.pdf',
+          financialProposalFileName: supportingFiles[1]?.fileName || 'Financial_Schedule.pdf',
+          isSealed: true,
+          sealedHash,
+        },
+        initialTimelineNote: `Sealed commercial bid (BWP ${grandTotalBWP.toLocaleString()}) and statutory schedules submitted. Receipt #${generatedReceipt}.`,
+      });
 
-    addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || 'Kagiso Molosiwa',
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      action: 'Sealed RFP Commercial Proposal Submitted',
-      entityType: 'Bid',
-      entityId: newAppId,
-      details: `Submitted sealed tender offer of BWP ${grandTotalBWP.toLocaleString()} for ${call.callNumber}. Sealed hash: ${sealedHash}.`,
-    });
+      addAuditEvent({
+        actorName: supplier.directors[0]?.fullName || supplier.legalName || 'Supplier Administrator',
+        actorRole: 'Supplier',
+        organizationName: supplier.legalName,
+        action: 'Sealed RFP Commercial Proposal Submitted',
+        entityType: 'Bid',
+        entityId: sealRes.bidId || newAppId,
+        details: `Submitted sealed tender offer of BWP ${grandTotalBWP.toLocaleString()} for ${call.callNumber}. Sealed hash: ${sealedHash}.`,
+      });
 
-    setTimeout(() => {
-      setIsSubmitting(false);
       setSubmittedReceipt({
-        appId: newAppId,
+        appId: sealRes.bidId || newAppId,
         receiptNumber: generatedReceipt,
         timestamp: now,
-        sealedHash: sealedHash,
+        sealedHash,
         fileFingerprints: fingerprints,
       });
       setCurrentStep(5);
-    }, 600);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Bid submission was blocked by the server. Please verify your supplier standing and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Withdraw action
@@ -679,8 +645,8 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
 =============================================================
 BIDREADY360 CERTIFIED ELECTRONIC TENDER RECEIPT
 =============================================================
-Receipt Number: ${submittedReceipt?.receiptNumber || 'B360-GRC-2026-0929-8812'}
-Submission Timestamp: ${submittedReceipt?.timestamp || '2026-09-29 15:40 CAT'}
+Receipt Number: ${submittedReceipt?.receiptNumber || existingSubmittedApp?.id || ''}
+Submission Timestamp: ${submittedReceipt?.timestamp || existingSubmittedApp?.submittedAt || ''}
 Procuring Entity: ${call.organizationName}
 Tender Reference: ${call.callNumber}
 Tender Title: ${call.title}
@@ -692,10 +658,10 @@ BURS Taxpayer TIN: ${supplier.tinNumber}
 
 SEALED COMMERCIAL SPECIFICATION:
 Total Evaluated Bid Value: BWP ${grandTotalBWP.toLocaleString()}
-Cryptographic Sealing Checksum: ${submittedReceipt?.sealedHash || 'SHA256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069'}
+Cryptographic Sealing Checksum: ${submittedReceipt?.sealedHash || existingSubmittedApp?.bid?.sealedHash || 'Recorded server-side'}
 
 ATTACHED FILE INTEGRITY FINGERPRINTS:
-${submittedReceipt?.fileFingerprints.map((f) => `- ${f.fileName} [${f.hash}]`).join('\n')}
+${(submittedReceipt?.fileFingerprints || []).map((f) => `- ${f.fileName} [${f.hash}]`).join('\n') || '- Sealed electronically in repository'}
 
 LEGAL NOTICE:
 This sealed electronic receipt confirms that your commercial pricing and bill of quantities are securely stored in the BidReady360 vault. In compliance with the Public Procurement Act of Botswana, prices remain tamper-proof and inaccessible until the designated public opening session.
@@ -761,7 +727,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           </span>
           <div className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white flex items-center sm:justify-end gap-1.5 tabular-nums">
             <Clock className="w-4 h-4 text-[#1F5F99]" />
-            <span>{isCallClosed ? 'Closed' : `${call.daysRemaining} days, 03:14:20`}</span>
+            <span>{timeRemainingLabel}</span>
           </div>
           <span className="text-[14px] text-[#6B7A87] block">
             Time zone: CAT (UTC+02:00)
@@ -1256,7 +1222,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
 
             <div className="space-y-1.5">
               <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
-                Quality assurance & timber compliance statement
+                Quality assurance & compliance statement
               </label>
               <textarea
                 rows={3}
@@ -1554,7 +1520,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 </span>
               </div>
               <p className="text-[14px] text-[#6B7A87]">
-                Comprises {lineItems.length} line items across timber beams, trusses, cement, and steel bars including 14% statutory VAT.
+                Comprises {lineItems.length} schedule line items including 14% statutory VAT.
               </p>
             </div>
 
@@ -1673,6 +1639,31 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 </div>
               )}
 
+              {(submitError || supplier.activeDebarment || supplier.accountStatus === 'suspended' || (supplier.verificationStatus && supplier.verificationStatus !== 'verified')) && (
+                <div className="w-full p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[13px] text-[#C2412D] flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-semibold block">
+                      {submitError
+                        ? 'Bid submission blocked'
+                        : supplier.activeDebarment
+                        ? 'Active statutory debarment on account'
+                        : supplier.accountStatus === 'suspended'
+                        ? 'Supplier account suspended'
+                        : 'Supplier verification required'}
+                    </span>
+                    <span>
+                      {submitError ||
+                        (supplier.activeDebarment
+                          ? `Your supplier account is currently debarred (${supplier.activeDebarment.reason})${supplier.activeDebarment.endsOn ? ` until ${supplier.activeDebarment.endsOn}` : ' (permanent)'}. Bid submissions are blocked.`
+                          : supplier.accountStatus === 'suspended'
+                          ? 'Your supplier account is currently suspended by platform administration and cannot submit bids.'
+                          : 'Your supplier profile must be verified by an administrator before submitting sealed bids.')}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1771,7 +1762,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               </p>
               <div className="flex items-center gap-2 pt-1 text-[14px] text-[#6B7A87]">
                 <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
-                <span>Vault verification timestamp recorded in Gaborone regional registry</span>
+                <span>Vault verification timestamp recorded in central procurement registry</span>
               </div>
             </div>
 

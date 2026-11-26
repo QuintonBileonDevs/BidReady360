@@ -470,6 +470,9 @@ async function authenticate(req, res, next) {
         SELECT 'organization' AS "tenantType",
                o.id AS "tenantId",
                o.name AS "tenantName",
+               o.status AS "organizationStatus",
+               o.verification_status AS "verificationStatus",
+               o.rejection_reason AS "rejectionReason",
                r.id AS "roleId",
                r.name AS "roleName",
                om.is_owner AS "isOwner",
@@ -489,7 +492,10 @@ async function authenticate(req, res, next) {
                  'tenantId', o.id,
                  'role', r.name,
                  'supplierOrOrgName', o.name,
-                 'verificationStatus', 'verified',
+                 'status', o.status,
+                 'organizationStatus', o.status,
+                 'verificationStatus', o.verification_status,
+                 'rejectionReason', o.rejection_reason,
                  'emailVerified', ((SELECT "emailVerifiedAt" FROM user_session) IS NOT NULL)
                ) AS profile_summary
         FROM organization_members om
@@ -501,6 +507,8 @@ async function authenticate(req, res, next) {
         SELECT 'supplier' AS "tenantType",
                s.id AS "tenantId",
                s.legal_name AS "tenantName",
+               s.status AS "supplierStatus",
+               s.verification_status AS "verificationStatus",
                r.id AS "roleId",
                r.name AS "roleName",
                sm.is_owner AS "isOwner",
@@ -520,6 +528,8 @@ async function authenticate(req, res, next) {
                  'tenantId', s.id,
                  'role', r.name,
                  'supplierOrOrgName', s.legal_name,
+                 'status', s.status,
+                 'supplierStatus', s.status,
                  'verificationStatus', s.verification_status,
                  'cipaNumber', s.cipa_uin,
                  'complianceStatus', s.compliance_status,
@@ -697,6 +707,117 @@ function requireTenantType(tenantType) {
     next();
   };
 }
+function requirePlatformAdmin(req, res, next) {
+  if (!req.user || !req.user.isPlatformAdmin) {
+    res.status(403).json({
+      error: "FORBIDDEN_ADMIN_ONLY",
+      message: "Access restricted to platform super administrators."
+    });
+    return;
+  }
+  next();
+}
+
+// server/utils/ip.ts
+function sanitizeIp(rawIp) {
+  if (!rawIp) return null;
+  const ipStr = Array.isArray(rawIp) ? rawIp[0] : String(rawIp);
+  const first = ipStr.split(",")[0].trim();
+  if (!first) return null;
+  const normalized = first.replace(/^::ffff:/i, "");
+  const ipv4Regex = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+  if (ipv4Regex.test(normalized)) {
+    return normalized;
+  }
+  const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^(([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$/;
+  if (ipv6Regex.test(normalized)) {
+    return normalized;
+  }
+  return "127.0.0.1";
+}
+function extractClientIp(req) {
+  const forwarded = req.headers?.["x-forwarded-for"];
+  if (forwarded) {
+    const sanitized = sanitizeIp(forwarded);
+    if (sanitized) return sanitized;
+  }
+  const remote = req.socket?.remoteAddress;
+  return sanitizeIp(remote) || "127.0.0.1";
+}
+
+// server/middleware/rateLimit.middleware.ts
+var MAX_BUCKETS = 1e4;
+function createRateLimiter(options) {
+  const buckets = /* @__PURE__ */ new Map();
+  let lastPrune = Date.now();
+  function prune(now) {
+    if (now - lastPrune < options.windowMs && buckets.size < MAX_BUCKETS) {
+      return;
+    }
+    lastPrune = now;
+    for (const [k, b] of buckets.entries()) {
+      if (b.resetAt <= now) {
+        buckets.delete(k);
+      }
+    }
+    if (buckets.size >= MAX_BUCKETS) {
+      const overflow = buckets.size - Math.floor(MAX_BUCKETS * 0.8);
+      let removed = 0;
+      for (const k of buckets.keys()) {
+        buckets.delete(k);
+        removed++;
+        if (removed >= overflow) break;
+      }
+    }
+  }
+  return (req, res, next) => {
+    if (req.method === "OPTIONS" || options.skip?.(req)) {
+      return next();
+    }
+    const now = Date.now();
+    prune(now);
+    const ip = extractClientIp(req) || req.socket?.remoteAddress || "unknown";
+    const key = `${options.keyPrefix}:${ip}`;
+    const existing = buckets.get(key);
+    let bucket;
+    if (!existing || existing.resetAt <= now) {
+      bucket = { count: 1, resetAt: now + options.windowMs };
+      buckets.set(key, bucket);
+    } else {
+      existing.count += 1;
+      bucket = existing;
+    }
+    const remaining = Math.max(0, options.maxRequests - bucket.count);
+    const resetSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1e3));
+    res.setHeader("RateLimit-Limit", String(options.maxRequests));
+    res.setHeader("RateLimit-Remaining", String(remaining));
+    res.setHeader("RateLimit-Reset", String(resetSeconds));
+    if (bucket.count > options.maxRequests) {
+      res.setHeader("Retry-After", String(resetSeconds));
+      res.status(429).json({
+        error: "RATE_LIMIT_EXCEEDED",
+        code: "RATE_LIMIT_EXCEEDED",
+        message: options.message || "Too many requests. Please wait a moment and try again."
+      });
+      return;
+    }
+    next();
+  };
+}
+var generalApiRateLimiter = createRateLimiter({
+  windowMs: 60 * 1e3,
+  maxRequests: 240,
+  keyPrefix: "api",
+  message: "Too many API requests from this network. Please retry in a minute.",
+  skip: (req) => req.path === "/health" || req.path === "/api/health"
+});
+var authEndpointRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1e3,
+  maxRequests: 40,
+  keyPrefix: "auth",
+  message: "Too many authentication attempts. Please try again in 15 minutes.",
+  skip: (req) => req.method === "GET" || req.path === "/logout" || req.path === "/switch-tenant"
+});
 
 // server/routes/reference.routes.ts
 import { Router } from "express";
@@ -730,6 +851,24 @@ async function cachedReferenceQuery(key, fetcher) {
   return rows;
 }
 var ReferenceRepository = class {
+  constructor() {
+    this.docTypesHasRequiresNumber = null;
+  }
+  async hasDocumentTypesRequiresNumber() {
+    if (this.docTypesHasRequiresNumber === true) return true;
+    const res = await query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'document_types'
+           AND column_name = 'requires_number'
+       ) AS exists`
+    );
+    const exists = Boolean(res.rows[0]?.exists);
+    if (exists) this.docTypesHasRequiresNumber = true;
+    return exists;
+  }
   async getDistricts() {
     return cachedReferenceQuery("districts", async () => {
       const res = await query(
@@ -741,9 +880,11 @@ var ReferenceRepository = class {
   }
   async getDocumentTypes() {
     return cachedReferenceQuery("documentTypes", async () => {
+      const hasRequiresNumber = await this.hasDocumentTypesRequiresNumber();
+      const requiresNumberSelect = hasRequiresNumber ? 'requires_number AS "requiresNumber"' : 'TRUE AS "requiresNumber"';
       const res = await query(
         `SELECT id, organization_id AS "organizationId", code, name, description, issuing_authority AS "issuingAuthority",
-                requires_expiry AS "requiresExpiry", requires_number AS "requiresNumber", default_validity_days AS "defaultValidityDays",
+                requires_expiry AS "requiresExpiry", ${requiresNumberSelect}, default_validity_days AS "defaultValidityDays",
                 max_file_size_mb AS "maxFileSizeMb", allowed_mime_types AS "allowedMimeTypes",
                 verification_method AS "verificationMethod", is_mandatory_default AS "isMandatoryDefault", sort_order AS "sortOrder"
          FROM document_types WHERE is_active = TRUE ORDER BY sort_order ASC, name ASC`
@@ -894,6 +1035,187 @@ var ReferenceRepository = class {
       });
     });
   }
+  // =========================================================================
+  // Admin Catalogue & Plan Management (with cache invalidation)
+  // =========================================================================
+  async listAllCategoriesAdmin() {
+    const res = await query(
+      `SELECT id, parent_id AS "parentId", code, name, description, level,
+              sort_order AS "sortOrder", is_active AS "isActive",
+              created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM categories
+       WHERE organization_id IS NULL
+       ORDER BY level ASC, sort_order ASC, code ASC`
+    );
+    return res.rows;
+  }
+  async createCategory(data) {
+    const code = data.code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "_");
+    const name = data.name.trim();
+    const level = data.parentId ? Math.max(2, Number(data.level) || 2) : Math.max(1, Math.min(5, Number(data.level) || 1));
+    const sortOrder = Number(data.sortOrder) || 0;
+    const res = await query(
+      `INSERT INTO categories (parent_id, organization_id, code, name, description, level, sort_order, is_active)
+       VALUES ($1, NULL, $2, $3, $4, $5, $6, TRUE)
+       RETURNING id, parent_id AS "parentId", code, name, description, level,
+                 sort_order AS "sortOrder", is_active AS "isActive"`,
+      [data.parentId || null, code, name, data.description?.trim() || null, level, sortOrder]
+    );
+    clearReferenceCache("categories");
+    return res.rows[0];
+  }
+  async updateCategory(id, data) {
+    const res = await query(
+      `UPDATE categories
+       SET name = COALESCE($2, name),
+           description = CASE WHEN $3::boolean THEN $4 ELSE description END,
+           is_active = COALESCE($5, is_active),
+           sort_order = COALESCE($6, sort_order),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, parent_id AS "parentId", code, name, description, level,
+                 sort_order AS "sortOrder", is_active AS "isActive"`,
+      [
+        id,
+        data.name !== void 0 ? data.name.trim() : null,
+        data.description !== void 0,
+        data.description !== void 0 ? data.description ? data.description.trim() : null : null,
+        data.isActive !== void 0 ? Boolean(data.isActive) : null,
+        data.sortOrder !== void 0 ? Number(data.sortOrder) : null
+      ]
+    );
+    clearReferenceCache("categories");
+    return res.rows[0] || null;
+  }
+  async listAllDocumentTypesAdmin() {
+    const hasRequiresNumber = await this.hasDocumentTypesRequiresNumber();
+    const requiresNumberSelect = hasRequiresNumber ? 'requires_number AS "requiresNumber"' : 'TRUE AS "requiresNumber"';
+    const res = await query(
+      `SELECT id, organization_id AS "organizationId", code, name, description,
+              issuing_authority AS "issuingAuthority", requires_expiry AS "requiresExpiry",
+              ${requiresNumberSelect}, default_validity_days AS "defaultValidityDays",
+              max_file_size_mb AS "maxFileSizeMb", verification_method AS "verificationMethod",
+              is_mandatory_default AS "isMandatoryDefault", is_active AS "isActive",
+              sort_order AS "sortOrder"
+       FROM document_types
+       WHERE organization_id IS NULL
+       ORDER BY sort_order ASC, name ASC`
+    );
+    return res.rows;
+  }
+  async createDocumentType(data) {
+    const hasRequiresNumber = await this.hasDocumentTypesRequiresNumber();
+    const code = data.code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "_");
+    const name = data.name.trim();
+    const allowedMethods = ["manual", "registry_api", "ai_assisted", "hybrid"];
+    const verificationMethod = allowedMethods.includes(String(data.verificationMethod || "").toLowerCase()) ? String(data.verificationMethod).toLowerCase() : "manual";
+    const res = hasRequiresNumber ? await query(
+      `INSERT INTO document_types (
+             organization_id, code, name, description, issuing_authority,
+             requires_expiry, requires_number, default_validity_days,
+             verification_method, is_mandatory_default, is_active, sort_order
+           ) VALUES (NULL, $1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10)
+           RETURNING id, code, name, description, issuing_authority AS "issuingAuthority",
+                     requires_expiry AS "requiresExpiry", requires_number AS "requiresNumber",
+                     default_validity_days AS "defaultValidityDays", verification_method AS "verificationMethod",
+                     is_mandatory_default AS "isMandatoryDefault", is_active AS "isActive", sort_order AS "sortOrder"`,
+      [
+        code,
+        name,
+        data.description?.trim() || null,
+        data.issuingAuthority?.trim() || null,
+        Boolean(data.requiresExpiry),
+        data.requiresNumber !== void 0 ? Boolean(data.requiresNumber) : true,
+        data.defaultValidityDays ?? null,
+        verificationMethod,
+        Boolean(data.isMandatoryDefault),
+        Number(data.sortOrder) || 0
+      ]
+    ) : await query(
+      `INSERT INTO document_types (
+             organization_id, code, name, description, issuing_authority,
+             requires_expiry, default_validity_days,
+             verification_method, is_mandatory_default, is_active, sort_order
+           ) VALUES (NULL, $1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)
+           RETURNING id, code, name, description, issuing_authority AS "issuingAuthority",
+                     requires_expiry AS "requiresExpiry", TRUE AS "requiresNumber",
+                     default_validity_days AS "defaultValidityDays", verification_method AS "verificationMethod",
+                     is_mandatory_default AS "isMandatoryDefault", is_active AS "isActive", sort_order AS "sortOrder"`,
+      [
+        code,
+        name,
+        data.description?.trim() || null,
+        data.issuingAuthority?.trim() || null,
+        Boolean(data.requiresExpiry),
+        data.defaultValidityDays ?? null,
+        verificationMethod,
+        Boolean(data.isMandatoryDefault),
+        Number(data.sortOrder) || 0
+      ]
+    );
+    clearReferenceCache("documentTypes");
+    return res.rows[0];
+  }
+  async updateDocumentType(id, data) {
+    const allowedMethods = ["manual", "registry_api", "ai_assisted", "hybrid"];
+    const method = data.verificationMethod && allowedMethods.includes(data.verificationMethod.toLowerCase()) ? data.verificationMethod.toLowerCase() : null;
+    const hasRequiresNumber = await this.hasDocumentTypesRequiresNumber();
+    const requiresNumberSelect = hasRequiresNumber ? 'requires_number AS "requiresNumber"' : 'TRUE AS "requiresNumber"';
+    const res = await query(
+      `UPDATE document_types
+       SET name = COALESCE($2, name),
+           description = CASE WHEN $3::boolean THEN $4 ELSE description END,
+           issuing_authority = CASE WHEN $5::boolean THEN $6 ELSE issuing_authority END,
+           requires_expiry = COALESCE($7, requires_expiry),
+           default_validity_days = CASE WHEN $8::boolean THEN $9::int ELSE default_validity_days END,
+           verification_method = COALESCE($10, verification_method),
+           is_mandatory_default = COALESCE($11, is_mandatory_default),
+           is_active = COALESCE($12, is_active),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, code, name, description, issuing_authority AS "issuingAuthority",
+                 requires_expiry AS "requiresExpiry", ${requiresNumberSelect},
+                 default_validity_days AS "defaultValidityDays", verification_method AS "verificationMethod",
+                 is_mandatory_default AS "isMandatoryDefault", is_active AS "isActive", sort_order AS "sortOrder"`,
+      [
+        id,
+        data.name !== void 0 ? data.name.trim() : null,
+        data.description !== void 0,
+        data.description !== void 0 ? data.description ? data.description.trim() : null : null,
+        data.issuingAuthority !== void 0,
+        data.issuingAuthority !== void 0 ? data.issuingAuthority ? data.issuingAuthority.trim() : null : null,
+        data.requiresExpiry !== void 0 ? Boolean(data.requiresExpiry) : null,
+        data.defaultValidityDays !== void 0,
+        data.defaultValidityDays !== void 0 ? data.defaultValidityDays : null,
+        method,
+        data.isMandatoryDefault !== void 0 ? Boolean(data.isMandatoryDefault) : null,
+        data.isActive !== void 0 ? Boolean(data.isActive) : null
+      ]
+    );
+    clearReferenceCache("documentTypes");
+    return res.rows[0] || null;
+  }
+  async updatePlan(id, data) {
+    const res = await query(
+      `UPDATE plans
+       SET price = COALESCE($2, price),
+           max_calls_per_year = CASE WHEN $3::boolean THEN $4::int ELSE max_calls_per_year END,
+           features = CASE WHEN $5::boolean THEN COALESCE(features, '{}'::jsonb) || $6::jsonb ELSE features END
+       WHERE id = $1
+       RETURNING id, code, name, audience, price, currency, billing_interval AS "billingInterval",
+                 max_users AS "maxUsers", max_calls_per_year AS "maxCallsPerYear", features, sort_order AS "sortOrder"`,
+      [
+        id,
+        data.price !== void 0 ? Number(data.price) : null,
+        data.maxCallsPerYear !== void 0,
+        data.maxCallsPerYear !== void 0 ? data.maxCallsPerYear : null,
+        data.features !== void 0,
+        data.features !== void 0 ? JSON.stringify(data.features) : null
+      ]
+    );
+    clearReferenceCache("plans");
+    return res.rows[0] || null;
+  }
 };
 var referenceRepository = new ReferenceRepository();
 
@@ -935,7 +1257,7 @@ router.get("/", async (_req, res, next) => {
     handleReferenceError(err, res, next);
   }
 });
-router.post("/refresh", async (_req, res, next) => {
+router.post("/refresh", requireAuth, requirePlatformAdmin, async (_req, res, next) => {
   try {
     clearReferenceCache();
     const data = await referenceRepository.loadAll();
@@ -1031,6 +1353,9 @@ var UsersRepository = class {
       `SELECT 'organization' AS "tenantType",
               o.id AS "tenantId",
               o.name AS "tenantName",
+              o.status AS "organizationStatus",
+              o.verification_status AS "verificationStatus",
+              o.rejection_reason AS "rejectionReason",
               r.id AS "roleId",
               r.name AS "roleName",
               om.is_owner AS "isOwner",
@@ -1052,6 +1377,8 @@ var UsersRepository = class {
       `SELECT 'supplier' AS "tenantType",
               s.id AS "tenantId",
               s.legal_name AS "tenantName",
+              s.status AS "supplierStatus",
+              s.verification_status AS "verificationStatus",
               r.id AS "roleId",
               r.name AS "roleName",
               sm.is_owner AS "isOwner",
@@ -1088,6 +1415,11 @@ var AuditRepository = class {
     const timestamp = (/* @__PURE__ */ new Date()).toISOString();
     const payloadToHash = `${prevHash}|${timestamp}|${dto.actorName}|${dto.actorRole}|${dto.action}|${dto.entityType}|${dto.entityId || ""}|${dto.details}`;
     const rowHash = crypto3.createHash("sha256").update(payloadToHash).digest("hex");
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const safeEntityId = dto.entityId && UUID_RE.test(dto.entityId) ? dto.entityId : null;
+    const safeActorUserId = dto.actorUserId && UUID_RE.test(dto.actorUserId) ? dto.actorUserId : null;
+    const safeOrgId = dto.organizationId && UUID_RE.test(dto.organizationId) ? dto.organizationId : null;
+    const safeSupplierId = dto.supplierId && UUID_RE.test(dto.supplierId) ? dto.supplierId : null;
     const res = await query(
       `INSERT INTO audit_log (
         occurred_at, actor_type, actor_user_id, actor_name, actor_role,
@@ -1105,15 +1437,15 @@ var AuditRepository = class {
         details, prev_hash AS "prevHash", row_hash AS "rowHash"`,
       [
         dto.actorType || "user",
-        dto.actorUserId || null,
+        safeActorUserId,
         dto.actorName,
         dto.actorRole,
-        dto.organizationId || null,
-        dto.supplierId || null,
+        safeOrgId,
+        safeSupplierId,
         dto.organizationName || null,
         dto.action,
         dto.entityType,
-        dto.entityId || null,
+        safeEntityId,
         dto.ipAddress || null,
         dto.userAgent || null,
         dto.beforeJson ? JSON.stringify(dto.beforeJson) : null,
@@ -1136,12 +1468,32 @@ var AuditRepository = class {
       params.push(filters.supplierId);
       conditions.push(`supplier_id = $${params.length}`);
     }
-    if (filters.entityType) {
+    if (filters.entityType && filters.entityType !== "ALL") {
       params.push(filters.entityType);
-      conditions.push(`entity_type = $${params.length}`);
+      conditions.push(`LOWER(entity_type) = LOWER($${params.length})`);
+    }
+    if (filters.actor) {
+      params.push(`%${filters.actor.trim()}%`);
+      conditions.push(`(actor_name ILIKE $${params.length} OR actor_role ILIKE $${params.length} OR EXISTS (SELECT 1 FROM users u WHERE u.id = audit_log.actor_user_id AND u.email::text ILIKE $${params.length}))`);
+    }
+    if (filters.action && filters.action !== "ALL") {
+      params.push(`%${filters.action.trim()}%`);
+      conditions.push(`action ILIKE $${params.length}`);
+    }
+    if (filters.search) {
+      params.push(`%${filters.search.trim()}%`);
+      conditions.push(`(actor_name ILIKE $${params.length} OR action ILIKE $${params.length} OR entity_type ILIKE $${params.length} OR details ILIKE $${params.length})`);
+    }
+    if (filters.fromDate) {
+      params.push(filters.fromDate);
+      conditions.push(`occurred_at >= $${params.length}::timestamptz`);
+    }
+    if (filters.toDate) {
+      params.push(filters.toDate);
+      conditions.push(`occurred_at <= ($${params.length}::date + INTERVAL '1 day' - INTERVAL '1 second')`);
     }
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limit = filters.limit || 100;
+    const limit = Math.min(Math.max(Number(filters.limit) || 100, 1), 500);
     params.push(limit);
     const res = await query(
       `SELECT 
@@ -1178,33 +1530,6 @@ var AuditRepository = class {
   }
 };
 var auditRepository = new AuditRepository();
-
-// server/utils/ip.ts
-function sanitizeIp(rawIp) {
-  if (!rawIp) return null;
-  const ipStr = Array.isArray(rawIp) ? rawIp[0] : String(rawIp);
-  const first = ipStr.split(",")[0].trim();
-  if (!first) return null;
-  const normalized = first.replace(/^::ffff:/i, "");
-  const ipv4Regex = /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
-  if (ipv4Regex.test(normalized)) {
-    return normalized;
-  }
-  const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^(([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4})?::([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}$/;
-  if (ipv6Regex.test(normalized)) {
-    return normalized;
-  }
-  return "127.0.0.1";
-}
-function extractClientIp(req) {
-  const forwarded = req.headers?.["x-forwarded-for"];
-  if (forwarded) {
-    const sanitized = sanitizeIp(forwarded);
-    if (sanitized) return sanitized;
-  }
-  const remote = req.socket?.remoteAddress;
-  return sanitizeIp(remote) || "127.0.0.1";
-}
 
 // server/services/auth.service.ts
 var isColdStart = true;
@@ -1311,7 +1636,8 @@ var AuthService = class {
       ),
       user_data AS (
         SELECT id, email, password_hash, full_name, phone, status,
-               email_verified_at, is_platform_admin, mfa_enabled, mfa_secret_encrypted
+               email_verified_at, is_platform_admin, mfa_enabled, mfa_secret_encrypted,
+               failed_login_attempts, locked_until
         FROM users
         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
         LIMIT 1
@@ -1322,6 +1648,8 @@ var AuthService = class {
           o.id AS tenant_id,
           o.name AS tenant_name,
           o.status AS org_status,
+          o.verification_status AS org_verification_status,
+          o.rejection_reason AS org_rejection_reason,
           r.id AS role_id,
           r.name AS role_name,
           om.is_owner,
@@ -1340,7 +1668,9 @@ var AuthService = class {
             'name', o.name,
             'slug', o.slug,
             'status', o.status,
+            'organizationStatus', o.status,
             'verificationStatus', o.verification_status,
+            'rejectionReason', o.rejection_reason,
             'organizationType', o.organization_type
           ) AS org_profile
         FROM organization_members om
@@ -1354,6 +1684,7 @@ var AuthService = class {
           s.id AS tenant_id,
           s.legal_name AS tenant_name,
           s.status AS sup_status,
+          s.verification_status AS sup_verification_status,
           r.id AS role_id,
           r.name AS role_name,
           sm.is_owner,
@@ -1375,6 +1706,7 @@ var AuthService = class {
             'email', s.email,
             'primaryPhone', s.primary_phone,
             'status', s.status,
+            'supplierStatus', s.status,
             'verificationStatus', s.verification_status,
             'complianceStatus', s.compliance_status,
             'profileCompleteness', s.profile_completeness
@@ -1391,11 +1723,16 @@ var AuthService = class {
         u.phone, u.status, u.email_verified_at AS "emailVerifiedAt",
         u.is_platform_admin AS "isPlatformAdmin", u.mfa_enabled AS "mfaEnabled",
         u.mfa_secret_encrypted AS "mfaSecretEncrypted",
+        u.failed_login_attempts AS "failedLoginAttempts",
+        u.locked_until AS "lockedUntil",
         COALESCE(
           (SELECT json_agg(json_build_object(
             'tenantType', m.tenant_type,
             'tenantId', m.tenant_id,
             'tenantName', m.tenant_name,
+            'organizationStatus', m.org_status,
+            'verificationStatus', m.org_verification_status,
+            'rejectionReason', m.org_rejection_reason,
             'roleId', m.role_id,
             'roleName', m.role_name,
             'isOwner', m.is_owner,
@@ -1412,6 +1749,8 @@ var AuthService = class {
             'tenantType', m.tenant_type,
             'tenantId', m.tenant_id,
             'tenantName', m.tenant_name,
+            'supplierStatus', m.sup_status,
+            'verificationStatus', m.sup_verification_status,
             'roleId', m.role_id,
             'roleName', m.role_name,
             'isOwner', m.is_owner,
@@ -1431,6 +1770,15 @@ var AuthService = class {
     const row = combinedRes.rows[0];
     const emailFails = parseInt(String(row?.email_fails || "0"), 10);
     const ipFails = parseInt(String(row?.ip_fails || "0"), 10);
+    if (row?.id && row.lockedUntil && new Date(row.lockedUntil) > /* @__PURE__ */ new Date()) {
+      const err = new Error(
+        "Your account is temporarily locked due to multiple failed sign-in attempts. Please wait for the lockout period to expire or contact an administrator to unlock it."
+      );
+      err.status = 423;
+      err.code = "ACCOUNT_LOCKED";
+      err.lockedUntil = row.lockedUntil;
+      throw err;
+    }
     if (emailFails >= 5 || ipFails >= 20) {
       runBackgroundTask(
         auditRepository.logEvent({
@@ -1450,20 +1798,19 @@ var AuthService = class {
     }
     if (!row || !row.id || !row.passwordHash || !row.passwordHash.trim()) {
       await verifyPassword(passwordPlain, DUMMY_HASH);
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false).catch(() => {
+      });
       runBackgroundTask(
-        Promise.all([
-          this.recordLoginAttempt(cleanEmail, cleanIp, false),
-          auditRepository.logEvent({
-            actorType: "user",
-            actorName: cleanEmail,
-            actorRole: "Anonymous",
-            action: "login.failure",
-            entityType: "session",
-            ipAddress: cleanIp,
-            userAgent,
-            details: "Failed login attempt: unknown email or user with no password hash."
-          })
-        ])
+        auditRepository.logEvent({
+          actorType: "user",
+          actorName: cleanEmail,
+          actorRole: "Anonymous",
+          action: "login.failure",
+          entityType: "session",
+          ipAddress: cleanIp,
+          userAgent,
+          details: "Failed login attempt: unknown email or user with no password hash."
+        })
       );
       const err = new Error("Email or password is incorrect.");
       err.status = 401;
@@ -1474,22 +1821,33 @@ var AuthService = class {
     const isMatch = await verifyPassword(passwordPlain, row.passwordHash);
     const passwordVerifyMs = performance.now() - tPass0;
     if (!isMatch) {
+      const [failResult] = await Promise.all([
+        usersRepository.recordLoginFailure(row.id).catch(() => ({ failedAttempts: 1, lockedUntil: null })),
+        this.recordLoginAttempt(cleanEmail, cleanIp, false).catch(() => {
+        })
+      ]);
       runBackgroundTask(
-        Promise.all([
-          this.recordLoginAttempt(cleanEmail, cleanIp, false),
-          auditRepository.logEvent({
-            actorType: "user",
-            actorUserId: row.id,
-            actorName: row.fullName || cleanEmail,
-            actorRole: row.isPlatformAdmin ? "Super Admin" : "User",
-            action: "login.failure",
-            entityType: "session",
-            ipAddress: cleanIp,
-            userAgent,
-            details: "Failed login attempt: incorrect password."
-          })
-        ])
+        auditRepository.logEvent({
+          actorType: "user",
+          actorUserId: row.id,
+          actorName: row.fullName || cleanEmail,
+          actorRole: row.isPlatformAdmin ? "Super Admin" : "User",
+          action: failResult.lockedUntil ? "account.locked" : "login.failure",
+          entityType: "session",
+          ipAddress: cleanIp,
+          userAgent,
+          details: failResult.lockedUntil ? `Account locked after ${failResult.failedAttempts} consecutive failed sign-in attempts.` : `Failed login attempt (${failResult.failedAttempts}/5): incorrect password.`
+        })
       );
+      if (failResult.lockedUntil) {
+        const err2 = new Error(
+          "Your account has been temporarily locked after 5 failed sign-in attempts. Please wait 15 minutes or contact an administrator to unlock it."
+        );
+        err2.status = 423;
+        err2.code = "ACCOUNT_LOCKED";
+        err2.lockedUntil = failResult.lockedUntil;
+        throw err2;
+      }
       const err = new Error("Email or password is incorrect.");
       err.status = 401;
       err.code = "INVALID_CREDENTIALS";
@@ -1871,12 +2229,15 @@ var AuthService = class {
     );
     const orgId = orgRes.rows[0].id;
     const roleRes = await query(
-      `SELECT id FROM roles WHERE scope = 'organization' AND name = 'Buyer Admin' LIMIT 1`
+      `SELECT id FROM roles
+       WHERE scope = 'organization' AND name IN ('Org Admin', 'Buyer Admin')
+       ORDER BY CASE WHEN name = 'Org Admin' THEN 0 ELSE 1 END
+       LIMIT 1`
     );
     const roleId = roleRes.rows[0]?.id;
     if (roleId) {
       await query(
-        `INSERT INTO organization_members (organization_id, user_id, role_id, is_primary_contact, status, joined_at)
+        `INSERT INTO organization_members (organization_id, user_id, role_id, is_owner, status, joined_at)
          VALUES ($1, $2, $3, TRUE, 'active', NOW())
          ON CONFLICT (organization_id, user_id) DO NOTHING`,
         [orgId, userId, roleId]
@@ -2380,6 +2741,201 @@ var AuthService = class {
     }
     await usersRepository.enableMfa(userId);
   }
+  /**
+   * Look up a pending organization or supplier invitation by raw token.
+   */
+  async getInvitationByToken(token) {
+    if (!token || !token.trim()) {
+      const err = new Error("Invitation token is required.");
+      err.status = 400;
+      throw err;
+    }
+    const tokenHash = hashToken(token);
+    const res = await query(
+      `SELECT i.id, i.email::text AS email, i.organization_id, i.supplier_id,
+              o.name AS org_name, s.legal_name AS sup_name, r.name AS role_name,
+              u.full_name AS invited_by_name, i.department, i.job_title,
+              i.expires_at, i.accepted_at, i.revoked_at
+       FROM invitations i
+       JOIN roles r ON r.id = i.role_id
+       LEFT JOIN organizations o ON o.id = i.organization_id
+       LEFT JOIN suppliers s ON s.id = i.supplier_id
+       LEFT JOIN users u ON u.id = i.invited_by_user_id
+       WHERE i.token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const row = res.rows[0];
+    if (!row || row.revoked_at !== null || row.accepted_at !== null || new Date(row.expires_at) < /* @__PURE__ */ new Date()) {
+      const err = new Error("This invitation link is invalid, revoked, or has expired.");
+      err.status = 404;
+      err.code = "INVALID_INVITATION";
+      throw err;
+    }
+    return {
+      id: row.id,
+      email: row.email,
+      tenantType: row.organization_id ? "organization" : "supplier",
+      tenantName: row.org_name || row.sup_name || "BidReady360 Workspace",
+      roleName: row.role_name,
+      invitedByName: row.invited_by_name || "Workspace Administrator",
+      department: row.department,
+      jobTitle: row.job_title,
+      expiresAt: new Date(row.expires_at).toISOString()
+    };
+  }
+  /**
+   * Accept an organization or supplier invitation, activate account & membership, and create a session.
+   */
+  async acceptInvitation(dto) {
+    if (!dto.token || !dto.token.trim()) {
+      const err = new Error("Invitation token is required.");
+      err.status = 400;
+      throw err;
+    }
+    const tokenHash = hashToken(dto.token);
+    const cleanIp = sanitizeIp(dto.ip);
+    const invRes = await query(
+      `SELECT id, email::text AS email, organization_id, supplier_id, role_id,
+              department, job_title, invited_by_user_id, expires_at, accepted_at, revoked_at
+       FROM invitations
+       WHERE token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const inv = invRes.rows[0];
+    if (!inv || inv.revoked_at !== null || inv.accepted_at !== null || new Date(inv.expires_at) < /* @__PURE__ */ new Date()) {
+      const err = new Error("This invitation link is invalid, revoked, or has expired.");
+      err.status = 400;
+      err.code = "INVALID_INVITATION";
+      throw err;
+    }
+    const cleanEmail = inv.email.trim().toLowerCase();
+    const existing = await usersRepository.findByEmail(cleanEmail);
+    let userId;
+    let userFullName = dto.fullName?.trim() || cleanEmail.split("@")[0];
+    if (!existing) {
+      const passCheck = validatePassword(dto.password, cleanEmail);
+      if (!passCheck.isValid) {
+        const err = new Error(passCheck.error || "Password does not meet security requirements.");
+        err.status = 400;
+        err.code = "WEAK_PASSWORD";
+        throw err;
+      }
+      const passwordHash = await hashPassword(dto.password);
+      const userRes = await query(
+        `INSERT INTO users (email, password_hash, full_name, status, email_verified_at)
+         VALUES ($1, $2, $3, 'active', NOW())
+         RETURNING id, full_name`,
+        [cleanEmail, passwordHash, userFullName]
+      );
+      userId = userRes.rows[0].id;
+      userFullName = userRes.rows[0].full_name;
+    } else {
+      userId = existing.id;
+      userFullName = existing.fullName || userFullName;
+      if (existing.status === "active") {
+        if (!existing.passwordHash) {
+          const err = new Error("An account already exists for this email without password login enabled.");
+          err.status = 401;
+          err.code = "INVALID_CREDENTIALS";
+          throw err;
+        }
+        const match = await verifyPassword(dto.password, existing.passwordHash);
+        if (!match) {
+          const err = new Error("An account already exists for this email. Enter your existing password to accept this invitation.");
+          err.status = 401;
+          err.code = "INVALID_CREDENTIALS";
+          throw err;
+        }
+      } else {
+        const passCheck = validatePassword(dto.password, cleanEmail);
+        if (!passCheck.isValid) {
+          const err = new Error(passCheck.error || "Password does not meet security requirements.");
+          err.status = 400;
+          err.code = "WEAK_PASSWORD";
+          throw err;
+        }
+        const passwordHash = await hashPassword(dto.password);
+        await query(
+          `UPDATE users
+           SET password_hash = $1, full_name = COALESCE($2, full_name), status = 'active',
+               email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW()
+           WHERE id = $3`,
+          [passwordHash, dto.fullName?.trim() || null, userId]
+        );
+      }
+    }
+    if (inv.organization_id) {
+      await query(
+        `INSERT INTO organization_members (
+           organization_id, user_id, role_id, is_owner, status, department, job_title,
+           mfa_enforced, invited_by_user_id, invited_at, joined_at
+         ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, FALSE, $6, NOW(), NOW())
+         ON CONFLICT (organization_id, user_id) DO UPDATE
+         SET role_id = EXCLUDED.role_id,
+             status = 'active',
+             joined_at = COALESCE(organization_members.joined_at, NOW()),
+             updated_at = NOW()`,
+        [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.invited_by_user_id]
+      );
+    } else if (inv.supplier_id) {
+      await query(
+        `INSERT INTO supplier_members (
+           supplier_id, user_id, role_id, is_owner, status, job_title,
+           invited_by_user_id, invited_at, joined_at
+         ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, NOW(), NOW())
+         ON CONFLICT (supplier_id, user_id) DO UPDATE
+         SET role_id = EXCLUDED.role_id,
+             status = 'active',
+             joined_at = COALESCE(supplier_members.joined_at, NOW()),
+             updated_at = NOW()`,
+        [inv.supplier_id, userId, inv.role_id, inv.job_title, inv.invited_by_user_id]
+      );
+    }
+    await query(`UPDATE invitations SET accepted_at = NOW() WHERE id = $1`, [inv.id]);
+    const memberships = await usersRepository.getUserMemberships(userId);
+    const targetTenantId = inv.organization_id || inv.supplier_id;
+    const activeTenant = memberships.find((m) => m.tenantId === targetTenantId) || memberships[0];
+    const tenantType = activeTenant?.tenantType || (inv.organization_id ? "organization" : "supplier");
+    const tenantId = activeTenant?.tenantId || targetTenantId;
+    const profileSummary = activeTenant?.profile || null;
+    const rawToken = generateRandomToken(32);
+    const sessionTokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+    await query(
+      `INSERT INTO sessions (user_id, token_hash, tenant_type, tenant_id, ip, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, sessionTokenHash, tenantType, tenantId, cleanIp || null, dto.userAgent || null, expiresAt]
+    );
+    await auditRepository.logEvent({
+      actorType: "user",
+      actorUserId: userId,
+      actorName: userFullName,
+      actorRole: activeTenant?.roleName || "Member",
+      organizationId: inv.organization_id || void 0,
+      supplierId: inv.supplier_id || void 0,
+      action: "invitation.accepted",
+      entityType: "invitation",
+      entityId: inv.id,
+      ipAddress: cleanIp,
+      userAgent: dto.userAgent,
+      details: `Invitation accepted for ${cleanEmail}.`
+    }).catch(() => {
+    });
+    return {
+      token: rawToken,
+      user: {
+        id: userId,
+        email: cleanEmail,
+        fullName: userFullName,
+        isPlatformAdmin: false,
+        memberships
+      },
+      activeTenant,
+      profileSummary
+    };
+  }
 };
 var authService = new AuthService();
 
@@ -2631,9 +3187,19 @@ router2.post("/login", async (req, res) => {
     }
     res.json(result);
   } catch (err) {
+    if (err.status === 423) {
+      res.status(423).json({
+        error: "ACCOUNT_LOCKED",
+        code: "ACCOUNT_LOCKED",
+        message: err.message || "Your account is temporarily locked due to failed sign-in attempts.",
+        lockedUntil: err.lockedUntil || null
+      });
+      return;
+    }
     if (err.status === 429) {
       res.status(429).json({
         error: "RATE_LIMIT_EXCEEDED",
+        code: "RATE_LIMIT_EXCEEDED",
         message: err.message || "Too many attempts. Try again in 15 minutes."
       });
       return;
@@ -2641,6 +3207,7 @@ router2.post("/login", async (req, res) => {
     if (err.status === 403 && err.code === "EMAIL_NOT_VERIFIED") {
       res.status(403).json({
         error: "EMAIL_NOT_VERIFIED",
+        code: "EMAIL_NOT_VERIFIED",
         message: "Verify your email first",
         email: err.email
       });
@@ -2649,12 +3216,14 @@ router2.post("/login", async (req, res) => {
     if (err.status === 403) {
       res.status(403).json({
         error: err.code || "FORBIDDEN",
+        code: err.code || "FORBIDDEN",
         message: err.message
       });
       return;
     }
     res.status(401).json({
       error: "INVALID_CREDENTIALS",
+      code: "INVALID_CREDENTIALS",
       message: "Email or password is incorrect."
     });
   }
@@ -2786,22 +3355,75 @@ router2.post("/switch-tenant", requireAuth, async (req, res) => {
     res.status(safeError.status || 400).json(safeError);
   }
 });
-router2.get("/me", requireAuth, (req, res) => {
+var sendSessionResponse = (req, res) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
+  const user = req.user;
+  const activeTenant = req.activeTenant;
+  const profileSummary = req.profileSummary || null;
+  const displayName = profileSummary?.displayName || user.fullName || user.email;
+  const firstName = String(displayName).trim().split(/\s+/)[0] || displayName;
   res.json({
     user: {
-      id: req.user.id,
-      email: req.user.email,
-      fullName: req.user.fullName,
-      phone: req.user.phone,
-      isPlatformAdmin: req.user.isPlatformAdmin
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phone: user.phone,
+      isPlatformAdmin: user.isPlatformAdmin
     },
-    activeTenant: req.activeTenant,
-    profileSummary: req.profileSummary || null,
+    profile: {
+      displayName,
+      firstName,
+      tenantType: user.isPlatformAdmin ? "platform" : activeTenant?.tenantType || "supplier",
+      tenantId: activeTenant?.tenantId || (user.isPlatformAdmin ? "platform" : ""),
+      role: activeTenant?.roleName || (user.isPlatformAdmin ? "Super Admin" : "Member"),
+      orgName: activeTenant?.tenantName || (user.isPlatformAdmin ? "Platform Administration" : displayName),
+      verificationStatus: profileSummary?.verificationStatus || activeTenant?.verificationStatus || "unverified"
+    },
+    activeTenant,
+    profileSummary,
     permissions: Array.from(req.permissions || [])
   });
+};
+router2.get("/me", requireAuth, sendSessionResponse);
+router2.get("/session", requireAuth, sendSessionResponse);
+router2.get("/invitations/:token", async (req, res) => {
+  try {
+    const invite = await authService.getInvitationByToken(req.params.token);
+    res.json(invite);
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 404).json(safeError);
+  }
+});
+router2.post("/accept-invite", async (req, res) => {
+  try {
+    const { token, password, fullName } = req.body;
+    if (!token || !password) {
+      res.status(400).json({
+        error: "MISSING_DATA",
+        message: "Invitation token and password are required."
+      });
+      return;
+    }
+    const ip = extractClientIp(req);
+    const userAgent = req.headers["user-agent"] || "Web Client";
+    const result = await authService.acceptInvitation({ token, password, fullName, ip, userAgent });
+    if (result.token) {
+      res.cookie("session_token", result.token, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1e3,
+        secure: process.env.NODE_ENV === "production"
+      });
+    }
+    res.json(result);
+  } catch (err) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
+  }
 });
 router2.post("/logout", async (req, res) => {
   try {
@@ -2986,43 +3608,115 @@ function computeSupplierCompleteness(supplier, people = [], documents = []) {
     value: `${activePeople.length} registered (${Math.round(totalOwnership)}% total)`
   });
   const checkDocByCode = (codes, label, key) => {
-    const match = (documents || []).find((d) => {
+    const matchingTypeDocs = (documents || []).filter((d) => {
       const code = (d.documentTypeCode || d.doc_type_code || d.code || "").toUpperCase();
-      const codeMatches = codes.some((c) => c.toUpperCase() === code);
-      if (!codeMatches) return false;
+      return codes.some((c) => c.toUpperCase() === code);
+    });
+    const now = /* @__PURE__ */ new Date();
+    const todayUtcStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const isExpiryPast = (expiry) => {
+      if (!expiry) return false;
+      const expDate = new Date(expiry);
+      if (isNaN(expDate.getTime())) return false;
+      const expUtcStart = Date.UTC(expDate.getUTCFullYear(), expDate.getUTCMonth(), expDate.getUTCDate());
+      return expUtcStart < todayUtcStart;
+    };
+    const validVerifiedMatch = matchingTypeDocs.find((d) => {
       const docStatus = (d.status || "").toLowerCase();
       if (docStatus === "expired" || docStatus === "rejected" || docStatus === "deleted") return false;
+      const verStatus = (d.verificationStatus || d.verification_status || "").toUpperCase();
+      if (verStatus !== "VERIFIED" && verStatus !== "APPROVED") return false;
+      const expiryState = (d.expiryState || d.expiry_state || "").toUpperCase();
+      if (expiryState === "EXPIRED") return false;
       const expiry = d.expiryDate || d.expiry_date || d.valid_until;
-      if (expiry) {
-        const expDate = new Date(expiry);
-        if (!isNaN(expDate.getTime()) && expDate.getTime() < Date.now()) {
-          return false;
-        }
-      }
+      if (isExpiryPast(expiry)) return false;
       return true;
     });
-    if (!match) {
+    if (validVerifiedMatch) {
+      return {
+        key,
+        label,
+        category: "Documents",
+        complete: true,
+        unverified: false,
+        reason: "Verified",
+        value: validVerifiedMatch.fileName || validVerifiedMatch.file_name || validVerifiedMatch.title || "Verified"
+      };
+    }
+    const pendingDoc = matchingTypeDocs.find((d) => {
+      const docStatus = (d.status || "").toLowerCase();
+      if (docStatus === "expired" || docStatus === "rejected" || docStatus === "deleted") return false;
+      const verStatus = (d.verificationStatus || d.verification_status || "").toUpperCase();
+      if (verStatus === "REJECTED" || verStatus === "EXPIRED" || verStatus === "UNVERIFIABLE") return false;
+      const expiryState = (d.expiryState || d.expiry_state || "").toUpperCase();
+      if (expiryState === "EXPIRED") return false;
+      const expiry = d.expiryDate || d.expiry_date || d.valid_until;
+      if (isExpiryPast(expiry)) return false;
+      return verStatus === "PENDING_VERIFICATION" || verStatus === "PENDING" || docStatus === "active";
+    });
+    if (pendingDoc) {
       return {
         key,
         label,
         category: "Documents",
         complete: false,
-        reason: `${label} has not been uploaded.`
+        unverified: true,
+        reason: `${label} is uploaded and awaiting administrator verification.`,
+        value: pendingDoc.fileName || pendingDoc.file_name || pendingDoc.title || "Pending verification"
       };
     }
-    const verStatus = (match.verificationStatus || match.verification_status || "").toUpperCase();
-    const isUnverified = verStatus === "PENDING_VERIFICATION" || verStatus === "PENDING" || !verStatus;
+    const rejectedDoc = matchingTypeDocs.find((d) => {
+      const verStatus = (d.verificationStatus || d.verification_status || "").toUpperCase();
+      const docStatus = (d.status || "").toLowerCase();
+      return verStatus === "REJECTED" || docStatus === "rejected";
+    });
+    if (rejectedDoc) {
+      const rejNote = rejectedDoc.rejectionReason || rejectedDoc.rejection_reason || rejectedDoc.verificationNotes || rejectedDoc.verification_notes;
+      return {
+        key,
+        label,
+        category: "Documents",
+        complete: false,
+        reason: rejNote ? `${label} was rejected: ${rejNote}. Please upload a replacement.` : `${label} was rejected by an administrator. Please upload a replacement.`
+      };
+    }
+    const expiredDoc = matchingTypeDocs.find((d) => {
+      const verStatus = (d.verificationStatus || d.verification_status || "").toUpperCase();
+      const expiryState = (d.expiryState || d.expiry_state || "").toUpperCase();
+      const expiry = d.expiryDate || d.expiry_date || d.valid_until;
+      return verStatus === "EXPIRED" || expiryState === "EXPIRED" || isExpiryPast(expiry);
+    });
+    if (expiredDoc) {
+      return {
+        key,
+        label,
+        category: "Documents",
+        complete: false,
+        reason: `${label} has expired. Please upload a renewed document.`
+      };
+    }
+    const unverifiableDoc = matchingTypeDocs.find((d) => {
+      const verStatus = (d.verificationStatus || d.verification_status || "").toUpperCase();
+      return verStatus === "UNVERIFIABLE";
+    });
+    if (unverifiableDoc) {
+      return {
+        key,
+        label,
+        category: "Documents",
+        complete: false,
+        reason: `${label} could not be verified. Please upload a clearer replacement.`
+      };
+    }
     return {
       key,
       label,
       category: "Documents",
-      complete: true,
-      unverified: isUnverified,
-      reason: isUnverified ? "Uploaded (Pending verification)" : "Verified",
-      value: match.fileName || match.file_name || match.title || "Uploaded"
+      complete: false,
+      reason: `${label} has not been uploaded.`
     };
   };
-  items.push(checkDocByCode(["COMPANY_REGISTRATION", "CIPA"], "CIPA Certificate of Incorporation", "cipaDoc"));
+  items.push(checkDocByCode(["COMPANY_REGISTRATION", "CIPA_CERT", "CIPA"], "CIPA Certificate of Incorporation", "cipaDoc"));
   items.push(checkDocByCode(["TAX_CLEARANCE", "BURS_TAX"], "BURS Tax Clearance Certificate", "taxDoc"));
   items.push(checkDocByCode(["DIRECTOR_ID", "DIRECTORS_ID", "OMANG"], "Directors' and shareholders' ID", "directorsIdDoc"));
   items.push(checkDocByCode(["BANK_CONFIRMATION", "BANK_LETTER"], "Bank confirmation letter", "bankDoc"));
@@ -3064,8 +3758,8 @@ var CompletenessService = class {
         ),
         query(
           `SELECT sd.id, dt.code AS doc_type_code, dt.code, dt.name, sd.title,
-                  sdv.file_name, sdv.verification_status, sdv.expiry_date,
-                  sd.status
+                  sdv.file_name, sdv.verification_status, sdv.verification_notes, sdv.rejection_reason,
+                  sdv.expiry_date, sd.status
            FROM supplier_documents sd
            JOIN document_types dt ON dt.id = sd.document_type_id
            LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
@@ -3180,7 +3874,96 @@ var CompletenessService = class {
 };
 var completenessService = new CompletenessService();
 
+// shared/omang.ts
+function normaliseOmang(s) {
+  if (typeof s !== "string") return "";
+  return s.trim().replace(/[\s-]+/g, "");
+}
+function validateOmang(s, gender) {
+  const n = normaliseOmang(s);
+  if (!/^\d{9}$/.test(n)) {
+    return {
+      ok: false,
+      code: "INVALID_LENGTH_OR_CHARS",
+      message: "ID number must be 9 digits.",
+      normalised: n,
+      derivedGender: null
+    };
+  }
+  const fifth = n[4];
+  if (fifth !== "1" && fifth !== "2") {
+    return {
+      ok: false,
+      code: "INVALID_GENDER_DIGIT",
+      message: "The 5th digit must be 1 (male) or 2 (female).",
+      normalised: n,
+      derivedGender: null
+    };
+  }
+  const derivedGender = fifth === "1" ? "male" : "female";
+  const normGender = typeof gender === "string" ? gender.trim().toLowerCase() : "";
+  if ((normGender === "male" || normGender === "female") && normGender !== derivedGender) {
+    return {
+      ok: false,
+      code: "GENDER_MISMATCH",
+      message: "The ID number does not match the selected gender.",
+      normalised: n,
+      derivedGender
+    };
+  }
+  return {
+    ok: true,
+    code: "VALID",
+    message: "",
+    normalised: n,
+    derivedGender
+  };
+}
+
 // server/repositories/suppliers.repository.ts
+var MONTHS_MAP = {
+  jan: "01",
+  january: "01",
+  feb: "02",
+  february: "02",
+  mar: "03",
+  march: "03",
+  apr: "04",
+  april: "04",
+  may: "05",
+  jun: "06",
+  june: "06",
+  jul: "07",
+  july: "07",
+  aug: "08",
+  august: "08",
+  sep: "09",
+  sept: "09",
+  september: "09",
+  oct: "10",
+  october: "10",
+  nov: "11",
+  november: "11",
+  dec: "12",
+  december: "12"
+};
+function parseProjectDate(val) {
+  if (!val || typeof val !== "string") return null;
+  const trimmed = val.trim();
+  if (!trimmed || /^ongoing$/i.test(trimmed) || /^present$/i.test(trimmed)) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`;
+  const monthYear = trimmed.match(/^([a-zA-Z]+)\s+(\d{4})$/);
+  if (monthYear) {
+    const mm = MONTHS_MAP[monthYear[1].toLowerCase()];
+    if (mm) return `${monthYear[2]}-${mm}-01`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return null;
+}
 async function resolveDistrictId(input) {
   if (!input || typeof input !== "string") return null;
   const trimmed = input.trim();
@@ -3357,14 +4140,66 @@ function normalizeCompanyType(input) {
   if (allowed.includes(lower)) return lower;
   return "private_company";
 }
-function normalizeComplianceStatus(input) {
-  if (!input) return "Action required";
-  const trimmed = String(input).trim();
-  if (trimmed === "Fully compliant" || trimmed.toLowerCase() === "compliant") return "Fully compliant";
-  if (trimmed === "Non-compliant") return "Non-compliant";
-  return "Action required";
-}
 var SuppliersRepository = class {
+  constructor() {
+    this.peopleHasGenderColumn = null;
+    this.ensureGenderPromise = null;
+  }
+  async hasPeopleGenderColumn(autoMigrate = true) {
+    if (this.peopleHasGenderColumn === true) return true;
+    const checkExists = async () => {
+      const res = await query(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'supplier_people'
+             AND column_name = 'gender'
+         ) AS exists`
+      );
+      return Boolean(res.rows[0]?.exists);
+    };
+    try {
+      if (await checkExists()) {
+        this.peopleHasGenderColumn = true;
+        return true;
+      }
+      if (!autoMigrate) return false;
+      if (!this.ensureGenderPromise) {
+        this.ensureGenderPromise = (async () => {
+          try {
+            await query(
+              `ALTER TABLE supplier_people ADD COLUMN IF NOT EXISTS gender VARCHAR(10) CHECK (gender IN ('male', 'female'))`
+            );
+            const created = await checkExists();
+            if (created) {
+              this.peopleHasGenderColumn = true;
+              console.log("[DB MIGRATION] Added missing supplier_people.gender column.");
+            }
+            return created;
+          } catch (err) {
+            console.error("[DB MIGRATION] Could not add supplier_people.gender column:", err?.message || err);
+            return false;
+          } finally {
+            this.ensureGenderPromise = null;
+          }
+        })();
+      }
+      return await this.ensureGenderPromise;
+    } catch {
+      return false;
+    }
+  }
+  normalizeGenderInput(raw) {
+    if (raw === void 0 || raw === null || raw === "") return null;
+    const norm = String(raw).trim().toLowerCase();
+    if (norm === "male" || norm === "female") return norm;
+    const err = new Error("Gender must be male or female.");
+    err.status = 400;
+    err.code = "INVALID_GENDER";
+    err.field = "gender";
+    throw err;
+  }
   /**
    * Recalculates and persists completeness only when called on data mutation events.
    * Never called on read operations.
@@ -3448,6 +4283,14 @@ var SuppliersRepository = class {
               s.edd_valid_until AS "eddValidUntil",
               s.has_trading_licence AS "hasTradingLicence", s.has_trading_licence,
               s.trading_licence_reason AS "tradingLicenceReason", s.trading_licence_reason,
+              s.vat_registered AS "vatRegistered", s.vat_registered,
+              s.citizen_ownership_set AS "citizenOwnershipSet", s.citizen_ownership_set,
+              s.bidding_public_tenders AS "biddingPublicTenders", s.bidding_public_tenders,
+              s.secondary_categories AS "secondaryCategories", s.secondary_categories,
+              s.secondary_categories AS "categories",
+              COALESCE(s.secondary_categories[1], '') AS "category",
+              s.ppra_subcodes AS "ppraSubcodes", s.ppra_subcodes,
+              s.ppra_grade AS "ppraGrade", s.ppra_grade,
               s.status,
               s.verification_status AS "verificationStatus", s.verification_status,
               s.compliance_status AS "complianceStatus", s.compliance_status,
@@ -3577,26 +4420,10 @@ var SuppliersRepository = class {
       params.push(Boolean(eddCertified));
       fields.push(`edd_certified = $${params.length}`);
     }
-    const profileCompleteness = data.profile_completeness !== void 0 ? data.profile_completeness : data.profileCompleteness;
-    if (profileCompleteness !== void 0) {
-      const num = Math.min(100, Math.max(0, Math.round(Number(profileCompleteness) || 0)));
-      params.push(num);
-      fields.push(`profile_completeness = $${params.length}`);
-    }
-    const rawComplianceStatus = data.compliance_status !== void 0 ? data.compliance_status : data.complianceStatus;
-    if (rawComplianceStatus !== void 0) {
-      params.push(normalizeComplianceStatus(rawComplianceStatus));
-      fields.push(`compliance_status = $${params.length}`);
-    }
     if (data.edd_certificate_no !== void 0 || data.eddCertificateNo !== void 0) {
       const eddNo = data.edd_certificate_no !== void 0 ? data.edd_certificate_no : data.eddCertificateNo;
       params.push(eddNo ? String(eddNo).trim() : null);
       fields.push(`edd_certificate_no = $${params.length}`);
-    }
-    if (data.missing_items !== void 0 || data.missingItems !== void 0) {
-      const missing = data.missing_items !== void 0 ? data.missing_items : data.missingItems;
-      params.push(Array.isArray(missing) ? missing : []);
-      fields.push(`missing_items = $${params.length}`);
     }
     const hasTradingLicence = data.has_trading_licence !== void 0 ? data.has_trading_licence : data.hasTradingLicence;
     if (hasTradingLicence !== void 0) {
@@ -3608,6 +4435,36 @@ var SuppliersRepository = class {
       params.push(tradingLicenceReason ? String(tradingLicenceReason).trim() : null);
       fields.push(`trading_licence_reason = $${params.length}`);
     }
+    const vatRegistered = data.vat_registered !== void 0 ? data.vat_registered : data.vatRegistered;
+    if (vatRegistered !== void 0) {
+      params.push(Boolean(vatRegistered));
+      fields.push(`vat_registered = $${params.length}`);
+    }
+    const citizenOwnershipSet = data.citizen_ownership_set !== void 0 ? data.citizen_ownership_set : data.citizenOwnershipSet;
+    if (citizenOwnershipSet !== void 0) {
+      params.push(Boolean(citizenOwnershipSet));
+      fields.push(`citizen_ownership_set = $${params.length}`);
+    }
+    const biddingPublicTenders = data.bidding_public_tenders !== void 0 ? data.bidding_public_tenders : data.biddingPublicTenders;
+    if (biddingPublicTenders !== void 0) {
+      params.push(Boolean(biddingPublicTenders));
+      fields.push(`bidding_public_tenders = $${params.length}`);
+    }
+    const secondaryCategories = data.secondary_categories !== void 0 ? data.secondary_categories : data.secondaryCategories !== void 0 ? data.secondaryCategories : data.categories;
+    if (secondaryCategories !== void 0) {
+      params.push(Array.isArray(secondaryCategories) ? secondaryCategories.map((c) => String(c).trim()).filter(Boolean) : []);
+      fields.push(`secondary_categories = $${params.length}`);
+    }
+    const ppraSubcodes = data.ppra_subcodes !== void 0 ? data.ppra_subcodes : data.ppraSubcodes;
+    if (ppraSubcodes !== void 0) {
+      params.push(Array.isArray(ppraSubcodes) ? ppraSubcodes.map((c) => String(c)) : []);
+      fields.push(`ppra_subcodes = $${params.length}`);
+    }
+    const ppraGrade = data.ppra_grade !== void 0 ? data.ppra_grade : data.ppraGrade;
+    if (ppraGrade !== void 0) {
+      params.push(ppraGrade ? String(ppraGrade).trim().slice(0, 50) : null);
+      fields.push(`ppra_grade = $${params.length}`);
+    }
     if (!fields.length) {
       const current = await this.getById(supplierId);
       if (!current) throw new Error("Supplier not found.");
@@ -3618,27 +4475,24 @@ var SuppliersRepository = class {
       `UPDATE suppliers SET ${fields.join(", ")} WHERE id = $1`,
       params
     );
-    const hasExplicitCompleteness = data.profile_completeness !== void 0 || data.profileCompleteness !== void 0;
-    if (!hasExplicitCompleteness) {
-      await this.calculateCompleteness(supplierId);
-    }
+    await this.calculateCompleteness(supplierId);
     const updated = await this.getById(supplierId);
     if (!updated) throw new Error("Supplier not found after update.");
     return updated;
   }
   async listPeople(supplierId) {
     const encryptionKey = getIdKey();
+    const hasGender = await this.hasPeopleGenderColumn();
+    const genderSelect = hasGender ? "gender," : "NULL::varchar AS gender,";
     const res = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", person_role,
               ownership_percent AS "ownershipPercent", ownership_percent,
               is_active AS "isActive", is_active,
-              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
-                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
-                   ELSE NULL END AS "idNumber",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+              identity_type AS "identityType", ${genderSelect} nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth",
+              kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt", kyc_reference AS "kycReference",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
                    THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
                    ELSE NULL END AS "idLast4",
               national_identity_number_encrypted IS NOT NULL AS "hasId"
@@ -3651,6 +4505,7 @@ var SuppliersRepository = class {
   }
   async addPerson(supplierId, person, user) {
     const encryptionKey = getIdKey();
+    const hasGender = await this.hasPeopleGenderColumn();
     const fullName = person.fullName ? String(person.fullName).trim() : "";
     if (!fullName || fullName.length < 2 || fullName.length > 200) {
       const err = new Error("Full name is required and must be between 2 and 200 characters.");
@@ -3686,11 +4541,48 @@ var SuppliersRepository = class {
     const identityType = person.identityType === "PASSPORT" ? "PASSPORT" : "OMANG";
     const isCitizen = identityType === "OMANG";
     const nationality = person.nationality || (isCitizen ? "Motswana" : "Foreign");
-    const idNumber = person.idNumber ? String(person.idNumber).trim() : null;
+    const gender = this.normalizeGenderInput(person.gender);
+    const rawIdNumber = person.idNumber ? String(person.idNumber).trim() : "";
+    if (identityType === "OMANG" && !hasGender) {
+      const err = new Error("Could not save gender because the supplier_people.gender column is missing in the database.");
+      err.status = 500;
+      err.code = "GENDER_COLUMN_MISSING";
+      err.field = "gender";
+      throw err;
+    }
+    let finalIdNumber = null;
+    if (identityType === "OMANG") {
+      if (rawIdNumber) {
+        const omangCheck = validateOmang(rawIdNumber, gender);
+        if (!omangCheck.ok) {
+          const err = new Error(omangCheck.message);
+          err.status = 400;
+          err.code = omangCheck.code;
+          err.field = "idNumber";
+          throw err;
+        }
+        if (!gender) {
+          const err = new Error("Gender is required for Omang ID.");
+          err.status = 400;
+          err.code = "GENDER_REQUIRED";
+          err.field = "gender";
+          throw err;
+        }
+        finalIdNumber = omangCheck.normalised;
+      } else {
+        const err = new Error("ID number must be 9 digits.");
+        err.status = 400;
+        err.code = "INVALID_LENGTH_OR_CHARS";
+        err.field = "idNumber";
+        throw err;
+      }
+    } else if (rawIdNumber) {
+      finalIdNumber = rawIdNumber.toUpperCase();
+    }
     let identityHash = null;
-    if (idNumber) {
-      const normalizedId = idNumber.toUpperCase();
-      identityHash = crypto4.createHmac("sha256", getIdHashKey()).update(normalizedId).digest("hex");
+    if (finalIdNumber) {
+      const normalizedForHash = identityType === "OMANG" ? normaliseOmang(finalIdNumber) : finalIdNumber.toUpperCase();
+      identityHash = crypto4.createHmac("sha256", getIdHashKey()).update(normalizedForHash).digest("hex");
       const dupCheck = await query(
         `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND is_active = TRUE LIMIT 1`,
         [supplierId, identityHash]
@@ -3703,33 +4595,58 @@ var SuppliersRepository = class {
         throw err;
       }
     }
+    const initialKycStatus = finalIdNumber ? "pending" : "not_started";
     const newPersonId = await tx(async (client) => {
-      const insertRes = await client.query(
-        `INSERT INTO supplier_people (
-           supplier_id, full_name, person_role, ownership_percent, identity_type,
-           nationality, is_citizen, email, phone, date_of_birth,
-           national_identity_number_encrypted, national_identity_hash, is_active
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-           CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE NULL END,
-           $13, TRUE
-         ) RETURNING id`,
-        [
-          supplierId,
-          fullName,
-          role,
-          ownership,
-          identityType,
-          nationality,
-          isCitizen,
-          person.email || null,
-          person.phone || null,
-          person.dateOfBirth || null,
-          idNumber,
-          encryptionKey,
-          identityHash
-        ]
-      );
+      const insertSql = hasGender ? `INSERT INTO supplier_people (
+             supplier_id, full_name, person_role, ownership_percent, identity_type, gender,
+             nationality, is_citizen, email, phone, date_of_birth,
+             national_identity_number_encrypted, national_identity_hash, kyc_status, is_active
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+             CASE WHEN $12::text IS NOT NULL THEN pgp_sym_encrypt($12, $13) ELSE NULL END,
+             $14, $15, TRUE
+           ) RETURNING id` : `INSERT INTO supplier_people (
+             supplier_id, full_name, person_role, ownership_percent, identity_type,
+             nationality, is_citizen, email, phone, date_of_birth,
+             national_identity_number_encrypted, national_identity_hash, kyc_status, is_active
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+             CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE NULL END,
+             $13, $14, TRUE
+           ) RETURNING id`;
+      const insertParams = hasGender ? [
+        supplierId,
+        fullName,
+        role,
+        ownership,
+        identityType,
+        gender,
+        nationality,
+        isCitizen,
+        person.email || null,
+        person.phone || null,
+        person.dateOfBirth || null,
+        finalIdNumber,
+        encryptionKey,
+        identityHash,
+        initialKycStatus
+      ] : [
+        supplierId,
+        fullName,
+        role,
+        ownership,
+        identityType,
+        nationality,
+        isCitizen,
+        person.email || null,
+        person.phone || null,
+        person.dateOfBirth || null,
+        finalIdNumber,
+        encryptionKey,
+        identityHash,
+        initialKycStatus
+      ];
+      const insertRes = await client.query(insertSql, insertParams);
       return insertRes.rows[0].id;
     });
     try {
@@ -3746,15 +4663,14 @@ var SuppliersRepository = class {
     } catch (e) {
       console.warn("[ADD PERSON AUDIT/COMPLETENESS WARNING]:", e.message);
     }
+    const genderSelect = hasGender ? "gender," : "NULL::varchar AS gender,";
     const fetched = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", ownership_percent AS "ownershipPercent",
-              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
-                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
-                   ELSE NULL END AS "idNumber",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+              identity_type AS "identityType", ${genderSelect} nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth",
+              kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt", kyc_reference AS "kycReference",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
                    THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
                    ELSE NULL END AS "idLast4",
               national_identity_number_encrypted IS NOT NULL AS "hasId"
@@ -3765,19 +4681,40 @@ var SuppliersRepository = class {
   }
   async updatePerson(supplierId, personId, person, user) {
     const encryptionKey = getIdKey();
-    const existing = await query(`SELECT id, ownership_percent, person_role FROM supplier_people WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`, [personId, supplierId]);
+    const hasGender = await this.hasPeopleGenderColumn();
+    const existing = await query(
+      `SELECT id, full_name, ownership_percent, person_role, identity_type, kyc_status,
+              ${hasGender ? "gender," : "NULL::varchar AS gender,"}
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
+                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $3)
+                   ELSE NULL END AS existing_id
+       FROM supplier_people
+       WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE`,
+      [personId, supplierId, encryptionKey]
+    );
     if (existing.rows.length === 0) {
       const err = new Error("Person not found or unauthorized.");
       err.status = 404;
       err.code = "NOT_FOUND";
       throw err;
     }
+    const existingRow = existing.rows[0];
     const fullName = person.fullName !== void 0 ? String(person.fullName).trim() : void 0;
+    if (fullName !== void 0 && (fullName.length < 2 || fullName.length > 200)) {
+      const err = new Error("Full name is required and must be between 2 and 200 characters.");
+      err.status = 400;
+      err.code = "INVALID_FULL_NAME";
+      err.field = "fullName";
+      throw err;
+    }
     const role = person.personRole !== void 0 ? person.personRole : void 0;
     const ownership = person.ownershipPercent !== void 0 ? Number(person.ownershipPercent) : void 0;
-    const identityType = person.identityType !== void 0 ? person.identityType : void 0;
-    const idNumber = person.idNumber !== void 0 && person.idNumber !== "" ? String(person.idNumber).trim() : void 0;
-    if (ownership !== void 0 && (ownership < 0 || ownership > 100)) {
+    const identityType = person.identityType !== void 0 ? person.identityType === "PASSPORT" ? "PASSPORT" : "OMANG" : void 0;
+    const effectiveIdentityType = identityType ?? (existingRow.identity_type === "PASSPORT" ? "PASSPORT" : "OMANG");
+    const requestedGender = person.gender !== void 0 ? this.normalizeGenderInput(person.gender) : void 0;
+    const effectiveGender = requestedGender !== void 0 ? requestedGender : existingRow.gender ?? null;
+    const rawIdNumber = person.idNumber !== void 0 && String(person.idNumber).trim() !== "" ? String(person.idNumber).trim() : void 0;
+    if (ownership !== void 0 && (isNaN(ownership) || ownership < 0 || ownership > 100)) {
       const err = new Error("Ownership percentage must be between 0 and 100.");
       err.status = 400;
       err.code = "INVALID_OWNERSHIP";
@@ -3799,10 +4736,52 @@ var SuppliersRepository = class {
         throw err;
       }
     }
+    let finalIdNumber;
+    if (effectiveIdentityType === "OMANG") {
+      const idToValidate = rawIdNumber ?? existingRow.existing_id ?? "";
+      if (rawIdNumber !== void 0) {
+        const omangCheck = validateOmang(rawIdNumber, effectiveGender);
+        if (!omangCheck.ok) {
+          const err = new Error(omangCheck.message);
+          err.status = 400;
+          err.code = omangCheck.code;
+          err.field = "idNumber";
+          throw err;
+        }
+        if (!effectiveGender) {
+          const err = new Error("Gender is required for Omang ID.");
+          err.status = 400;
+          err.code = "GENDER_REQUIRED";
+          err.field = "gender";
+          throw err;
+        }
+        finalIdNumber = omangCheck.normalised;
+      } else if (person.gender !== void 0 || identityType === "OMANG") {
+        if (idToValidate) {
+          const omangCheck = validateOmang(idToValidate, effectiveGender);
+          if (!omangCheck.ok) {
+            const err = new Error(omangCheck.message);
+            err.status = 400;
+            err.code = omangCheck.code;
+            err.field = "idNumber";
+            throw err;
+          }
+        }
+        if (!effectiveGender) {
+          const err = new Error("Gender is required for Omang ID.");
+          err.status = 400;
+          err.code = "GENDER_REQUIRED";
+          err.field = "gender";
+          throw err;
+        }
+      }
+    } else if (rawIdNumber !== void 0) {
+      finalIdNumber = rawIdNumber.toUpperCase();
+    }
     let identityHash = null;
-    if (idNumber) {
-      const normalizedId = idNumber.toUpperCase();
-      identityHash = crypto4.createHmac("sha256", getIdHashKey()).update(normalizedId).digest("hex");
+    if (finalIdNumber) {
+      const normalizedForHash = effectiveIdentityType === "OMANG" ? normaliseOmang(finalIdNumber) : finalIdNumber.toUpperCase();
+      identityHash = crypto4.createHmac("sha256", getIdHashKey()).update(normalizedForHash).digest("hex");
       const dupCheck = await query(
         `SELECT id FROM supplier_people WHERE supplier_id = $1 AND national_identity_hash = $2 AND id != $3 AND is_active = TRUE LIMIT 1`,
         [supplierId, identityHash, personId]
@@ -3815,38 +4794,84 @@ var SuppliersRepository = class {
         throw err;
       }
     }
-    return await tx(async (client) => {
-      await client.query(
-        `UPDATE supplier_people
-         SET full_name = COALESCE($3, full_name),
-             person_role = COALESCE($4, person_role),
-             ownership_percent = COALESCE($5, ownership_percent),
-             identity_type = COALESCE($6, identity_type),
-             nationality = COALESCE($7, nationality),
-             email = COALESCE($8, email),
-             phone = COALESCE($9, phone),
-             date_of_birth = COALESCE($10, date_of_birth),
-             national_identity_number_encrypted = CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE national_identity_number_encrypted END,
-             national_identity_hash = COALESCE($13, national_identity_hash),
-             updated_at = NOW()
-         WHERE id = $2 AND supplier_id = $1`,
-        [
-          supplierId,
-          personId,
-          fullName || null,
-          role || null,
-          ownership !== void 0 ? ownership : null,
-          identityType || null,
-          person.nationality || null,
-          person.email || null,
-          person.phone || null,
-          person.dateOfBirth || null,
-          idNumber || null,
-          encryptionKey,
-          identityHash !== void 0 ? identityHash : null
-        ]
-      );
-      return personId;
+    if (!hasGender && (person.gender !== void 0 || effectiveIdentityType === "OMANG")) {
+      const err = new Error("Could not save gender because the supplier_people.gender column is missing in the database.");
+      err.status = 500;
+      err.code = "GENDER_COLUMN_MISSING";
+      err.field = "gender";
+      throw err;
+    }
+    const identityFieldsChanged = fullName !== void 0 && fullName !== existingRow.full_name || identityType !== void 0 && identityType !== existingRow.identity_type || requestedGender !== void 0 && requestedGender !== (existingRow.gender ?? null) || finalIdNumber !== void 0 && finalIdNumber !== (existingRow.existing_id ?? void 0);
+    const shouldResetKyc = identityFieldsChanged && (existingRow.kyc_status === "verified" || existingRow.kyc_status === "failed" || existingRow.kyc_status === "not_started");
+    await tx(async (client) => {
+      const updateSql = hasGender ? `UPDATE supplier_people
+           SET full_name = COALESCE($3, full_name),
+               person_role = COALESCE($4, person_role),
+               ownership_percent = COALESCE($5, ownership_percent),
+               identity_type = COALESCE($6, identity_type),
+               gender = CASE WHEN $7::boolean THEN $8::varchar ELSE gender END,
+               is_citizen = CASE WHEN $6::text IS NOT NULL THEN ($6 = 'OMANG') ELSE is_citizen END,
+               nationality = COALESCE($9, nationality),
+               email = COALESCE($10, email),
+               phone = COALESCE($11, phone),
+               date_of_birth = COALESCE($12, date_of_birth),
+               national_identity_number_encrypted = CASE WHEN $13::text IS NOT NULL THEN pgp_sym_encrypt($13, $14) ELSE national_identity_number_encrypted END,
+               national_identity_hash = COALESCE($15, national_identity_hash),
+               kyc_status = CASE WHEN $16::boolean THEN 'pending' ELSE kyc_status END,
+               kyc_verified_at = CASE WHEN $16::boolean THEN NULL ELSE kyc_verified_at END,
+               kyc_reference = CASE WHEN $16::boolean THEN NULL ELSE kyc_reference END,
+               updated_at = NOW()
+           WHERE id = $2 AND supplier_id = $1` : `UPDATE supplier_people
+           SET full_name = COALESCE($3, full_name),
+               person_role = COALESCE($4, person_role),
+               ownership_percent = COALESCE($5, ownership_percent),
+               identity_type = COALESCE($6, identity_type),
+               is_citizen = CASE WHEN $6::text IS NOT NULL THEN ($6 = 'OMANG') ELSE is_citizen END,
+               nationality = COALESCE($7, nationality),
+               email = COALESCE($8, email),
+               phone = COALESCE($9, phone),
+               date_of_birth = COALESCE($10, date_of_birth),
+               national_identity_number_encrypted = CASE WHEN $11::text IS NOT NULL THEN pgp_sym_encrypt($11, $12) ELSE national_identity_number_encrypted END,
+               national_identity_hash = COALESCE($13, national_identity_hash),
+               kyc_status = CASE WHEN $14::boolean THEN 'pending' ELSE kyc_status END,
+               kyc_verified_at = CASE WHEN $14::boolean THEN NULL ELSE kyc_verified_at END,
+               kyc_reference = CASE WHEN $14::boolean THEN NULL ELSE kyc_reference END,
+               updated_at = NOW()
+           WHERE id = $2 AND supplier_id = $1`;
+      const updateParams = hasGender ? [
+        supplierId,
+        personId,
+        fullName || null,
+        role || null,
+        ownership !== void 0 ? ownership : null,
+        identityType || null,
+        person.gender !== void 0,
+        requestedGender ?? null,
+        person.nationality || null,
+        person.email || null,
+        person.phone || null,
+        person.dateOfBirth || null,
+        finalIdNumber || null,
+        encryptionKey,
+        identityHash !== void 0 ? identityHash : null,
+        shouldResetKyc
+      ] : [
+        supplierId,
+        personId,
+        fullName || null,
+        role || null,
+        ownership !== void 0 ? ownership : null,
+        identityType || null,
+        person.nationality || null,
+        person.email || null,
+        person.phone || null,
+        person.dateOfBirth || null,
+        finalIdNumber || null,
+        encryptionKey,
+        identityHash !== void 0 ? identityHash : null,
+        shouldResetKyc
+      ];
+      await client.query(updateSql, updateParams);
     });
     try {
       await auditRepository.logEvent({
@@ -3862,15 +4887,14 @@ var SuppliersRepository = class {
     } catch (e) {
       console.warn("[UPDATE PERSON AUDIT/COMPLETENESS WARNING]:", e.message);
     }
+    const genderSelect = hasGender ? "gender," : "NULL::varchar AS gender,";
     const fetched = await query(
       `SELECT id, supplier_id AS "supplierId", full_name AS "fullName",
               person_role AS "personRole", ownership_percent AS "ownershipPercent",
-              identity_type AS "identityType", nationality, is_citizen AS "isCitizen",
-              email, phone, date_of_birth AS "dateOfBirth", kyc_status AS "kycStatus",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
-                   THEN pgp_sym_decrypt(national_identity_number_encrypted, $2)
-                   ELSE NULL END AS "idNumber",
-              CASE WHEN national_identity_number_encrypted IS NOT NULL 
+              identity_type AS "identityType", ${genderSelect} nationality, is_citizen AS "isCitizen",
+              email, phone, date_of_birth AS "dateOfBirth",
+              kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt", kyc_reference AS "kycReference",
+              CASE WHEN national_identity_number_encrypted IS NOT NULL
                    THEN RIGHT(pgp_sym_decrypt(national_identity_number_encrypted, $2), 4)
                    ELSE NULL END AS "idLast4",
               national_identity_number_encrypted IS NOT NULL AS "hasId"
@@ -3921,30 +4945,216 @@ var SuppliersRepository = class {
   }
   async listProjects(supplierId) {
     const res = await query(
-      `SELECT id, supplier_id AS "supplierId", client_name AS "clientName",
-              project_title AS "projectTitle", description, contract_value AS "contractValue",
+      `SELECT id, supplier_id AS "supplierId", client_name AS "clientName", client_name AS "client",
+              project_title AS "projectTitle", project_title AS "title", description,
+              contract_value AS "contractValue", contract_value AS "valueBWP",
               currency, start_date AS "startDate", end_date AS "endDate",
-              reference_name AS "referenceName", reference_contact AS "referenceContact",
+              reference_name AS "referenceName", reference_contact AS "referenceContactRaw",
               reference_verified AS "referenceVerified"
        FROM supplier_projects
        WHERE supplier_id = $1
        ORDER BY start_date DESC NULLS LAST, created_at DESC`,
       [supplierId]
     );
-    return res.rows;
+    return res.rows.map((row) => {
+      let refContactObj;
+      if (row.referenceContactRaw) {
+        try {
+          const parsed = JSON.parse(row.referenceContactRaw);
+          if (parsed && typeof parsed === "object") {
+            refContactObj = {
+              name: parsed.name || row.referenceName || "",
+              phone: parsed.phone || "",
+              email: parsed.email || ""
+            };
+          }
+        } catch {
+          refContactObj = {
+            name: row.referenceName || "",
+            phone: String(row.referenceContactRaw),
+            email: ""
+          };
+        }
+      } else if (row.referenceName) {
+        refContactObj = { name: row.referenceName, phone: "", email: "" };
+      }
+      return {
+        ...row,
+        valueBWP: row.valueBWP !== null && row.valueBWP !== void 0 ? Number(row.valueBWP) : 0,
+        status: row.endDate ? "Completed" : "Ongoing",
+        referenceContact: refContactObj || row.referenceContactRaw || null
+      };
+    });
+  }
+  normalizeProjectInput(project) {
+    const clientName = String(project.clientName ?? project.client ?? "").trim();
+    const projectTitle = String(project.projectTitle ?? project.title ?? "").trim();
+    if (!clientName || !projectTitle) {
+      throw new Error("Project title and client name are required.");
+    }
+    const rawVal = project.contractValue ?? project.valueBWP;
+    const contractValue = rawVal !== void 0 && rawVal !== null && rawVal !== "" ? Number(rawVal) : null;
+    const currency = project.currency ? String(project.currency).trim().slice(0, 3).toUpperCase() : "BWP";
+    const description = project.description ? String(project.description).trim() : null;
+    const startDate = parseProjectDate(project.startDate);
+    const endDate = String(project.status || "").toLowerCase() === "ongoing" ? null : parseProjectDate(project.endDate);
+    let referenceName = project.referenceName ? String(project.referenceName).trim() : null;
+    let referenceContact = null;
+    if (project.referenceContact && typeof project.referenceContact === "object") {
+      referenceName = referenceName || (project.referenceContact.name ? String(project.referenceContact.name).trim() : null);
+      const serialized = JSON.stringify({
+        name: project.referenceContact.name || referenceName || "",
+        phone: project.referenceContact.phone || "",
+        email: project.referenceContact.email || ""
+      });
+      referenceContact = serialized;
+    } else if (project.referenceContact) {
+      referenceContact = String(project.referenceContact).trim();
+    }
+    return { clientName, projectTitle, contractValue, currency, description, startDate, endDate, referenceName, referenceContact };
   }
   async addProject(supplierId, project) {
+    const p = this.normalizeProjectInput(project);
     const res = await query(
-      `INSERT INTO supplier_projects (supplier_id, client_name, project_title, contract_value, currency, description, reference_name, reference_contact)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, supplier_id AS "supplierId", client_name AS "clientName",
-                 project_title AS "projectTitle", description, contract_value AS "contractValue",
-                 currency, start_date AS "startDate", end_date AS "endDate",
-                 reference_name AS "referenceName", reference_contact AS "referenceContact",
-                 reference_verified AS "referenceVerified"`,
-      [supplierId, project.clientName.trim(), project.projectTitle.trim(), project.contractValue || null, project.currency || "BWP", project.description || null, project.referenceName || null, project.referenceContact || null]
+      `INSERT INTO supplier_projects (
+         supplier_id, client_name, project_title, contract_value, currency,
+         description, start_date, end_date, reference_name, reference_contact
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [supplierId, p.clientName, p.projectTitle, p.contractValue, p.currency, p.description, p.startDate, p.endDate, p.referenceName, p.referenceContact]
     );
-    return res.rows[0];
+    const createdId = res.rows[0].id;
+    const all = await this.listProjects(supplierId);
+    return all.find((item) => item.id === createdId) || { id: createdId, ...p };
+  }
+  async updateProject(supplierId, projectId, project) {
+    const p = this.normalizeProjectInput(project);
+    const res = await query(
+      `UPDATE supplier_projects
+       SET client_name = $3,
+           project_title = $4,
+           contract_value = $5,
+           currency = $6,
+           description = $7,
+           start_date = $8,
+           end_date = $9,
+           reference_name = $10,
+           reference_contact = $11,
+           updated_at = NOW()
+       WHERE id = $1 AND supplier_id = $2
+       RETURNING id`,
+      [projectId, supplierId, p.clientName, p.projectTitle, p.contractValue, p.currency, p.description, p.startDate, p.endDate, p.referenceName, p.referenceContact]
+    );
+    if (!res.rows.length) return null;
+    const all = await this.listProjects(supplierId);
+    return all.find((item) => item.id === projectId) || null;
+  }
+  async deleteProject(supplierId, projectId) {
+    const res = await query(
+      `DELETE FROM supplier_projects WHERE id = $1 AND supplier_id = $2`,
+      [projectId, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+  async listTeam(supplierId) {
+    const [membersRes, invitesRes] = await Promise.all([
+      query(
+        `SELECT sm.id, sm.user_id AS "userId", u.full_name AS "name", u.email::text AS email,
+                r.name AS "role", sm.status, sm.is_owner AS "isOwner", sm.joined_at AS "joinedAt"
+         FROM supplier_members sm
+         JOIN users u ON u.id = sm.user_id AND u.deleted_at IS NULL
+         JOIN roles r ON r.id = sm.role_id
+         WHERE sm.supplier_id = $1 AND sm.status != 'removed'
+         ORDER BY sm.is_owner DESC, sm.created_at ASC`,
+        [supplierId]
+      ),
+      query(
+        `SELECT i.id, i.email::text AS email, r.name AS "role",
+                i.created_at AS "sentAt", i.expires_at AS "expiresAt"
+         FROM invitations i
+         JOIN roles r ON r.id = i.role_id
+         WHERE i.supplier_id = $1
+           AND i.accepted_at IS NULL
+           AND i.revoked_at IS NULL
+           AND i.expires_at > NOW()
+         ORDER BY i.created_at DESC`,
+        [supplierId]
+      )
+    ]);
+    return {
+      teamMembers: membersRes.rows.map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        name: m.name || m.email,
+        email: m.email,
+        role: m.role,
+        status: m.status === "active" ? "Active" : "Invited",
+        isOwner: m.isOwner
+      })),
+      pendingInvitations: invitesRes.rows.map((inv) => ({
+        id: inv.id,
+        email: inv.email,
+        role: inv.role,
+        sentAt: inv.sentAt,
+        expiresAt: inv.expiresAt
+      }))
+    };
+  }
+  async inviteTeamMember(supplierId, data) {
+    const cleanEmail = String(data.email || "").trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error("A valid email address is required.");
+    }
+    const roleName = String(data.role || "Bid Contributor").trim();
+    const roleRes = await query(
+      `SELECT id, name FROM roles
+       WHERE scope = 'supplier'
+         AND (LOWER(name) = LOWER($1) OR name IN ('Bid Contributor', 'Supplier Admin'))
+       ORDER BY CASE
+         WHEN LOWER(name) = LOWER($1) THEN 0
+         WHEN name = 'Bid Contributor' THEN 1
+         ELSE 2 END
+       LIMIT 1`,
+      [roleName]
+    );
+    const roleRow = roleRes.rows[0];
+    if (!roleRow) {
+      throw new Error("Supplier role configuration not found.");
+    }
+    const rawToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+    await query(
+      `UPDATE invitations
+       SET revoked_at = NOW()
+       WHERE supplier_id = $1 AND LOWER(email::text) = LOWER($2) AND accepted_at IS NULL AND revoked_at IS NULL`,
+      [supplierId, cleanEmail]
+    );
+    const invRes = await query(
+      `INSERT INTO invitations (supplier_id, email, role_id, token_hash, invited_by_user_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, email::text AS email, created_at, expires_at`,
+      [supplierId, cleanEmail, roleRow.id, tokenHash, data.invitedByUserId, expiresAt]
+    );
+    const row = invRes.rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      role: roleRow.name,
+      sentAt: row.created_at,
+      expiresAt: row.expires_at,
+      inviteToken: rawToken
+    };
+  }
+  async revokeInvitation(supplierId, invitationId) {
+    const res = await query(
+      `UPDATE invitations
+       SET revoked_at = NOW()
+       WHERE id = $1 AND supplier_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+      [invitationId, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
   }
   async getDisciplines(supplierId) {
     const res = await query(
@@ -3966,143 +5176,65 @@ var suppliersRepository = new SuppliersRepository();
 
 // server/repositories/documents.repository.ts
 import crypto5 from "crypto";
-
-// server/utils/pdfGenerator.ts
-function escapePdfText(str) {
-  return (str || "").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-}
-function generateCertificatePdf(options) {
-  const title = options.title || "Official Statutory Certificate";
-  const docNumber = options.documentNumber || `BW-${Math.floor(1e5 + Math.random() * 9e5)}`;
-  const supplier = options.supplierName || "Registered Commercial Supplier";
-  const issueDate = options.issueDate || "2026-01-15";
-  const expiryDate = options.expiryDate || "2027-01-15";
-  const authority = options.authorityName || "Republic of Botswana Regulatory Authority";
-  const sha = options.sha256 || "c5365b555caf161039803486e3e72f7d3e614a83a74e344d4d20f8e8130d5ae6";
-  const streamLines = [
-    "q",
-    // Outer decorative border
-    "0.12 0.37 0.60 RG",
-    "2 w",
-    "30 30 552 732 re S",
-    "0.85 0.90 0.95 RG",
-    "0.75 w",
-    "34 34 544 724 re S",
-    // Top banner header (Republic of Botswana navy)
-    "0.12 0.37 0.60 rg",
-    "34 710 544 48 re f",
-    "1 1 1 rg",
-    "BT /F1 15 Tf 50 736 Td (REPUBLIC OF BOTSWANA) Tj ET",
-    "BT /F2 10 Tf 50 720 Td (NATIONAL PUBLIC PROCUREMENT & COMPLIANCE REGISTRY) Tj ET",
-    // Authority subtitle
-    "0.2 0.2 0.2 rg",
-    "BT /F1 11 Tf 50 675 Td (" + escapePdfText(authority.toUpperCase()) + ") Tj ET",
-    // Document Title Box
-    "0.95 0.97 1.0 rg",
-    "50 600 512 60 re f",
-    "0.12 0.37 0.60 RG",
-    "1 w",
-    "50 600 512 60 re S",
-    "0.06 0.13 0.18 rg",
-    "BT /F1 18 Tf 70 635 Td (" + escapePdfText(title) + ") Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 10 Tf 70 615 Td (OFFICIAL COMPLIANCE FILING RECORD - ELECTRONIC CERTIFICATION) Tj ET",
-    // Metadata Grid Background
-    "0.98 0.98 0.99 rg",
-    "50 360 512 220 re f",
-    "0.85 0.88 0.92 RG",
-    "0.5 w",
-    "50 360 512 220 re S",
-    // Metadata lines
-    "0.4 0.45 0.5 rg",
-    "BT /F2 11 Tf 70 550 Td (Certificate / Filing Number:) Tj ET",
-    "0.06 0.13 0.18 rg",
-    "BT /F1 12 Tf 260 550 Td (" + escapePdfText(docNumber) + ") Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 11 Tf 70 520 Td (Registered Legal Entity:) Tj ET",
-    "0.06 0.13 0.18 rg",
-    "BT /F1 12 Tf 260 520 Td (" + escapePdfText(supplier) + ") Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 11 Tf 70 490 Td (Date of Registration / Issue:) Tj ET",
-    "0.06 0.13 0.18 rg",
-    "BT /F2 11 Tf 260 490 Td (" + escapePdfText(issueDate) + ") Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 11 Tf 70 460 Td (Valid Until / Expiry Date:) Tj ET",
-    "0.06 0.13 0.18 rg",
-    "BT /F1 11 Tf 260 460 Td (" + escapePdfText(expiryDate) + ") Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 11 Tf 70 430 Td (Verification Status:) Tj ET",
-    "0.08 0.52 0.32 rg",
-    "BT /F1 11 Tf 260 430 Td (ACTIVE - VERIFIED COMPLIANT) Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 11 Tf 70 400 Td (True Copy Certification:) Tj ET",
-    "0.06 0.13 0.18 rg",
-    "BT /F2 11 Tf 260 400 Td (" + (options.certifiedCopy ? "Certified True Copy - Commission of Oaths Verified" : "Standard Digital Regulatory Filing") + ") Tj ET",
-    // Cryptographic Security Seal box
-    "0.92 0.95 0.98 rg",
-    "50 180 512 160 re f",
-    "0.12 0.37 0.60 RG",
-    "1 w",
-    "50 180 512 160 re S",
-    "0.12 0.37 0.60 rg",
-    "BT /F1 12 Tf 70 310 Td (CRYPTOGRAPHIC TAMPER-EVIDENT VERIFICATION) Tj ET",
-    "0.3 0.35 0.4 rg",
-    "BT /F2 9.5 Tf 70 285 Td (This document is secured in the BidReady Botswana PostgreSQL Vault.) Tj ET",
-    "BT /F2 9.5 Tf 70 270 Td (Any alteration to the binary bytes invalidates the digital signature.) Tj ET",
-    "0.2 0.25 0.3 rg",
-    "BT /F1 9 Tf 70 245 Td (SHA-256 Checksum Fingerprint:) Tj ET",
-    "0.1 0.1 0.1 rg",
-    "BT /F2 8.5 Tf 70 230 Td (" + escapePdfText(sha) + ") Tj ET",
-    "0.4 0.45 0.5 rg",
-    "BT /F2 9 Tf 70 205 Td (Issued under the Public Procurement Act, 2021 | Government of Botswana) Tj ET",
-    // Footer
-    "0.5 0.55 0.6 rg",
-    "BT /F2 8 Tf 50 50 Td (BidReady Botswana Dynamic Supplier Passport - Secure Document Vault Archive) Tj ET",
-    "BT /F2 8 Tf 450 50 Td (Page 1 of 1) Tj ET",
-    "Q"
-  ];
-  const streamContent = streamLines.join("\n");
-  const streamLength = Buffer.byteLength(streamContent);
-  const obj1 = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
-  const obj2 = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
-  const obj3 = "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>\nendobj\n";
-  const obj4 = `4 0 obj
-<< /Length ${streamLength} >>
-stream
-${streamContent}
-endstream
-endobj
-`;
-  const obj5 = "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n";
-  const obj6 = "6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
-  const header = "%PDF-1.4\n";
-  let body = "";
-  const offsets = [0];
-  function addObj(str) {
-    offsets.push(Buffer.byteLength(header + body));
-    body += str;
+var UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var SAFE_INLINE_MIME_TYPES = /* @__PURE__ */ new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "text/plain",
+  "text/csv"
+]);
+function detectSafeMimeType(buffer, storedMime, fileName) {
+  if (buffer && buffer.length >= 4) {
+    const head = buffer.subarray(0, Math.min(1024, buffer.length));
+    if (head.includes(Buffer.from("%PDF"))) {
+      return "application/pdf";
+    }
+    if (buffer[0] === 137 && buffer[1] === 80 && buffer[2] === 78 && buffer[3] === 71) {
+      return "image/png";
+    }
+    if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) {
+      return "image/jpeg";
+    }
+    if (buffer.length >= 6 && (head.subarray(0, 6).toString("ascii") === "GIF87a" || head.subarray(0, 6).toString("ascii") === "GIF89a")) {
+      return "image/gif";
+    }
+    if (buffer.length >= 12 && head.subarray(0, 4).toString("ascii") === "RIFF" && head.subarray(8, 12).toString("ascii") === "WEBP") {
+      return "image/webp";
+    }
+    if (buffer[0] === 80 && buffer[1] === 75 && buffer[2] === 3 && buffer[3] === 4) {
+      const ext2 = (fileName || "").split(".").pop()?.toLowerCase();
+      if (ext2 === "docx" || (storedMime || "").toLowerCase().includes("wordprocessingml")) {
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      }
+    }
+    if (buffer[0] === 208 && buffer[1] === 207 && buffer[2] === 17 && buffer[3] === 224) {
+      return "application/msword";
+    }
   }
-  addObj(obj1);
-  addObj(obj2);
-  addObj(obj3);
-  addObj(obj4);
-  addObj(obj5);
-  addObj(obj6);
-  const startxref = Buffer.byteLength(header + body);
-  let xref = "xref\n0 7\n0000000000 65535 f \n";
-  for (let i = 1; i <= 6; i++) {
-    xref += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
+  const normalizedStored = String(storedMime || "").split(";")[0].trim().toLowerCase();
+  if (normalizedStored === "image/jpg") {
+    return "image/jpeg";
   }
-  const trailer = `trailer
-<< /Size 7 /Root 1 0 R >>
-startxref
-${startxref}
-%%EOF
-`;
-  return Buffer.from(header + body + xref + trailer);
+  if (SAFE_INLINE_MIME_TYPES.has(normalizedStored)) {
+    return normalizedStored;
+  }
+  const ext = (fileName || "").split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === "doc") return "application/msword";
+  if (ext === "txt") return "text/plain";
+  if (ext === "csv") return "text/csv";
+  return "application/octet-stream";
 }
-
-// server/repositories/documents.repository.ts
 var DocumentsRepository = class {
   /**
    * Retrieves all documents with their latest pinned versions and computed expiry states.
@@ -4119,7 +5251,12 @@ var DocumentsRepository = class {
               v.sha256, v.document_number AS "documentNumber", v.issue_date AS "issueDate",
               v.expiry_date AS "expiryDate", v.verification_status AS "verificationStatus",
               v.verified_via AS "verifiedVia", v.verified_at AS "verifiedAt",
-              v.verification_notes AS "verificationNotes", v.uploaded_at AS "uploadedAt",
+              v.verification_notes AS "verificationNotes", v.rejection_reason AS "rejectionReason",
+              v.uploaded_at AS "uploadedAt",
+              EXISTS (
+                SELECT 1 FROM document_files f
+                WHERE f.document_version_id = v.id AND octet_length(f.content) > 0
+              ) AS "hasFile",
               CASE WHEN v.expiry_date IS NOT NULL THEN (v.expiry_date - CURRENT_DATE) ELSE NULL END AS "daysToExpiry",
               CASE
                 WHEN v.expiry_date IS NULL THEN 'NO_EXPIRY'
@@ -4144,6 +5281,7 @@ var DocumentsRepository = class {
   async uploadVersion(dto) {
     const sha256 = crypto5.createHash("sha256").update(dto.fileBuffer).digest("hex");
     const fileSizeBytes = dto.fileBuffer.length;
+    const resolvedMimeType = detectSafeMimeType(dto.fileBuffer, dto.mimeType, dto.fileName);
     const storageKey = `vault/${dto.supplierId}/${Date.now()}-${dto.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     let docTypeRes = await query(
       `SELECT id, name FROM document_types WHERE code = $1 OR UPPER(code) = UPPER($1) LIMIT 1`,
@@ -4184,10 +5322,10 @@ var DocumentsRepository = class {
         nextVersionNo = Number(maxVerRes.rows[0]?.max_version || 0) + 1;
       } else {
         const newDocRes = await client.query(
-          `INSERT INTO supplier_documents (supplier_id, document_type_id, title, status)
-           VALUES ($1, $2, $3, 'active')
+          `INSERT INTO supplier_documents (supplier_id, document_type_id, title, file_size_bytes, status)
+           VALUES ($1, $2, $3, $4, 'active')
            RETURNING id`,
-          [dto.supplierId, docType.id, dto.title || docType.name]
+          [dto.supplierId, docType.id, dto.title || docType.name, fileSizeBytes]
         );
         docId = newDocRes.rows[0].id;
       }
@@ -4204,7 +5342,7 @@ var DocumentsRepository = class {
           nextVersionNo,
           storageKey,
           dto.fileName,
-          dto.mimeType,
+          resolvedMimeType,
           fileSizeBytes,
           sha256,
           dto.documentNumber || null,
@@ -4217,7 +5355,7 @@ var DocumentsRepository = class {
       await client.query(
         `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [versionId, dto.fileBuffer, dto.mimeType, dto.fileName, fileSizeBytes, sha256]
+        [versionId, dto.fileBuffer, resolvedMimeType, dto.fileName, fileSizeBytes, sha256]
       );
       const readBackRes = await client.query(
         `SELECT sha256, size_bytes, file_name FROM document_files WHERE document_version_id = $1`,
@@ -4231,8 +5369,10 @@ var DocumentsRepository = class {
         throw new Error(`File integrity check failed: stored hash (${storedSha}) does not match computed hash (${sha256}).`);
       }
       await client.query(
-        `UPDATE supplier_documents SET current_version_id = $1, updated_at = NOW() WHERE id = $2`,
-        [versionId, docId]
+        `UPDATE supplier_documents
+         SET current_version_id = $1, file_size_bytes = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [versionId, fileSizeBytes, docId]
       );
       return {
         documentId: docId,
@@ -4248,7 +5388,7 @@ var DocumentsRepository = class {
         versionNo: nextVersionNo,
         storageKey,
         fileName: dto.fileName,
-        mimeType: dto.mimeType,
+        mimeType: resolvedMimeType,
         fileSizeBytes: String(fileSizeBytes),
         sha256,
         documentNumber: dto.documentNumber || null,
@@ -4258,89 +5398,153 @@ var DocumentsRepository = class {
         verifiedVia: null,
         verifiedAt: null,
         verificationNotes: "File uploaded and verified against canonical SHA-256 checksum rules.",
+        rejectionReason: null,
         uploadedAt: (/* @__PURE__ */ new Date()).toISOString(),
         daysToExpiry: dto.expiryDate ? Math.ceil((new Date(dto.expiryDate).getTime() - Date.now()) / 864e5) : null,
         expiryState: dto.expiryDate ? "VALID" : "NO_EXPIRY",
+        hasFile: true,
         certifiedCopy: dto.certifiedCopy
       };
     });
   }
   /**
-   * Fetch file bytes by document version, document ID, or document code, ensuring ownership.
+   * Fetch actual uploaded file bytes by document version ID or document ID,
+   * strictly scoped to the owning supplier and prioritizing the exact requested
+   * version or the document's current active version.
+   * Never fabricates placeholder PDFs when real bytes do not exist.
    */
   async getFileByVersionOrDocId(id, supplierId) {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const isSupplierUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(supplierId);
-    if (isUuid) {
-      const res = await query(
-        `SELECT f.content, f.mime_type AS "mimeType", f.file_name AS "fileName"
-         FROM document_files f
-         JOIN supplier_document_versions v ON v.id = f.document_version_id
-         JOIN supplier_documents d ON d.id = v.document_id
-         WHERE (v.id = $1 OR d.id = $1 OR f.id = $1)
-           ${isSupplierUuid ? "AND d.supplier_id = $2" : ""}
-         LIMIT 1`,
-        isSupplierUuid ? [id, supplierId] : [id]
-      );
-      if (res.rows.length) return res.rows[0];
+    if (!UUID_REGEX.test(id) || !UUID_REGEX.test(supplierId)) {
+      return null;
     }
-    const docQuery = isUuid ? `SELECT d.id AS doc_id, d.title, d.supplier_id, v.id AS version_id, v.file_name, v.mime_type,
-                v.document_number, v.issue_date, v.expiry_date, v.sha256, dt.name AS doc_type_name,
-                dt.issuing_authority, s.legal_name
-         FROM supplier_documents d
-         JOIN document_types dt ON dt.id = d.document_type_id
-         LEFT JOIN supplier_document_versions v ON v.id = d.current_version_id
-         LEFT JOIN suppliers s ON s.id = d.supplier_id
-         WHERE (d.id = $1 OR v.id = $1)
-           ${isSupplierUuid ? "AND d.supplier_id = $2" : ""}
-         LIMIT 1` : `SELECT d.id AS doc_id, d.title, d.supplier_id, v.id AS version_id, v.file_name, v.mime_type,
-                v.document_number, v.issue_date, v.expiry_date, v.sha256, dt.name AS doc_type_name,
-                dt.issuing_authority, s.legal_name
-         FROM supplier_documents d
-         JOIN document_types dt ON dt.id = d.document_type_id
-         LEFT JOIN supplier_document_versions v ON v.id = d.current_version_id
-         LEFT JOIN suppliers s ON s.id = d.supplier_id
-         WHERE (d.title ILIKE '%' || $1 || '%' OR dt.code ILIKE $1 OR dt.name ILIKE '%' || $1 || '%')
-           ${isSupplierUuid ? "AND d.supplier_id = $2" : ""}
-         LIMIT 1`;
-    const docRes = await query(docQuery, isSupplierUuid ? [id, supplierId] : [id]);
-    if (docRes.rows.length > 0) {
-      const row = docRes.rows[0];
-      if (row.version_id) {
-        const existingFile = await query(
-          `SELECT content, mime_type AS "mimeType", file_name AS "fileName"
-           FROM document_files WHERE document_version_id = $1 LIMIT 1`,
-          [row.version_id]
-        );
-        if (existingFile.rows.length > 0) return existingFile.rows[0];
-      }
-      const pdfBuffer = generateCertificatePdf({
-        title: row.title || row.doc_type_name || "Official Certificate",
-        documentNumber: row.document_number || "CERT-2026-VAL",
-        supplierName: row.legal_name || "Registered Commercial Supplier",
-        issueDate: row.issue_date ? new Date(row.issue_date).toISOString().split("T")[0] : "2026-01-15",
-        expiryDate: row.expiry_date ? new Date(row.expiry_date).toISOString().split("T")[0] : "2027-01-15",
-        authorityName: row.issuing_authority || "Republic of Botswana Regulatory Authority",
-        sha256: row.sha256
-      });
-      const fileName = row.file_name || `${(row.title || "Certificate").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
-      const mimeType = "application/pdf";
-      const sha256 = crypto5.createHash("sha256").update(pdfBuffer).digest("hex");
-      if (row.version_id) {
-        await query(
-          `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [row.version_id, pdfBuffer, mimeType, fileName, pdfBuffer.length, sha256]
-        ).catch(() => {
-        });
-      }
-      return {
-        content: pdfBuffer,
-        mimeType,
-        fileName
-      };
+    const res = await query(
+      `SELECT f.content,
+              COALESCE(f.mime_type, v.mime_type) AS "mimeType",
+              COALESCE(f.file_name, v.file_name) AS "fileName",
+              f.size_bytes AS "sizeBytes",
+              COALESCE(f.sha256, v.sha256) AS sha256,
+              v.id AS "versionId",
+              d.id AS "documentId"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE d.supplier_id = $2
+         AND d.status != 'deleted'
+         AND (v.id = $1 OR d.id = $1 OR f.id = $1)
+       ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
+       LIMIT 1`,
+      [id, supplierId]
+    );
+    if (!res.rows.length || !res.rows[0].content || res.rows[0].content.length === 0) {
+      return null;
     }
-    return null;
+    const row = res.rows[0];
+    const buf = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+    return {
+      content: buf,
+      mimeType: detectSafeMimeType(buf, row.mimeType, row.fileName),
+      fileName: row.fileName || "document",
+      sizeBytes: buf.length,
+      sha256: row.sha256 ? row.sha256.trim() : null,
+      versionId: row.versionId,
+      documentId: row.documentId
+    };
+  }
+  /**
+   * Fetch actual uploaded file bytes for platform administrators during verification.
+   * Accepts either a versionId or a documentId (defaulting to current_version_id).
+   */
+  async getFileForAdmin(versionOrDocId) {
+    if (!UUID_REGEX.test(versionOrDocId)) {
+      return null;
+    }
+    const res = await query(
+      `SELECT f.content,
+              COALESCE(f.mime_type, v.mime_type) AS "mimeType",
+              COALESCE(f.file_name, v.file_name) AS "fileName",
+              f.size_bytes AS "sizeBytes",
+              COALESCE(f.sha256, v.sha256) AS sha256,
+              v.id AS "versionId",
+              d.id AS "documentId"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE v.id = $1 OR d.id = $1 OR f.id = $1
+       ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
+       LIMIT 1`,
+      [versionOrDocId]
+    );
+    if (!res.rows.length || !res.rows[0].content || res.rows[0].content.length === 0) {
+      return null;
+    }
+    const row = res.rows[0];
+    const buf = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+    return {
+      content: buf,
+      mimeType: detectSafeMimeType(buf, row.mimeType, row.fileName),
+      fileName: row.fileName || "document",
+      sizeBytes: buf.length,
+      sha256: row.sha256 ? row.sha256.trim() : null,
+      versionId: row.versionId,
+      documentId: row.documentId
+    };
+  }
+  /**
+   * Fetch actual uploaded file bytes for an authorized procuring organization (buyer).
+   * Enforces that the supplier either submitted an application to one of this organization's calls
+   * or holds an active data-sharing consent grant with this organization.
+   */
+  async getFileForBuyer(versionOrDocId, organizationId) {
+    if (!UUID_REGEX.test(versionOrDocId) || !UUID_REGEX.test(organizationId)) {
+      return null;
+    }
+    const res = await query(
+      `SELECT f.content,
+              COALESCE(f.mime_type, v.mime_type) AS "mimeType",
+              COALESCE(f.file_name, v.file_name) AS "fileName",
+              f.size_bytes AS "sizeBytes",
+              COALESCE(f.sha256, v.sha256) AS sha256,
+              v.id AS "versionId",
+              d.id AS "documentId"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE d.status != 'deleted'
+         AND (v.id = $1 OR d.id = $1 OR f.id = $1)
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM applications a
+             JOIN calls c ON c.id = a.call_id
+             WHERE a.supplier_id = d.supplier_id
+               AND c.organization_id = $2
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM consent_grants cg
+             WHERE cg.supplier_id = d.supplier_id
+               AND cg.organization_id = $2
+               AND cg.status = 'active'
+           )
+         )
+       ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
+       LIMIT 1`,
+      [versionOrDocId, organizationId]
+    );
+    if (!res.rows.length || !res.rows[0].content || res.rows[0].content.length === 0) {
+      return null;
+    }
+    const row = res.rows[0];
+    const buf = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+    return {
+      content: buf,
+      mimeType: detectSafeMimeType(buf, row.mimeType, row.fileName),
+      fileName: row.fileName || "document",
+      sizeBytes: buf.length,
+      sha256: row.sha256 ? row.sha256.trim() : null,
+      versionId: row.versionId,
+      documentId: row.documentId
+    };
   }
   /**
    * Delete or soft-delete a document for a supplier.
@@ -4499,13 +5703,84 @@ var ApplicationsRepository = class {
    */
   async submitApplication(data) {
     const callRes = await query(
-      `SELECT id, organization_id, reference_no, title, closes_at FROM calls WHERE id = $1`,
+      `SELECT c.id, c.organization_id, c.reference_no, c.title, c.status, c.closes_at, o.status AS org_status
+       FROM calls c
+       JOIN organizations o ON o.id = c.organization_id AND o.deleted_at IS NULL
+       WHERE c.id = $1`,
       [data.callId]
     );
-    if (!callRes.rows.length) throw new Error("Call does not exist.");
+    if (!callRes.rows.length) {
+      const err = new Error("Call does not exist.");
+      err.status = 404;
+      err.code = "CALL_NOT_FOUND";
+      throw err;
+    }
     const call = callRes.rows[0];
+    if (call.org_status !== "active") {
+      const err = new Error("This opportunity is unavailable because the procuring organization is not currently active.");
+      err.status = 403;
+      err.code = "ORGANIZATION_INACTIVE";
+      throw err;
+    }
+    if (!["open", "published"].includes(String(call.status || "").toLowerCase())) {
+      const err = new Error("This call is not currently open for applications.");
+      err.status = 400;
+      err.code = "CALL_NOT_OPEN";
+      throw err;
+    }
     if (call.closes_at && /* @__PURE__ */ new Date() > new Date(call.closes_at)) {
-      throw new Error("The closing time has passed; applications can no longer be submitted.");
+      const err = new Error("The closing time has passed; applications can no longer be submitted.");
+      err.status = 400;
+      err.code = "CALL_CLOSED";
+      throw err;
+    }
+    const supRes = await query(
+      `SELECT status, verification_status FROM suppliers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+      [data.supplierId]
+    );
+    if (!supRes.rows.length) {
+      const err = new Error("Supplier profile not found.");
+      err.status = 403;
+      err.code = "SUPPLIER_NOT_FOUND";
+      throw err;
+    }
+    const sup = supRes.rows[0];
+    if (String(sup.status || "").toLowerCase() !== "active") {
+      const err = new Error(
+        `Application blocked: your supplier account is currently ${sup.status}. Contact BidReady360 compliance administration.`
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_SUSPENDED";
+      throw err;
+    }
+    if (String(sup.verification_status || "").toLowerCase() === "rejected") {
+      const err = new Error(
+        "Application blocked: your supplier verification was rejected. Please address compliance findings before applying."
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_REJECTED";
+      throw err;
+    }
+    const debarRes = await query(
+      `SELECT id, reason, ends_on
+       FROM debarments
+       WHERE supplier_id = $1
+         AND lifted_at IS NULL
+         AND starts_on <= CURRENT_DATE
+         AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+         AND (organization_id IS NULL OR organization_id = $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [data.supplierId, call.organization_id]
+    );
+    if (debarRes.rows.length > 0) {
+      const deb = debarRes.rows[0];
+      const err = new Error(
+        `Application blocked: supplier is currently debarred (${deb.reason})${deb.ends_on ? ` until ${deb.ends_on}` : " (permanent)"}.`
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_DEBARRED";
+      throw err;
     }
     const reqDocsRes = await query(
       `SELECT crd.document_type_id, dt.code, dt.name
@@ -4516,19 +5791,34 @@ var ApplicationsRepository = class {
     );
     let attachedVersions = [];
     if (data.attachedDocumentVersionIds.length > 0) {
-      const vRes = await query(
-        `SELECT sdv.id, sd.document_type_id, sdv.version_no, sdv.sha256, sdv.document_number, sdv.expiry_date
-         FROM supplier_document_versions sdv
-         JOIN supplier_documents sd ON sd.id = sdv.document_id
-         WHERE sdv.id = ANY($1::uuid[]) AND sd.supplier_id = $2`,
-        [data.attachedDocumentVersionIds, data.supplierId]
+      const validUuids = data.attachedDocumentVersionIds.filter(
+        (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))
       );
-      attachedVersions = vRes.rows;
+      if (validUuids.length > 0) {
+        const vRes = await query(
+          `SELECT sdv.id, sd.document_type_id, sdv.version_no, sdv.sha256,
+                  sdv.document_number, sdv.expiry_date, sdv.verification_status
+           FROM supplier_document_versions sdv
+           JOIN supplier_documents sd ON sd.id = sdv.document_id
+           WHERE (sdv.id = ANY($1::uuid[]) OR (sd.id = ANY($1::uuid[]) AND sd.current_version_id = sdv.id))
+             AND sd.supplier_id = $2
+             AND sd.status = 'active'
+             AND COALESCE(UPPER(sdv.verification_status), 'PENDING_VERIFICATION') NOT IN ('REJECTED', 'EXPIRED', 'UNVERIFIABLE')
+             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)`,
+          [validUuids, data.supplierId]
+        );
+        attachedVersions = vRes.rows;
+      }
     }
     const attachedTypeIds = new Set(attachedVersions.map((v) => v.document_type_id));
     for (const reqDoc of reqDocsRes.rows) {
       if (!attachedTypeIds.has(reqDoc.document_type_id)) {
-        throw new Error(`Mandatory document missing: You must attach a valid ${reqDoc.name} (${reqDoc.code}) to submit this application.`);
+        const err = new Error(
+          `Mandatory document missing or invalid: You must attach a valid, non-rejected ${reqDoc.name} (${reqDoc.code}) to submit this application.`
+        );
+        err.status = 400;
+        err.code = "MANDATORY_DOCUMENT_MISSING";
+        throw err;
       }
     }
     const receiptNumber = `APP-${call.reference_no.replace(/[^a-zA-Z0-9]/g, "")}-${Date.now().toString().slice(-6)}`;
@@ -4649,18 +5939,20 @@ var BidsRepository = class {
       priceItems: itemsRes.rows
     };
   }
-  async listByCall(callId) {
+  async listByCall(callId, orgId) {
     const res = await query(
       `SELECT b.id, b.call_id AS "callId", c.reference_no AS "callNumber",
               b.supplier_id AS "supplierId", s.legal_name AS "supplierName",
+              s.cipa_uin AS "cipaNumber",
               b.status, b.receipt_number AS "receiptNumber", b.payload_sha256 AS "payloadSha256",
-              b.total_price AS "totalPrice", b.currency, b.submitted_at AS "submittedAt", b.opened_at AS "openedAt"
+              CASE WHEN b.status = 'opened' THEN b.total_price ELSE NULL END AS "totalPrice",
+              b.currency, b.submitted_at AS "submittedAt", b.opened_at AS "openedAt"
        FROM bids b
        JOIN calls c ON c.id = b.call_id
        JOIN suppliers s ON s.id = b.supplier_id
-       WHERE b.call_id = $1
+       WHERE b.call_id = $1 AND c.organization_id = $2
        ORDER BY b.submitted_at ASC NULLS LAST`,
-      [callId]
+      [callId, orgId]
     );
     return res.rows;
   }
@@ -4670,13 +5962,97 @@ var BidsRepository = class {
    */
   async sealAndSubmitBid(data) {
     const callRes = await query(
-      `SELECT id, organization_id, reference_no, closes_at FROM calls WHERE id = $1`,
+      `SELECT c.id, c.organization_id, c.reference_no, c.status, c.closes_at, o.status AS org_status
+       FROM calls c
+       JOIN organizations o ON o.id = c.organization_id AND o.deleted_at IS NULL
+       WHERE c.id = $1`,
       [data.callId]
     );
-    if (!callRes.rows.length) throw new Error("Tender call does not exist.");
+    if (!callRes.rows.length) {
+      const err = new Error("Tender call does not exist.");
+      err.status = 404;
+      err.code = "CALL_NOT_FOUND";
+      throw err;
+    }
     const call = callRes.rows[0];
+    if (call.org_status !== "active") {
+      const err = new Error("This tender call is unavailable because the procuring organization is not currently active.");
+      err.status = 403;
+      err.code = "ORGANIZATION_INACTIVE";
+      throw err;
+    }
+    if (!["open", "published"].includes(String(call.status || "").toLowerCase())) {
+      const err = new Error("This tender call is not currently open for bid submissions.");
+      err.status = 400;
+      err.code = "CALL_NOT_OPEN";
+      throw err;
+    }
     if (call.closes_at && /* @__PURE__ */ new Date() > new Date(call.closes_at)) {
-      throw new Error("The closing time has passed; bids can no longer be submitted.");
+      const err = new Error("The closing time has passed; bids can no longer be submitted.");
+      err.status = 400;
+      err.code = "CALL_CLOSED";
+      throw err;
+    }
+    const supplierRes = await query(
+      `SELECT status, verification_status, legal_name
+       FROM suppliers
+       WHERE id = $1 AND deleted_at IS NULL
+       LIMIT 1`,
+      [data.supplierId]
+    );
+    if (!supplierRes.rows.length) {
+      const err = new Error("Supplier profile not found.");
+      err.status = 403;
+      err.code = "SUPPLIER_NOT_FOUND";
+      throw err;
+    }
+    const sup = supplierRes.rows[0];
+    const supStatus = String(sup.status || "").toLowerCase();
+    const supVer = String(sup.verification_status || "").toLowerCase();
+    if (supStatus !== "active") {
+      const err = new Error(
+        `Bid submission blocked: your supplier account is currently ${supStatus}. Contact BidReady360 compliance administration.`
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_SUSPENDED";
+      throw err;
+    }
+    if (supVer === "rejected") {
+      const err = new Error(
+        "Bid submission blocked: your supplier verification was rejected. Please address compliance findings and resubmit for verification."
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_REJECTED";
+      throw err;
+    }
+    if (supVer !== "verified") {
+      const err = new Error(
+        "Bid submission blocked: your supplier profile must be verified by an administrator before submitting sealed bids."
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_NOT_VERIFIED";
+      throw err;
+    }
+    const debarRes = await query(
+      `SELECT id, reason, starts_on, ends_on
+       FROM debarments
+       WHERE supplier_id = $1
+         AND lifted_at IS NULL
+         AND starts_on <= CURRENT_DATE
+         AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+         AND (organization_id IS NULL OR organization_id = $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [data.supplierId, call.organization_id]
+    );
+    if (debarRes.rows.length > 0) {
+      const deb = debarRes.rows[0];
+      const err = new Error(
+        `Bid submission blocked: supplier is currently debarred (${deb.reason})${deb.ends_on ? ` until ${deb.ends_on}` : " (permanent)"}.`
+      );
+      err.status = 403;
+      err.code = "SUPPLIER_DEBARRED";
+      throw err;
     }
     const payloadStr = JSON.stringify({
       callId: data.callId,
@@ -4690,13 +6066,14 @@ var BidsRepository = class {
       const bidRes = await client.query(
         `INSERT INTO bids (
           call_id, supplier_id, status, receipt_number, sealed_payload_key,
-          envelope_key_ref, payload_sha256, submitted_by_user_id, submitted_at, updated_at
+          sealed_payload_hash, envelope_key_ref, payload_sha256, submitted_by_user_id, submitted_at, updated_at
         ) VALUES (
-          $1, $2, 'submitted', $3, $4, $5, $6, $7, NOW(), NOW()
+          $1, $2, 'submitted', $3, $4, $6, $5, $6, $7, NOW(), NOW()
         )
         ON CONFLICT (call_id, supplier_id) DO UPDATE
         SET status = 'submitted',
             receipt_number = EXCLUDED.receipt_number,
+            sealed_payload_hash = EXCLUDED.sealed_payload_hash,
             payload_sha256 = EXCLUDED.payload_sha256,
             submitted_by_user_id = EXCLUDED.submitted_by_user_id,
             submitted_at = NOW(),
@@ -4746,10 +6123,10 @@ var BidsRepository = class {
    */
   async conductOpeningSession(data) {
     const callRes = await query(
-      `SELECT id, reference_no, closes_at FROM calls WHERE id = $1`,
-      [data.callId]
+      `SELECT id, reference_no, closes_at FROM calls WHERE id = $1 AND organization_id = $2`,
+      [data.callId, data.orgId]
     );
-    if (!callRes.rows.length) throw new Error("Call does not exist.");
+    if (!callRes.rows.length) throw new Error("Tender call not found for your organization.");
     const call = callRes.rows[0];
     if (!call.closes_at || /* @__PURE__ */ new Date() < new Date(call.closes_at)) {
       throw new Error("Bids cannot be opened before the closing time. The statutory sealing protocol remains active.");
@@ -4834,7 +6211,13 @@ function validateFileBuffer(buffer, originalName) {
   if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) {
     return { isValid: true, mimeType: "image/jpeg" };
   }
-  if (buffer.subarray(0, 4).toString() === "RIFF" && buffer.subarray(8, 12).toString() === "WEBP") {
+  if (buffer.length >= 6) {
+    const gifHeader = buffer.subarray(0, 6).toString("ascii");
+    if (gifHeader === "GIF87a" || gifHeader === "GIF89a") {
+      return { isValid: true, mimeType: "image/gif" };
+    }
+  }
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
     return { isValid: true, mimeType: "image/webp" };
   }
   if (buffer[0] === 80 && buffer[1] === 75 && buffer[2] === 3 && buffer[3] === 4) {
@@ -4848,10 +6231,13 @@ function validateFileBuffer(buffer, originalName) {
     if (ext === "pdf") return { isValid: true, mimeType: "application/pdf" };
     if (ext === "png") return { isValid: true, mimeType: "image/png" };
     if (ext === "jpg" || ext === "jpeg") return { isValid: true, mimeType: "image/jpeg" };
+    if (ext === "webp") return { isValid: true, mimeType: "image/webp" };
+    if (ext === "gif") return { isValid: true, mimeType: "image/gif" };
     if (ext === "docx") return { isValid: true, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
     if (ext === "doc") return { isValid: true, mimeType: "application/msword" };
+    if (ext === "txt") return { isValid: true, mimeType: "text/plain" };
   }
-  return { isValid: false, mimeType: "", error: "Unsupported or corrupt file type. Only PDF, PNG, JPG, and Word files are accepted." };
+  return { isValid: false, mimeType: "", error: "Unsupported or corrupt file type. Only PDF, PNG, JPG, WebP, GIF, Word, and TXT files are accepted." };
 }
 var ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -4903,6 +6289,7 @@ router3.post("/people", async (req, res) => {
     const status = err.status || 400;
     res.status(status).json({
       error: err.code || "VALIDATION_ERROR",
+      code: err.code || "VALIDATION_ERROR",
       field: err.field || "fullName",
       message: err.message || "Failed to save director"
     });
@@ -4920,6 +6307,7 @@ router3.put("/people/:id", async (req, res) => {
     const status = err.status || 400;
     res.status(status).json({
       error: err.code || "VALIDATION_ERROR",
+      code: err.code || "VALIDATION_ERROR",
       field: err.field || "fullName",
       message: err.message || "Failed to update director"
     });
@@ -5039,6 +6427,68 @@ router3.post("/projects", async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+router3.put("/projects/:id", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const updated = await suppliersRepository.updateProject(ctx.tenantId, req.params.id, req.body);
+    if (!updated) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Project not found." });
+      return;
+    }
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router3.delete("/projects/:id", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const deleted = await suppliersRepository.deleteProject(ctx.tenantId, req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Project not found." });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router3.get("/team", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const team = await suppliersRepository.listTeam(ctx.tenantId);
+    res.json(team);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router3.post("/team/invite", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { email, role } = req.body;
+    const invite = await suppliersRepository.inviteTeamMember(ctx.tenantId, {
+      email,
+      role,
+      invitedByUserId: ctx.userId
+    });
+    res.status(201).json(invite);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router3.delete("/team/invite/:id", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const revoked = await suppliersRepository.revokeInvitation(ctx.tenantId, req.params.id);
+    if (!revoked) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Invitation not found or already closed." });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 router3.get("/disciplines", async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
@@ -5061,7 +6511,7 @@ router3.post("/documents/upload", upload.single("file"), async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
     const file = req.file;
-    const { documentTypeCode, documentNumber, issueDate, expiryDate, title, certifiedCopy } = req.body;
+    const { documentTypeCode, documentNumber, issueDate, expiryDate, title, certifiedCopy, identityType, gender } = req.body;
     if (!file) {
       res.status(400).json({ error: "MISSING_FILE", message: "No file uploaded or file missing." });
       return;
@@ -5069,6 +6519,21 @@ router3.post("/documents/upload", upload.single("file"), async (req, res) => {
     if (!documentTypeCode) {
       res.status(400).json({ error: "MISSING_TYPE", message: "Document type code is required." });
       return;
+    }
+    let cleanedDocNumber = documentNumber ? String(documentNumber).trim() : void 0;
+    const isDirectorsIdDoc = String(documentTypeCode).toUpperCase() === "DIRECTOR_ID" || /director|shareholder|omang/i.test(String(title || ""));
+    if (isDirectorsIdDoc && cleanedDocNumber && String(identityType || "OMANG").toUpperCase() !== "PASSPORT") {
+      const omangCheck = validateOmang(cleanedDocNumber, gender);
+      if (!omangCheck.ok) {
+        res.status(400).json({
+          error: omangCheck.code,
+          code: omangCheck.code,
+          field: "documentNumber",
+          message: omangCheck.message
+        });
+        return;
+      }
+      cleanedDocNumber = omangCheck.normalised;
     }
     const validation = validateFileBuffer(file.buffer, file.originalname);
     if (!validation.isValid) {
@@ -5081,7 +6546,7 @@ router3.post("/documents/upload", upload.single("file"), async (req, res) => {
       fileName: file.originalname || "document.pdf",
       mimeType: validation.mimeType,
       fileBuffer: file.buffer,
-      documentNumber,
+      documentNumber: cleanedDocNumber,
       issueDate,
       expiryDate,
       certifiedCopy: certifiedCopy === "true" || certifiedCopy === true,
@@ -5111,16 +6576,20 @@ router3.get("/documents/:id/file", async (req, res) => {
     const ctx = getSupplierContext(req);
     const fileRecord = await documentsRepository.getFileByVersionOrDocId(req.params.id, ctx.tenantId);
     if (!fileRecord) {
-      res.status(404).json({ error: "NOT_FOUND", message: "Document file not found or unauthorized." });
+      res.status(404).json({
+        error: "NOT_FOUND",
+        message: "No uploaded file found for this document. Please upload the document file to preview it."
+      });
       return;
     }
     const isDownload = req.query.download === "1" || req.query.download === "true" || req.query.attachment === "true";
     const dispositionType = isDownload ? "attachment" : "inline";
-    const safeFileName = (fileRecord.fileName || "document.pdf").replace(/"/g, "");
-    res.setHeader("Content-Type", fileRecord.mimeType || "application/pdf");
-    res.setHeader("Content-Length", fileRecord.content.length);
+    const safeFileName = (fileRecord.fileName || "document").replace(/[\r\n"\\]/g, "_");
+    res.setHeader("Content-Type", fileRecord.mimeType || "application/octet-stream");
+    res.setHeader("Content-Length", String(fileRecord.content.length));
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Disposition", `${dispositionType}; filename="${safeFileName}"; filename*=UTF-8''${encodeURIComponent(safeFileName)}`);
-    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
     res.send(fileRecord.content);
   } catch (err) {
     const safe = translateDbError(err);
@@ -5129,7 +6598,7 @@ router3.get("/documents/:id/file", async (req, res) => {
 });
 router3.post("/documents/read", async (req, res) => {
   try {
-    const { fileBase64, mimeType, documentTypeName } = req.body;
+    const { fileBase64, mimeType, documentTypeName, identityType } = req.body;
     if (!fileBase64) {
       res.status(400).json({ error: "File content is required" });
       return;
@@ -5137,7 +6606,7 @@ router3.post("/documents/read", async (req, res) => {
     let parsed = null;
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
+        model: "gemini-2.5-flash",
         contents: {
           parts: [
             {
@@ -5159,44 +6628,65 @@ router3.post("/documents/read", async (req, res) => {
       rawText = rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
       parsed = JSON.parse(rawText);
     } catch (aiErr) {
-      console.warn("[GEMINI API READ WARNING - USING SMART FALLBACK]", aiErr);
+      console.warn("[GEMINI API READ WARNING]:", aiErr?.message || "Read failed");
     }
-    if (!parsed || !parsed.document_number) {
-      parsed = {
-        document_type: documentTypeName || "CIPA Certificate of Incorporation",
-        holder_name: "ACME Botswana (Pty) Ltd",
-        document_number: `DOC-${Math.floor(1e5 + Math.random() * 9e5)}`,
-        issue_date: "2026-01-15",
-        expiry_date: "2027-01-15",
-        issuing_authority: "Botswana Regulatory Authority",
-        confidence: {
-          document_type: 0.95,
-          holder_name: 0.92,
-          document_number: 0.89,
-          issue_date: 0.9,
-          expiry_date: 0.88,
-          issuing_authority: 0.91
+    if (!parsed || typeof parsed !== "object") {
+      return res.json({
+        document_type: documentTypeName || null,
+        holder_name: null,
+        document_number: null,
+        issue_date: null,
+        expiry_date: null,
+        issuing_authority: null,
+        confidence: {},
+        validation_status: "Needs review",
+        omang_valid: null,
+        auto_fill_allowed: false,
+        verified: false
+      });
+    }
+    const isDirectorsIdDoc = /director|shareholder|omang|national.?id|director_id/i.test(String(documentTypeName || "")) || /omang|national.?id/i.test(String(parsed.document_type || ""));
+    const isOmangCheck = isDirectorsIdDoc && String(identityType || "OMANG").toUpperCase() !== "PASSPORT";
+    let omangValid = null;
+    let omangError = null;
+    let derivedGender = null;
+    let validationStatus = "Extracted (unverified)";
+    let autoFillAllowed = Boolean(parsed.document_number);
+    if (isOmangCheck) {
+      if (parsed.document_number) {
+        const omangCheck = validateOmang(String(parsed.document_number));
+        omangValid = omangCheck.ok;
+        if (omangCheck.ok) {
+          parsed.document_number = omangCheck.normalised;
+          derivedGender = omangCheck.derivedGender;
+        } else {
+          omangError = omangCheck.message;
+          validationStatus = "Needs review";
+          autoFillAllowed = false;
         }
-      };
-    }
-    res.json(parsed);
-  } catch (err) {
-    console.error("[GEMINI DOCUMENT READ ERROR]", err);
-    res.json({
-      document_type: "Official Document",
-      holder_name: "ACME Botswana (Pty) Ltd",
-      document_number: `REG-${Math.floor(1e5 + Math.random() * 9e5)}`,
-      issue_date: "2026-01-15",
-      expiry_date: "2027-01-15",
-      issuing_authority: "Botswana Regulatory Authority",
-      confidence: {
-        document_type: 0.9,
-        holder_name: 0.9,
-        document_number: 0.85,
-        issue_date: 0.9,
-        expiry_date: 0.9,
-        issuing_authority: 0.9
+      } else {
+        validationStatus = "Needs review";
+        autoFillAllowed = false;
       }
+    }
+    res.json({
+      ...parsed,
+      omang_valid: omangValid,
+      omang_error: omangError,
+      derived_gender: derivedGender,
+      validation_status: validationStatus,
+      auto_fill_allowed: autoFillAllowed,
+      verified: false
+      // Reading a document never verifies it
+    });
+  } catch (err) {
+    console.error("[GEMINI DOCUMENT READ ERROR]", err?.message || "Unknown error");
+    res.status(500).json({
+      error: "DOCUMENT_READ_FAILED",
+      validation_status: "Needs review",
+      auto_fill_allowed: false,
+      verified: false,
+      message: "Could not read document details automatically."
     });
   }
 });
@@ -5212,20 +6702,76 @@ router3.post("/documents/:id/read", async (req, res) => {
     }
     const extracted = {
       document_type: targetDoc.documentTypeName,
-      holder_name: "ACME Botswana (Pty) Ltd",
-      document_number: targetDoc.documentNumber || `DOC-${Math.floor(1e5 + Math.random() * 9e5)}`,
-      issue_date: targetDoc.issueDate || "2026-01-15",
-      expiry_date: targetDoc.expiryDate || "2027-01-15",
-      issuing_authority: targetDoc.issuingAuthority || "Botswana Regulatory Authority",
-      confidence: {
-        document_type: 0.96,
-        holder_name: 0.95,
-        document_number: 0.94,
-        issue_date: 0.93,
-        expiry_date: 0.92,
-        issuing_authority: 0.95
-      }
+      holder_name: null,
+      document_number: targetDoc.documentNumber || null,
+      issue_date: targetDoc.issueDate || null,
+      expiry_date: targetDoc.expiryDate || null,
+      issuing_authority: targetDoc.issuingAuthority || null,
+      confidence: {},
+      validation_status: "Needs review",
+      omang_valid: null,
+      omang_error: null,
+      derived_gender: null,
+      auto_fill_allowed: false,
+      verified: false
+      // Reading a document never verifies it
     };
+    const fileRecord = await documentsRepository.getFileByVersionOrDocId(docId, ctx.tenantId).catch(() => null);
+    if (fileRecord && fileRecord.content) {
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: fileRecord.mimeType || "application/pdf",
+                  data: fileRecord.content.toString("base64")
+                }
+              },
+              {
+                text: "Extract document details from this uploaded document. Return valid JSON only (no markdown formatting), with these exact fields: document_type, holder_name, document_number, issue_date (YYYY-MM-DD), expiry_date (YYYY-MM-DD), issuing_authority, and confidence (an object containing a confidence score from 0 to 1 for each of document_type, holder_name, document_number, issue_date, expiry_date, issuing_authority). Use null when a field is not visible. Never guess."
+              }
+            ]
+          },
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+        let rawText = response.text || "{}";
+        rawText = rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
+        const parsed = JSON.parse(rawText);
+        if (parsed && typeof parsed === "object") {
+          Object.assign(extracted, parsed, { verified: false });
+        }
+      } catch (aiErr) {
+        console.warn("[GEMINI STORED DOC READ WARNING]:", aiErr?.message || "Read failed");
+      }
+    }
+    const isDirectorsIdDoc = String(targetDoc.documentTypeCode || "").toUpperCase() === "DIRECTOR_ID" || /director|shareholder|omang|national.?id/i.test(String(targetDoc.documentTypeName || ""));
+    if (isDirectorsIdDoc) {
+      if (extracted.document_number) {
+        const omangCheck = validateOmang(String(extracted.document_number));
+        extracted.omang_valid = omangCheck.ok;
+        if (omangCheck.ok) {
+          extracted.document_number = omangCheck.normalised;
+          extracted.derived_gender = omangCheck.derivedGender;
+          extracted.validation_status = "Extracted (unverified)";
+          extracted.auto_fill_allowed = true;
+        } else {
+          extracted.omang_error = omangCheck.message;
+          extracted.validation_status = "Needs review";
+          extracted.auto_fill_allowed = false;
+        }
+      } else {
+        extracted.validation_status = "Needs review";
+        extracted.auto_fill_allowed = false;
+      }
+    } else if (extracted.document_number) {
+      extracted.validation_status = "Extracted (unverified)";
+      extracted.auto_fill_allowed = true;
+    }
+    extracted.verified = false;
     res.json({ success: true, extracted, document: targetDoc });
   } catch (err) {
     const safe = translateDbError(err);
@@ -5281,6 +6827,14 @@ router3.post("/applications/submit", async (req, res) => {
     });
     res.status(201).json(result);
   } catch (err) {
+    if (err?.status === 403 || err?.status === 400 || err?.status === 404) {
+      res.status(err.status).json({
+        error: err.code || "SUBMISSION_BLOCKED",
+        code: err.code || "SUBMISSION_BLOCKED",
+        message: err.message || "Application submission could not be completed."
+      });
+      return;
+    }
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
   }
@@ -5290,7 +6844,7 @@ router3.post("/bids/seal", async (req, res) => {
     const ctx = getSupplierContext(req);
     const { callId, financialSchedule } = req.body;
     if (!callId || !financialSchedule || !financialSchedule.length) {
-      res.status(400).json({ error: "INVALID_BID_DATA", message: "Tender ID and completed financial bill of quantities schedule are required." });
+      res.status(400).json({ error: "INVALID_BID_DATA", code: "INVALID_BID_DATA", message: "Tender ID and completed financial bill of quantities schedule are required." });
       return;
     }
     const ip = extractClientIp(req);
@@ -5305,6 +6859,14 @@ router3.post("/bids/seal", async (req, res) => {
     });
     res.status(201).json(result);
   } catch (err) {
+    if (err?.status === 403 || err?.status === 400 || err?.status === 404) {
+      res.status(err.status).json({
+        error: err.code || "BID_SUBMISSION_BLOCKED",
+        code: err.code || "BID_SUBMISSION_BLOCKED",
+        message: err.message || "Bid submission blocked due to supplier compliance status."
+      });
+      return;
+    }
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
   }
@@ -5338,6 +6900,8 @@ var CallsRepository = class {
       JOIN organizations o ON o.id = c.organization_id
       WHERE c.status IN ('open', 'published')
         AND c.visibility = 'open'
+        AND o.status = 'active'
+        AND o.deleted_at IS NULL
     `;
     const params = [];
     if (filters?.callType && filters.callType !== "all") {
@@ -5409,85 +6973,211 @@ var CallsRepository = class {
       clarificationsCount: parseInt(clarCountRes.rows[0]?.count || "0", 10)
     };
   }
-  async listClarifications(callId) {
+  async listClarifications(callId, supplierId) {
+    const validSupplierId = supplierId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(supplierId) ? supplierId : null;
     const res = await query(
-      `SELECT id, call_id AS "callId", question, published_question AS "publishedQuestion",
+      `SELECT id, call_id AS "callId",
+              COALESCE(published_question, question) AS question,
+              published_question AS "publishedQuestion",
               answer, responder_title AS "responderTitle", topic, status,
-              asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished"
+              asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished",
+              (asked_by_supplier_id = $2::uuid) AS "isOwnQuestion"
        FROM clarifications
-       WHERE call_id = $1 AND is_published = TRUE
+       WHERE call_id = $1
+         AND (is_published = TRUE OR ($2::uuid IS NOT NULL AND asked_by_supplier_id = $2::uuid))
        ORDER BY asked_at DESC`,
-      [callId]
+      [callId, validSupplierId]
+    );
+    return res.rows;
+  }
+  async listClarificationsByOrganization(orgId) {
+    const res = await query(
+      `SELECT cl.id, cl.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              cl.asked_by_supplier_id AS "supplierId",
+              COALESCE(s.legal_name, cl.supplier_name_snapshot, 'Prospective Bidder') AS "supplierName",
+              cl.question, cl.published_question AS "publishedQuestion",
+              cl.answer, cl.responder_title AS "responderTitle",
+              cl.topic, cl.status, cl.is_published AS "isPublished",
+              cl.asked_at AS "askedAt", cl.answered_at AS "answeredAt"
+       FROM clarifications cl
+       JOIN calls c ON c.id = cl.call_id
+       LEFT JOIN suppliers s ON s.id = cl.asked_by_supplier_id
+       WHERE c.organization_id = $1
+       ORDER BY cl.asked_at DESC`,
+      [orgId]
     );
     return res.rows;
   }
   async askClarification(data) {
-    const call = await this.getById(data.callId);
-    if (!call) throw new Error("Call does not exist.");
-    if (call.clarificationDeadline && /* @__PURE__ */ new Date() > new Date(call.clarificationDeadline)) {
-      throw new Error("The clarification window for this tender has closed. Questions can no longer be submitted.");
+    if (!data.question || !data.question.trim()) {
+      const err = new Error("Clarification question text is required.");
+      err.status = 400;
+      throw err;
     }
+    const call = await this.getById(data.callId);
+    if (!call) {
+      const err = new Error("Call does not exist.");
+      err.status = 404;
+      throw err;
+    }
+    if (call.clarificationDeadline && /* @__PURE__ */ new Date() > new Date(call.clarificationDeadline)) {
+      const err = new Error("The clarification window for this tender has closed. Questions can no longer be submitted.");
+      err.status = 400;
+      throw err;
+    }
+    const supRes = await query(
+      `SELECT legal_name FROM suppliers WHERE id = $1 LIMIT 1`,
+      [data.supplierId]
+    );
+    const supplierSnapshot = supRes.rows[0]?.legal_name || null;
     const res = await query(
       `INSERT INTO clarifications (
-        call_id, asked_by_supplier_id, asked_by_user_id, question, topic, is_published, status, asked_at
+        call_id, asked_by_supplier_id, asked_by_user_id, supplier_name_snapshot, question, topic, is_published, status, asked_at
       ) VALUES (
-        $1, $2, $3, $4, $5, TRUE, 'Pending', NOW()
+        $1, $2, $3, $4, $5, $6, FALSE, 'Pending', NOW()
       ) RETURNING id, call_id AS "callId", question, published_question AS "publishedQuestion",
                   answer, responder_title AS "responderTitle", topic, status,
                   asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished"`,
-      [data.callId, data.supplierId, data.userId, data.question.trim(), data.topic || "General"]
+      [data.callId, data.supplierId, data.userId, supplierSnapshot, data.question.trim(), data.topic || "General"]
     );
     return res.rows[0];
   }
-  async answerClarification(clarificationId, answer, responderTitle, userId) {
-    await query(
-      `UPDATE clarifications
+  async answerClarification(clarificationId, answer, responderTitle, userId, orgId) {
+    const cleanAnswer = answer ? String(answer).trim() : "";
+    if (!cleanAnswer) {
+      const err = new Error("Official clarification response cannot be empty.");
+      err.status = 400;
+      throw err;
+    }
+    const res = await query(
+      `UPDATE clarifications cl
        SET answer = $2,
            responder_title = $3,
            answered_by_user_id = $4,
            answered_at = NOW(),
            status = 'Answered',
-           is_published = TRUE
-       WHERE id = $1`,
-      [clarificationId, answer.trim(), responderTitle, userId]
+           is_published = TRUE,
+           published_question = COALESCE(cl.published_question, cl.question)
+       FROM calls c
+       WHERE cl.id = $1
+         AND cl.call_id = c.id
+         AND c.organization_id = $5`,
+      [clarificationId, cleanAnswer, responderTitle, userId, orgId]
     );
+    if (res.rowCount === 0) {
+      const err = new Error("Clarification question not found for your organization.");
+      err.status = 404;
+      throw err;
+    }
+  }
+  async listByOrganization(orgId) {
+    const res = await query(
+      `SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
+              c.summary, c.description, c.status, c.visibility,
+              c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
+              c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
+              c.sealed_bid_protocol_enforced AS "isSealed",
+              c.organization_id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
+              (SELECT count(*)::int FROM applications a WHERE a.call_id = c.id AND a.status <> 'Draft') AS "applicationsCount",
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
+                 FROM call_categories cc
+                 JOIN categories cat ON cat.id = cc.category_id
+                 WHERE cc.call_id = c.id),
+                '[]'::json
+              ) AS categories,
+              COALESCE(
+                (SELECT json_agg(json_build_object('code', dt.code, 'name', dt.name))
+                 FROM call_required_documents crd
+                 JOIN document_types dt ON dt.id = crd.document_type_id
+                 WHERE crd.call_id = c.id),
+                '[]'::json
+              ) AS "requiredDocuments",
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', ca.id, 'addendumNo', ca.addendum_no, 'title', ca.title, 'body', ca.body, 'publishedAt', ca.published_at, 'newClosesAt', ca.new_closes_at) ORDER BY ca.addendum_no ASC)
+                 FROM call_addenda ca
+                 WHERE ca.call_id = c.id),
+                '[]'::json
+              ) AS addenda
+       FROM calls c
+       JOIN organizations o ON o.id = c.organization_id
+       WHERE c.organization_id = $1
+       ORDER BY c.created_at DESC`,
+      [orgId]
+    );
+    return res.rows;
   }
   /**
    * Create a new Call / Tender with strict statutory criteria weighting validation (must sum to 100%).
    */
   async createCall(data) {
     if (data.criteria && data.criteria.length > 0) {
-      const totalWeight = data.criteria.filter((c) => c.criterionType === "scored").reduce((sum, c) => sum + Number(c.weight || 0), 0);
-      if (Math.abs(totalWeight - 100) > 0.01) {
-        throw new Error(`Criteria weight validation failed: Scored criteria weights must sum to exactly 100% (currently ${totalWeight}%).`);
+      const scored = data.criteria.filter((c) => c.criterionType === "scored" || c.criterionType === "price");
+      if (scored.length > 0) {
+        const totalWeight = scored.reduce((sum, c) => sum + Number(c.weight || 0), 0);
+        if (Math.abs(totalWeight - 100) > 0.01) {
+          throw new Error(`Criteria weight validation failed: Scored criteria weights must sum to exactly 100% (currently ${totalWeight}%).`);
+        }
       }
     }
+    const allowedStatuses = ["draft", "open"];
+    const resolvedStatus = allowedStatuses.includes(String(data.status || "").toLowerCase()) ? String(data.status).toLowerCase() : "open";
+    const allowedVisibilities = ["open", "approved_suppliers", "category_restricted", "invite_only"];
+    const resolvedVisibility = allowedVisibilities.includes(String(data.visibility || "").toLowerCase()) ? String(data.visibility).toLowerCase() : "open";
+    const isSealed = data.isSealed !== void 0 ? Boolean(data.isSealed) : true;
     return tx(async (client) => {
       const orgCheck = await client.query(
-        `SELECT status FROM organizations WHERE id = $1`,
+        `SELECT status, verification_status, rejection_reason FROM organizations WHERE id = $1 AND deleted_at IS NULL`,
         [data.organizationId]
       );
-      if (orgCheck.rows[0]?.status === "pending") {
+      const orgRow = orgCheck.rows[0];
+      if (!orgRow) {
+        const err = new Error("Procuring organization record not found.");
+        err.status = 403;
+        err.code = "ORGANIZATION_NOT_FOUND";
+        throw err;
+      }
+      if (orgRow.status === "pending" || orgRow.verification_status === "pending_review" || orgRow.verification_status === "pending") {
         const err = new Error("Your organization is pending verification and approval. You cannot publish tender calls yet.");
         err.status = 403;
-        err.code = "ORGANIZATION_PENDING";
+        err.code = "ORGANIZATION_PENDING_APPROVAL";
+        throw err;
+      }
+      if (orgRow.status !== "active" || orgRow.verification_status === "rejected") {
+        const code = orgRow.verification_status === "rejected" ? "ORGANIZATION_REJECTED" : "ORGANIZATION_SUSPENDED";
+        const err = new Error(
+          orgRow.rejection_reason ? `Your organization is currently ${orgRow.status} (${orgRow.rejection_reason}) and cannot publish tender calls.` : `Your organization is currently ${orgRow.status} and cannot publish tender calls.`
+        );
+        err.status = 403;
+        err.code = code;
         throw err;
       }
       const callRes = await client.query(
         `INSERT INTO calls (
           organization_id, reference_no, title, call_type, summary, description,
-          status, visibility, opens_at, closes_at, clarification_deadline,
-          estimated_value, currency, created_by_user_id, created_at, updated_at
+          status, visibility, sealed_bid_protocol_enforced,
+          opens_at, closes_at, clarification_deadline,
+          estimated_value, currency, created_by_user_id,
+          published_by_user_id, published_at, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, 'open', 'open', $7, $8, $9, $10, $11, $12, NOW(), NOW()
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9,
+          $10, $11, $12,
+          $13, $14, $15,
+          CASE WHEN $7 = 'open' THEN $15 ELSE NULL END,
+          CASE WHEN $7 = 'open' THEN NOW() ELSE NULL END,
+          NOW(), NOW()
         ) RETURNING id`,
         [
           data.organizationId,
           data.referenceNo.trim(),
           data.title.trim(),
           data.callType,
-          data.summary.trim(),
-          data.description.trim(),
+          (data.summary || "").trim(),
+          (data.description || data.summary || "").trim(),
+          resolvedStatus,
+          resolvedVisibility,
+          isSealed,
           data.opensAt,
           data.closesAt,
           data.clarificationDeadline || null,
@@ -5497,10 +7187,23 @@ var CallsRepository = class {
         ]
       );
       const callId = callRes.rows[0].id;
+      if (Array.isArray(data.categoryIds) && data.categoryIds.length > 0) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        let idx = 0;
+        for (const catId of data.categoryIds) {
+          if (!uuidRegex.test(String(catId))) continue;
+          await client.query(
+            `INSERT INTO call_categories (call_id, category_id, is_primary)
+             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [callId, catId, idx === 0]
+          );
+          idx++;
+        }
+      }
       if (data.requiredDocTypeCodes && data.requiredDocTypeCodes.length) {
         for (const code of data.requiredDocTypeCodes) {
           const docType = await client.query(
-            `SELECT id FROM document_types WHERE code = $1 LIMIT 1`,
+            `SELECT id FROM document_types WHERE code = $1 OR LOWER(name) = LOWER($1) LIMIT 1`,
             [code]
           );
           if (docType.rows.length) {
@@ -5544,59 +7247,100 @@ var CallsRepository = class {
       return callId;
     });
   }
+  async updateCall(callId, orgId, userId, data) {
+    const sets = [];
+    const params = [callId, orgId];
+    if (data.status !== void 0) {
+      const allowed = ["draft", "open", "closed", "evaluating", "awarded", "cancelled"];
+      const cleanStatus = String(data.status).toLowerCase();
+      if (!allowed.includes(cleanStatus)) {
+        const err = new Error("Invalid call status.");
+        err.status = 400;
+        throw err;
+      }
+      params.push(cleanStatus);
+      sets.push(`status = $${params.length}`);
+      if (cleanStatus === "open") {
+        params.push(userId);
+        sets.push(`published_by_user_id = COALESCE(published_by_user_id, $${params.length})`);
+        sets.push(`published_at = COALESCE(published_at, NOW())`);
+      }
+    }
+    if (data.visibility !== void 0) {
+      const allowedVis = ["open", "approved_suppliers", "category_restricted", "invite_only"];
+      const cleanVis = String(data.visibility).toLowerCase();
+      if (!allowedVis.includes(cleanVis)) {
+        const err = new Error("Invalid call visibility.");
+        err.status = 400;
+        throw err;
+      }
+      params.push(cleanVis);
+      sets.push(`visibility = $${params.length}`);
+    }
+    if (data.closesAt !== void 0) {
+      params.push(data.closesAt);
+      sets.push(`closes_at = $${params.length}`);
+    }
+    if (data.clarificationDeadline !== void 0) {
+      params.push(data.clarificationDeadline || null);
+      sets.push(`clarification_deadline = $${params.length}`);
+    }
+    if (!sets.length) return;
+    sets.push(`updated_at = NOW()`);
+    const res = await query(
+      `UPDATE calls SET ${sets.join(", ")} WHERE id = $1 AND organization_id = $2`,
+      params
+    );
+    if (res.rowCount === 0) {
+      const err = new Error("Call not found for your organization.");
+      err.status = 404;
+      throw err;
+    }
+  }
+  async createAddendum(callId, orgId, userId, data) {
+    const cleanBody = (data.body ?? data.summary ?? "").trim();
+    if (!data.title?.trim() || !cleanBody) {
+      const err = new Error("Addendum title and details are required.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const check = await client.query(
+        `SELECT id FROM calls WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [callId, orgId]
+      );
+      if (!check.rows.length) {
+        const err = new Error("Tender call not found for your organization.");
+        err.status = 404;
+        throw err;
+      }
+      const maxRes = await client.query(
+        `SELECT COALESCE(MAX(addendum_no), 0) + 1 AS next_no FROM call_addenda WHERE call_id = $1`,
+        [callId]
+      );
+      const addendumNo = maxRes.rows[0].next_no;
+      const ins = await client.query(
+        `INSERT INTO call_addenda (
+          call_id, addendum_no, title, body, new_closes_at, published_by_user_id, published_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, NOW()
+        ) RETURNING id, call_id AS "callId", addendum_no AS "addendumNo", title, body, new_closes_at AS "newClosesAt", published_at AS "publishedAt"`,
+        [callId, addendumNo, data.title.trim(), cleanBody, data.newClosesAt || null, userId]
+      );
+      if (data.newClosesAt) {
+        await client.query(
+          `UPDATE calls SET closes_at = $2, updated_at = NOW() WHERE id = $1 AND organization_id = $3`,
+          [callId, data.newClosesAt, orgId]
+        );
+      }
+      return ins.rows[0];
+    });
+  }
 };
 var callsRepository = new CallsRepository();
 
 // server/routes/calls.routes.ts
 var router4 = Router4();
-router4.get("/supplier-preview", async (req, res) => {
-  try {
-    const list = await query(`
-      SELECT id FROM suppliers ORDER BY created_at DESC LIMIT 1
-    `);
-    if (list.rows.length > 0) {
-      const supplierId = list.rows[0].id;
-      const full = await suppliersRepository.getById(supplierId);
-      if (full) {
-        const docs = await query(`
-          SELECT dt.code, sd.status
-          FROM supplier_documents sd
-          JOIN document_types dt ON dt.id = sd.document_type_id
-          WHERE sd.supplier_id = $1 AND sd.status = 'active'
-        `, [supplierId]);
-        const hasCipa = docs.rows.some((d) => d.code === "COMPANY_REGISTRATION");
-        const hasBurs = docs.rows.some((d) => d.code === "TAX_CLEARANCE");
-        const hasPpra = docs.rows.some((d) => d.code === "PPRA_REGISTRATION");
-        res.json({
-          id: full.id,
-          legalName: full.legalName,
-          cipaNumber: full.cipaUin,
-          profileCompleteness: full.profileCompleteness,
-          hasCipa,
-          hasBurs,
-          hasPpra
-        });
-        return;
-      }
-    }
-    res.json({
-      id: "default",
-      legalName: "Test Company (Pty) Ltd",
-      cipaNumber: "BW000005864",
-      profileCompleteness: 94,
-      hasCipa: true,
-      hasBurs: true,
-      hasPpra: true
-    });
-  } catch (err) {
-    res.json({
-      id: "default",
-      legalName: "Test Company (Pty) Ltd",
-      cipaNumber: "BW000005864",
-      profileCompleteness: 94
-    });
-  }
-});
 router4.get("/", async (req, res) => {
   try {
     const { q, type } = req.query;
@@ -5625,17 +7369,19 @@ router4.get("/:id", async (req, res) => {
 });
 router4.get("/:id/clarifications", async (req, res) => {
   try {
-    const items = await callsRepository.listClarifications(req.params.id);
+    const supplierId = req.activeTenant?.tenantType === "supplier" ? req.activeTenant.tenantId : void 0;
+    const items = await callsRepository.listClarifications(req.params.id, supplierId);
     res.json(items);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
   }
 });
-router4.post("/:id/clarifications", requireAuth, async (req, res) => {
+router4.post("/:id/clarifications", requireAuth, requireTenantType("supplier"), async (req, res) => {
   try {
-    const ctx = getTenantContext(req);
+    const ctx = getSupplierContext(req);
     const { question, topic } = req.body;
-    if (!question || !question.trim()) {
+    if (!question || !String(question).trim()) {
       res.status(400).json({ error: "MISSING_QUESTION", message: "Question content cannot be empty." });
       return;
     }
@@ -5643,7 +7389,7 @@ router4.post("/:id/clarifications", requireAuth, async (req, res) => {
       callId: req.params.id,
       supplierId: ctx.tenantId,
       userId: ctx.userId,
-      question: question.trim(),
+      question: String(question).trim(),
       topic
     });
     res.status(201).json(item);
@@ -5931,27 +7677,100 @@ var awardsRepository = new AwardsRepository();
 var router5 = Router5();
 router5.use(requireAuth);
 router5.use(requireTenantType("organization"));
-router5.post("/calls/create", requirePermission("calls.create"), async (req, res) => {
+async function requireActiveOrganization(req, res, next) {
+  if (req.user?.isPlatformAdmin) {
+    return next();
+  }
   try {
     const ctx = getOrganizationContext(req);
     const orgRes = await query(
-      `SELECT status, verification_status FROM organizations WHERE id = $1 LIMIT 1`,
+      `SELECT status, verification_status, rejection_reason
+       FROM organizations
+       WHERE id = $1 AND deleted_at IS NULL
+       LIMIT 1`,
       [ctx.tenantId]
     );
     const org = orgRes.rows[0];
-    if (org && (org.status === "pending" || org.verification_status === "pending_review" || org.verification_status === "pending")) {
+    if (!org) {
       res.status(403).json({
-        error: "ORGANIZATION_PENDING_APPROVAL",
-        message: "Organizations with pending status cannot publish tender calls until verified."
+        error: "ORGANIZATION_NOT_FOUND",
+        code: "ORGANIZATION_NOT_FOUND",
+        message: "Your procuring organization record could not be found or is no longer active."
       });
       return;
     }
+    const status = String(org.status || "").toLowerCase();
+    const verStatus = String(org.verification_status || "").toLowerCase();
+    if (status === "pending" || verStatus === "pending_review" || verStatus === "pending") {
+      res.status(403).json({
+        error: "ORGANIZATION_PENDING_APPROVAL",
+        code: "ORGANIZATION_PENDING_APPROVAL",
+        message: "Your organization is awaiting administrator approval before you can publish or manage calls."
+      });
+      return;
+    }
+    if (status !== "active" || verStatus === "rejected") {
+      const code = verStatus === "rejected" ? "ORGANIZATION_REJECTED" : "ORGANIZATION_SUSPENDED";
+      res.status(403).json({
+        error: code,
+        code,
+        message: org.rejection_reason ? `Your procuring organization is currently ${status} (${org.rejection_reason}). Contact BidReady360 administration.` : `Your procuring organization is currently ${status} and cannot access procurement operations.`
+      });
+      return;
+    }
+    next();
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+}
+router5.use(requireActiveOrganization);
+router5.get("/calls", requirePermission("calls.create"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const calls = await callsRepository.listByOrganization(ctx.tenantId);
+    res.json(calls);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router5.post("/calls/create", requirePermission("calls.create"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
     const callId = await callsRepository.createCall({
       ...req.body,
       organizationId: ctx.tenantId,
       userId: ctx.userId
     });
-    res.status(201).json({ callId, message: "Tender call published successfully." });
+    res.status(201).json({ callId, message: "Tender call saved successfully." });
+  } catch (err) {
+    if (err?.status === 403) {
+      res.status(403).json({
+        error: err.code || "FORBIDDEN",
+        code: err.code || "FORBIDDEN",
+        message: err.message
+      });
+      return;
+    }
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.patch("/calls/:id", requirePermission("calls.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await callsRepository.updateCall(req.params.id, ctx.tenantId, ctx.userId, req.body);
+    res.json({ success: true, message: "Tender call updated." });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/calls/:id/addenda", requirePermission("calls.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const addendum = await callsRepository.createAddendum(req.params.id, ctx.tenantId, ctx.userId, req.body);
+    res.status(201).json(addendum);
   } catch (err) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -5987,15 +7806,29 @@ router5.post("/applications/:id/review", requirePermission("applications.review"
     res.status(safe.status).json(safe);
   }
 });
+router5.get("/clarifications", requirePermission("calls.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const list = await callsRepository.listClarificationsByOrganization(ctx.tenantId);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 router5.post("/clarifications/:id/answer", requirePermission("calls.manage"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
     const { answer, responderTitle } = req.body;
+    if (!answer || !String(answer).trim()) {
+      res.status(400).json({ error: "MISSING_ANSWER", message: "Clarification answer cannot be empty." });
+      return;
+    }
     await callsRepository.answerClarification(
       req.params.id,
       answer,
       responderTitle || `${req.user.fullName} (${ctx.roleName})`,
-      ctx.userId
+      ctx.userId,
+      ctx.tenantId
     );
     res.json({ success: true, message: "Official clarification answer published." });
   } catch (err) {
@@ -6005,7 +7838,8 @@ router5.post("/clarifications/:id/answer", requirePermission("calls.manage"), as
 });
 router5.get("/bids/:callId", requirePermission("bids.view"), async (req, res) => {
   try {
-    const bids = await bidsRepository.listByCall(req.params.callId);
+    const ctx = getOrganizationContext(req);
+    const bids = await bidsRepository.listByCall(req.params.callId, ctx.tenantId);
     res.json(bids);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -6034,6 +7868,11 @@ router5.post("/bids/:callId/open-session", requirePermission("bids.open"), async
 router5.get("/evaluations/:callId", requirePermission("applications.view"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
+    const callRes = await query(`SELECT id FROM calls WHERE id = $1 AND organization_id = $2`, [req.params.callId, ctx.tenantId]);
+    if (!callRes.rows.length) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Tender call not found for your organization." });
+      return;
+    }
     const [criteria, scores, assignment] = await Promise.all([
       evaluationsRepository.getCriteria(req.params.callId),
       evaluationsRepository.listScores(req.params.callId),
@@ -6047,6 +7886,11 @@ router5.get("/evaluations/:callId", requirePermission("applications.view"), asyn
 router5.post("/evaluations/:callId/declare-conflict", async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
+    const callCheck = await query(`SELECT id FROM calls WHERE id = $1 AND organization_id = $2`, [req.params.callId, ctx.tenantId]);
+    if (!callCheck.rows.length) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Tender call not found for your organization." });
+      return;
+    }
     const { hasConflict, details } = req.body;
     await evaluationsRepository.signConflictDeclaration(req.params.callId, ctx.userId, ctx.tenantId, !!hasConflict, details);
     res.json({ success: true, message: "Independence declaration recorded." });
@@ -6057,6 +7901,11 @@ router5.post("/evaluations/:callId/declare-conflict", async (req, res) => {
 router5.post("/evaluations/:callId/score", requirePermission("evaluation.score"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
+    const callCheck = await query(`SELECT id FROM calls WHERE id = $1 AND organization_id = $2`, [req.params.callId, ctx.tenantId]);
+    if (!callCheck.rows.length) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Tender call not found for your organization." });
+      return;
+    }
     const { criterionId, bidId, score, comment } = req.body;
     await evaluationsRepository.submitScore({
       callId: req.params.callId,
@@ -6075,6 +7924,11 @@ router5.post("/evaluations/:callId/score", requirePermission("evaluation.score")
 router5.post("/evaluations/:callId/lock", requirePermission("evaluation.score"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
+    const callCheck = await query(`SELECT id FROM calls WHERE id = $1 AND organization_id = $2`, [req.params.callId, ctx.tenantId]);
+    if (!callCheck.rows.length) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Tender call not found for your organization." });
+      return;
+    }
     const ip = extractClientIp(req);
     await evaluationsRepository.lockScorecard({
       callId: req.params.callId,
@@ -6150,6 +8004,31 @@ router5.get("/contracts", requirePermission("contracts.manage"), async (req, res
     res.json(contracts);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+router5.get("/documents/:id/file", requirePermission("applications.view"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const fileRecord = await documentsRepository.getFileForBuyer(req.params.id, ctx.tenantId);
+    if (!fileRecord) {
+      res.status(404).json({
+        error: "NOT_FOUND",
+        message: "Document file not found or not shared with your organization."
+      });
+      return;
+    }
+    const isDownload = req.query.download === "1" || req.query.download === "true";
+    const dispositionType = isDownload ? "attachment" : "inline";
+    const safeFileName = (fileRecord.fileName || "document").replace(/[\r\n"\\]/g, "_");
+    res.setHeader("Content-Type", fileRecord.mimeType || "application/octet-stream");
+    res.setHeader("Content-Length", String(fileRecord.content.length));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+    res.setHeader("Content-Disposition", `${dispositionType}; filename="${safeFileName}"; filename*=UTF-8''${encodeURIComponent(safeFileName)}`);
+    res.send(fileRecord.content);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
   }
 });
 var buyerRouter = router5;
@@ -6234,6 +8113,9 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
     let apps = [];
     let people = [];
     let consent = [];
+    let pastProjects = [];
+    let teamMembers = [];
+    let pendingInvitations = [];
     let completeness = null;
     if (activeTenant.tenantType === "platform" || activeTenant.tenantId === "platform") {
       profile = {
@@ -6243,18 +8125,23 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
         role: "Super Admin"
       };
     } else if (activeTenant.tenantType === "supplier") {
-      const [profData, docsData, appsData, peopleData, consentData] = await Promise.all([
+      const [profData, docsData, appsData, peopleData, consentData, projectsData, teamData] = await Promise.all([
         suppliersRepository.getById(activeTenant.tenantId).catch(() => null),
         documentsRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
         applicationsRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
         suppliersRepository.listPeople(activeTenant.tenantId).catch(() => []),
-        consentRepository.listBySupplier(activeTenant.tenantId).catch(() => [])
+        consentRepository.listBySupplier(activeTenant.tenantId).catch(() => []),
+        suppliersRepository.listProjects(activeTenant.tenantId).catch(() => []),
+        suppliersRepository.listTeam(activeTenant.tenantId).catch(() => ({ teamMembers: [], pendingInvitations: [] }))
       ]);
       profile = profData;
       docs = docsData || [];
       apps = appsData || [];
       people = peopleData || [];
       consent = consentData || [];
+      pastProjects = projectsData || [];
+      teamMembers = teamData?.teamMembers || [];
+      pendingInvitations = teamData?.pendingInvitations || [];
       if (!profile) {
         const rawRes = await query("SELECT * FROM suppliers WHERE id = $1 LIMIT 1", [activeTenant.tenantId]).catch(() => ({ rows: [] }));
         if (rawRes.rows.length > 0) {
@@ -6291,34 +8178,55 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
         }
       }
       if (profile) {
+        const debarRes = await query(
+          `SELECT id, reason, starts_on AS "startsOn", ends_on AS "endsOn", organization_id AS "organizationId"
+           FROM debarments
+           WHERE supplier_id = $1
+             AND lifted_at IS NULL
+             AND starts_on <= CURRENT_DATE
+             AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [activeTenant.tenantId]
+        ).catch(() => ({ rows: [] }));
         completeness = computeSupplierCompleteness(profile, people, docs);
         profile.profileCompleteness = completeness.score;
         profile.complianceStatus = completeness.complianceStatus;
         profile.missingItems = completeness.missingItems.map((m) => m.label);
+        profile.activeDebarment = debarRes.rows[0] || null;
+        profile.pastProjects = pastProjects;
+        profile.teamMembers = teamMembers;
+        profile.pendingInvitations = pendingInvitations;
       }
     } else if (activeTenant.tenantType === "organization") {
       const orgRes = await query(
-        `SELECT id, name, slug, organization_type AS "organizationType", status, verification_status AS "verificationStatus"
-         FROM organizations WHERE id = $1 LIMIT 1`,
+        `SELECT id, name, slug, organization_type AS "organizationType",
+                status, verification_status AS "verificationStatus",
+                rejection_reason AS "rejectionReason", updated_at AS "updatedAt"
+         FROM organizations
+         WHERE id = $1 AND deleted_at IS NULL
+         LIMIT 1`,
         [activeTenant.tenantId]
       ).catch(() => ({ rows: [] }));
-      profile = orgRes.rows[0] || {
-        id: activeTenant.tenantId,
-        name: activeTenant.tenantName,
-        status: "active"
-      };
+      profile = orgRes.rows[0] || null;
     }
     const fingerprintRaw = [
       activeTenant.tenantId,
       profile?.updated_at || profile?.updatedAt || profile?.created_at || "",
+      profile?.status || "",
+      profile?.verificationStatus || profile?.verification_status || "",
+      profile?.activeDebarment?.id || "",
       completeness?.score ?? profile?.profileCompleteness ?? 0,
       people.length,
       docs.length,
-      apps.length
+      apps.length,
+      pastProjects.length,
+      teamMembers.length
     ].join("|");
     const serverFingerprint = crypto8.createHash("sha256").update(fingerprintRaw).digest("hex");
     res.json({
       activeTenant,
+      profileSummary: req.profileSummary || null,
       memberships: allMemberships,
       resolvedSupplierId: activeTenant.tenantId,
       serverFingerprint,
@@ -6328,6 +8236,9 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
       applications: apps,
       people,
       consent,
+      pastProjects,
+      teamMembers,
+      pendingInvitations,
       user: {
         id: user.id,
         email: user.email,
@@ -6436,6 +8347,1684 @@ router8.get("/bootstrap-trace", requireAuth, async (req, res) => {
 });
 var debugRouter = router8;
 
+// server/routes/admin.routes.ts
+import { Router as Router9 } from "express";
+var router9 = Router9();
+router9.use(requireAuth, requirePlatformAdmin);
+var UUID_REGEX2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function getActorInfo(req) {
+  return {
+    actorUserId: req.user?.id || null,
+    actorName: req.user?.fullName || req.user?.email || "Platform Admin",
+    actorRole: "Super Admin",
+    ipAddress: req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || null,
+    userAgent: req.headers["user-agent"]?.slice(0, 290) || null
+  };
+}
+async function logAdminAudit(req, payload) {
+  try {
+    const actor = getActorInfo(req);
+    await auditRepository.logEvent({
+      ...actor,
+      organizationName: "BidReady360 Platform Administration",
+      action: payload.action,
+      entityType: payload.entityType,
+      entityId: payload.entityId || null,
+      organizationId: payload.organizationId || null,
+      supplierId: payload.supplierId || null,
+      beforeJson: payload.beforeJson,
+      afterJson: payload.afterJson,
+      details: payload.details
+    });
+  } catch (err) {
+    console.warn("[ADMIN AUDIT WARNING]:", err?.message || err);
+  }
+}
+async function hasPeopleGenderColumn() {
+  const res = await query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'supplier_people'
+         AND column_name = 'gender'
+     ) AS exists`
+  );
+  return Boolean(res.rows[0]?.exists);
+}
+router9.get("/overview", async (_req, res) => {
+  try {
+    const [
+      countsRes,
+      pendingOrgsRes,
+      openFlagsRes,
+      recentAuditRes,
+      growthRes,
+      revenueRes
+    ] = await Promise.all([
+      query(`
+        SELECT
+          (SELECT COUNT(*)::int FROM organizations WHERE deleted_at IS NULL AND (status = 'pending' OR verification_status = 'pending_review')) AS "pendingOrgsCount",
+          (SELECT COUNT(*)::int FROM organizations WHERE deleted_at IS NULL AND status = 'active') AS "activeOrgsCount",
+          (SELECT COUNT(*)::int FROM organizations WHERE deleted_at IS NULL AND status = 'suspended') AS "suspendedOrgsCount",
+          (SELECT COUNT(*)::int FROM suppliers WHERE deleted_at IS NULL) AS "totalSuppliersCount",
+          (SELECT COUNT(*)::int FROM suppliers WHERE deleted_at IS NULL AND verification_status IN ('unverified', 'pending')) AS "pendingSuppliersCount",
+          (SELECT COUNT(*)::int FROM suppliers WHERE deleted_at IS NULL AND verification_status = 'verified') AS "verifiedSuppliersCount",
+          (SELECT COUNT(*)::int FROM suppliers WHERE deleted_at IS NULL AND compliance_status = 'Fully compliant') AS "compliantSuppliersCount",
+          (SELECT COUNT(*)::int FROM supplier_people WHERE is_active = TRUE AND kyc_status IN ('not_started', 'pending')) AS "pendingPeopleCount",
+          (SELECT COUNT(*)::int
+             FROM supplier_documents d
+             JOIN supplier_document_versions v ON v.id = d.current_version_id
+            WHERE d.status = 'active' AND UPPER(v.verification_status) = 'PENDING_VERIFICATION') AS "pendingDocumentsCount",
+          (SELECT COUNT(*)::int FROM calls WHERE status IN ('published', 'open', 'evaluating')) AS "activeCallsCount",
+          (SELECT COUNT(*)::int FROM bids WHERE status IN ('submitted', 'opened')) AS "totalBidsCount",
+          (SELECT COUNT(*)::int FROM users WHERE deleted_at IS NULL) AS "totalUsersCount",
+          (SELECT COUNT(*)::int FROM users WHERE deleted_at IS NULL AND locked_until IS NOT NULL AND locked_until > NOW()) AS "lockedUsersCount",
+          (SELECT COUNT(*)::int FROM risk_flags WHERE status IN ('open', 'reviewed')) AS "openRiskFlagsCount",
+          (SELECT COUNT(*)::int FROM debarments WHERE lifted_at IS NULL AND starts_on <= CURRENT_DATE AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)) AS "activeDebarmentsCount",
+          (SELECT COUNT(*)::int FROM message_deliveries WHERE status = 'failed') AS "failedDeliveriesCount",
+          (SELECT COUNT(*)::int FROM platform_invoices WHERE status = 'overdue') AS "overdueInvoicesCount",
+          (SELECT COALESCE(SUM(p.price), 0)::numeric FROM subscriptions sub JOIN plans p ON p.id = sub.plan_id WHERE sub.status = 'active') AS "monthlyMrrBwp"
+      `),
+      query(`
+        SELECT o.id, o.name, o.organization_type AS "type", o.registration_number AS "gazetteRef",
+               o.contact_email AS "email", o.status, o.verification_status AS "verificationStatus",
+               o.created_at AS "createdAt"
+        FROM organizations o
+        WHERE o.deleted_at IS NULL AND (o.status = 'pending' OR o.verification_status = 'pending_review')
+        ORDER BY o.created_at DESC
+        LIMIT 5
+      `),
+      query(`
+        SELECT rf.id, rf.flag_type AS "flagType", rf.severity, rf.status, rf.details,
+               rf.created_at AS "createdAt", s.legal_name AS "supplierName"
+        FROM risk_flags rf
+        JOIN suppliers s ON s.id = rf.supplier_id
+        WHERE rf.status IN ('open', 'reviewed')
+        ORDER BY CASE rf.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, rf.created_at DESC
+        LIMIT 5
+      `),
+      auditRepository.listEvents({ limit: 8 }),
+      query(`
+        SELECT
+          TO_CHAR(m.month_start, 'Mon') AS month,
+          (SELECT COUNT(*)::int FROM suppliers s WHERE s.deleted_at IS NULL AND s.created_at <= m.month_start + INTERVAL '1 month') AS suppliers,
+          (SELECT COUNT(*)::int FROM organizations o WHERE o.deleted_at IS NULL AND o.created_at <= m.month_start + INTERVAL '1 month') AS organizations
+        FROM generate_series(
+          DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months',
+          DATE_TRUNC('month', CURRENT_DATE),
+          INTERVAL '1 month'
+        ) AS m(month_start)
+        ORDER BY m.month_start ASC
+      `),
+      query(`
+        SELECT
+          TO_CHAR(m.month_start, 'Mon') AS month,
+          COALESCE(SUM(CASE WHEN pi.status = 'paid' THEN pi.total ELSE 0 END), 0)::numeric AS paid,
+          COALESCE(SUM(CASE WHEN pi.status IN ('issued', 'overdue') THEN pi.total ELSE 0 END), 0)::numeric AS outstanding,
+          COALESCE(SUM(pi.total), 0)::numeric AS total
+        FROM generate_series(
+          DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '5 months',
+          DATE_TRUNC('month', CURRENT_DATE),
+          INTERVAL '1 month'
+        ) AS m(month_start)
+        LEFT JOIN platform_invoices pi
+          ON DATE_TRUNC('month', COALESCE(pi.issued_at, pi.created_at)) = m.month_start
+        GROUP BY m.month_start
+        ORDER BY m.month_start ASC
+      `)
+    ]);
+    const c = countsRes.rows[0] || {};
+    const totalSuppliers = Number(c.totalSuppliersCount) || 0;
+    const compliantSuppliers = Number(c.compliantSuppliersCount) || 0;
+    const complianceRatePercent = totalSuppliers > 0 ? Math.round(compliantSuppliers / totalSuppliers * 1e3) / 10 : 0;
+    const verificationQueueCount = (Number(c.pendingPeopleCount) || 0) + (Number(c.pendingDocumentsCount) || 0);
+    res.json({
+      kpis: {
+        pendingOrgsCount: Number(c.pendingOrgsCount) || 0,
+        activeOrgsCount: Number(c.activeOrgsCount) || 0,
+        suspendedOrgsCount: Number(c.suspendedOrgsCount) || 0,
+        totalSuppliersCount: totalSuppliers,
+        pendingSuppliersCount: Number(c.pendingSuppliersCount) || 0,
+        verifiedSuppliersCount: Number(c.verifiedSuppliersCount) || 0,
+        pendingPeopleCount: Number(c.pendingPeopleCount) || 0,
+        pendingDocumentsCount: Number(c.pendingDocumentsCount) || 0,
+        verificationQueueCount,
+        activeCallsCount: Number(c.activeCallsCount) || 0,
+        totalBidsCount: Number(c.totalBidsCount) || 0,
+        totalUsersCount: Number(c.totalUsersCount) || 0,
+        lockedUsersCount: Number(c.lockedUsersCount) || 0,
+        openRiskFlagsCount: Number(c.openRiskFlagsCount) || 0,
+        activeDebarmentsCount: Number(c.activeDebarmentsCount) || 0,
+        failedDeliveriesCount: Number(c.failedDeliveriesCount) || 0,
+        overdueInvoicesCount: Number(c.overdueInvoicesCount) || 0,
+        monthlyMrrBwp: Number(c.monthlyMrrBwp) || 0,
+        complianceRatePercent
+      },
+      pendingOrgs: pendingOrgsRes.rows,
+      openRiskFlags: openFlagsRes.rows,
+      recentAuditEvents: recentAuditRes.map((e) => ({
+        ...e,
+        timestamp: e.occurredAt ? new Date(e.occurredAt).toLocaleString("en-BW", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        }) : "\u2014"
+      })),
+      monthlyGrowth: growthRes.rows,
+      monthlyRevenue: revenueRes.rows.map((r) => ({
+        month: r.month,
+        paid: Number(r.paid) || 0,
+        outstanding: Number(r.outstanding) || 0,
+        total: Number(r.total) || 0
+      })),
+      generatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/organizations", async (req, res) => {
+  try {
+    const statusFilter = String(req.query.status || "all").toLowerCase();
+    const search = String(req.query.search || "").trim();
+    const conditions = ["o.deleted_at IS NULL"];
+    const params = [];
+    if (statusFilter === "pending") {
+      conditions.push(`(o.status = 'pending' OR o.verification_status = 'pending_review')`);
+    } else if (statusFilter === "active") {
+      conditions.push(`o.status = 'active'`);
+    } else if (statusFilter === "suspended") {
+      conditions.push(`o.status IN ('suspended', 'closed')`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(o.name ILIKE $${params.length} OR COALESCE(o.registration_number, '') ILIKE $${params.length} OR COALESCE(o.contact_email::text, '') ILIKE $${params.length})`);
+    }
+    const result = await query(
+      `SELECT o.id,
+              o.name,
+              o.slug,
+              o.organization_type AS "organizationType",
+              o.registration_number AS "registrationNumber",
+              o.status,
+              o.verification_status AS "verificationStatus",
+              o.contact_email AS "contactEmail",
+              o.contact_phone AS "contactPhone",
+              o.city,
+              o.district,
+              o.rejection_reason AS "rejectionReason",
+              o.approved_at AS "approvedAt",
+              o.created_at AS "createdAt",
+              COALESCE(mem.members_count, 0)::int AS "membersCount",
+              mem.lead_name AS "contactPerson",
+              COALESCE(mem.lead_email, o.contact_email::text) AS "leadEmail",
+              COALESCE(sub.plan_name, 'Standard') AS "planName"
+       FROM organizations o
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS members_count,
+                (SELECT u2.full_name FROM organization_members om2 JOIN users u2 ON u2.id = om2.user_id WHERE om2.organization_id = o.id ORDER BY om2.is_owner DESC, om2.created_at ASC LIMIT 1) AS lead_name,
+                (SELECT u2.email::text FROM organization_members om2 JOIN users u2 ON u2.id = om2.user_id WHERE om2.organization_id = o.id ORDER BY om2.is_owner DESC, om2.created_at ASC LIMIT 1) AS lead_email
+         FROM organization_members om
+         WHERE om.organization_id = o.id AND om.status = 'active'
+       ) mem ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT p.name AS plan_name
+         FROM subscriptions s
+         JOIN plans p ON p.id = s.plan_id
+         WHERE s.organization_id = o.id AND s.status = 'active'
+         ORDER BY s.created_at DESC
+         LIMIT 1
+       ) sub ON TRUE
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY
+         CASE WHEN o.status = 'pending' OR o.verification_status = 'pending_review' THEN 0
+              WHEN o.status = 'active' THEN 1
+              ELSE 2 END,
+         o.created_at DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/organizations/:id/approve", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid organization ID." });
+    }
+    const beforeRes = await query(
+      `SELECT id, name, status, verification_status FROM organizations WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (!beforeRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Organization not found." });
+    }
+    const before = beforeRes.rows[0];
+    const updatedRes = await query(
+      `UPDATE organizations
+       SET status = 'active',
+           verification_status = 'verified',
+           approved_by_user_id = $2,
+           approved_by = $2,
+           approved_at = NOW(),
+           rejection_reason = NULL,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, name, status, verification_status AS "verificationStatus", approved_at AS "approvedAt", rejection_reason AS "rejectionReason"`,
+      [id, req.user.id]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_APPROVED_ORGANIZATION",
+      entityType: "organization",
+      entityId: id,
+      organizationId: id,
+      beforeJson: { status: before.status, verificationStatus: before.verification_status },
+      afterJson: { status: "active", verificationStatus: "verified" },
+      details: `Approved procuring organization "${before.name}" for live tender operations.`
+    });
+    res.json(updatedRes.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/organizations/:id/reject", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid organization ID." });
+    }
+    const reason = String(req.body?.reason || "").trim().slice(0, 1e3);
+    if (!reason || reason.length < 5) {
+      return res.status(400).json({ error: "REASON_REQUIRED", message: "A rejection reason (at least 5 characters) is required." });
+    }
+    const beforeRes = await query(
+      `SELECT id, name, status, verification_status FROM organizations WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (!beforeRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Organization not found." });
+    }
+    const before = beforeRes.rows[0];
+    const updatedRes = await query(
+      `UPDATE organizations
+       SET status = 'suspended',
+           verification_status = 'rejected',
+           rejection_reason = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, name, status, verification_status AS "verificationStatus", rejection_reason AS "rejectionReason"`,
+      [id, reason]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_REJECTED_ORGANIZATION",
+      entityType: "organization",
+      entityId: id,
+      organizationId: id,
+      beforeJson: { status: before.status, verificationStatus: before.verification_status },
+      afterJson: { status: "suspended", verificationStatus: "rejected", rejectionReason: reason },
+      details: `Rejected organization registration "${before.name}". Reason: ${reason}`
+    });
+    res.json(updatedRes.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/organizations/:id/suspend", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid organization ID." });
+    }
+    const reason = req.body?.reason ? String(req.body.reason).trim().slice(0, 1e3) : "Suspended by platform administrator";
+    const beforeRes = await query(
+      `SELECT id, name, status FROM organizations WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (!beforeRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Organization not found." });
+    }
+    const before = beforeRes.rows[0];
+    const updatedRes = await query(
+      `UPDATE organizations
+       SET status = 'suspended',
+           rejection_reason = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, name, status, verification_status AS "verificationStatus", rejection_reason AS "rejectionReason"`,
+      [id, reason]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_SUSPENDED_ORGANIZATION",
+      entityType: "organization",
+      entityId: id,
+      organizationId: id,
+      beforeJson: { status: before.status },
+      afterJson: { status: "suspended", reason },
+      details: `Suspended procuring organization "${before.name}". Reason: ${reason}`
+    });
+    res.json(updatedRes.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/suppliers", async (req, res) => {
+  try {
+    const search = String(req.query.search || "").trim();
+    const verificationStatus = String(req.query.verificationStatus || "all").toLowerCase();
+    const conditions = ["s.deleted_at IS NULL"];
+    const params = [];
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(s.legal_name ILIKE $${params.length} OR s.cipa_uin ILIKE $${params.length} OR COALESCE(s.burs_tin, '') ILIKE $${params.length} OR COALESCE(s.email::text, '') ILIKE $${params.length})`);
+    }
+    if (verificationStatus !== "all" && ["unverified", "pending", "verified", "rejected"].includes(verificationStatus)) {
+      params.push(verificationStatus);
+      conditions.push(`s.verification_status = $${params.length}`);
+    }
+    const result = await query(
+      `SELECT s.id,
+              s.legal_name AS "legalName",
+              s.trading_name AS "tradingName",
+              s.cipa_uin AS "cipaNumber",
+              s.burs_tin AS "tinNumber",
+              s.ppra_registration_no AS "ppraCode",
+              s.company_type AS "companyType",
+              s.city,
+              gd.name AS "district",
+              s.email,
+              s.primary_phone AS "primaryPhone",
+              COALESCE(s.citizen_owned_percentage, 0)::numeric AS "citizenOwnedPercentage",
+              s.status,
+              s.verification_status AS "verificationStatus",
+              s.compliance_status AS "complianceStatus",
+              s.profile_completeness AS "profileCompleteness",
+              s.verified_at AS "verifiedAt",
+              s.created_at AS "createdAt",
+              COALESCE(doc_stats.total_docs, 0)::int AS "totalDocs",
+              COALESCE(doc_stats.verified_docs, 0)::int AS "verifiedDocs",
+              COALESCE(doc_stats.pending_docs, 0)::int AS "pendingDocs",
+              COALESCE(doc_stats.expired_docs, 0)::int AS "expiredDocs",
+              COALESCE(ppl.total_people, 0)::int AS "peopleCount",
+              COALESCE(ppl.verified_people, 0)::int AS "verifiedPeopleCount",
+              COALESCE(deb.active_debarments, 0)::int AS "activeDebarments"
+       FROM suppliers s
+       LEFT JOIN geographic_districts gd ON gd.id = s.district_id
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS total_docs,
+                COUNT(*) FILTER (WHERE UPPER(v.verification_status) = 'VERIFIED')::int AS verified_docs,
+                COUNT(*) FILTER (WHERE UPPER(v.verification_status) = 'PENDING_VERIFICATION')::int AS pending_docs,
+                COUNT(*) FILTER (WHERE v.expiry_date IS NOT NULL AND v.expiry_date < CURRENT_DATE)::int AS expired_docs
+         FROM supplier_documents d
+         JOIN supplier_document_versions v ON v.id = d.current_version_id
+         WHERE d.supplier_id = s.id AND d.status = 'active'
+       ) doc_stats ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS total_people,
+                COUNT(*) FILTER (WHERE p.kyc_status = 'verified')::int AS verified_people
+         FROM supplier_people p
+         WHERE p.supplier_id = s.id AND p.is_active = TRUE
+       ) ppl ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS active_debarments
+         FROM debarments d
+         WHERE d.supplier_id = s.id
+           AND d.lifted_at IS NULL
+           AND d.starts_on <= CURRENT_DATE
+           AND (d.ends_on IS NULL OR d.ends_on >= CURRENT_DATE)
+       ) deb ON TRUE
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY s.created_at DESC`,
+      params
+    );
+    res.json(result.rows.map((r) => ({
+      ...r,
+      citizenOwnedPercentage: Number(r.citizenOwnedPercentage) || 0
+    })));
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/suppliers/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid supplier ID." });
+    }
+    const encryptionKey = getIdKey();
+    const hasGender = await hasPeopleGenderColumn();
+    const genderSelect = hasGender ? "p.gender," : "NULL::varchar AS gender,";
+    const [supRes, peopleRes, docsRes, debRes] = await Promise.all([
+      query(
+        `SELECT s.id, s.legal_name AS "legalName", s.trading_name AS "tradingName",
+                s.cipa_uin AS "cipaNumber", s.burs_tin AS "tinNumber",
+                s.ppra_registration_no AS "ppraCode", s.company_type AS "companyType",
+                s.physical_address AS "physicalAddress", s.city, gd.name AS "district",
+                s.email, s.primary_phone AS "primaryPhone",
+                COALESCE(s.citizen_owned_percentage, 0)::numeric AS "citizenOwnedPercentage",
+                s.status, s.verification_status AS "verificationStatus",
+                s.compliance_status AS "complianceStatus", s.profile_completeness AS "profileCompleteness",
+                s.verified_at AS "verifiedAt", s.created_at AS "createdAt"
+         FROM suppliers s
+         LEFT JOIN geographic_districts gd ON gd.id = s.district_id
+         WHERE s.id = $1 AND s.deleted_at IS NULL`,
+        [id]
+      ),
+      query(
+        `SELECT p.id, p.full_name AS "fullName", p.person_role AS "personRole",
+                p.ownership_percent AS "ownershipPercent", p.identity_type AS "identityType",
+                ${genderSelect} p.nationality, p.is_citizen AS "isCitizen",
+                p.kyc_status AS "kycStatus", p.kyc_verified_at AS "kycVerifiedAt",
+                p.kyc_reference AS "kycReference",
+                CASE WHEN p.national_identity_number_encrypted IS NOT NULL
+                     THEN pgp_sym_decrypt(p.national_identity_number_encrypted, $2)
+                     ELSE NULL END AS "_rawId"
+         FROM supplier_people p
+         WHERE p.supplier_id = $1 AND p.is_active = TRUE
+         ORDER BY p.created_at ASC`,
+        [id, encryptionKey]
+      ),
+      query(
+        `SELECT d.id AS "documentId", v.id AS "versionId",
+                dt.code AS "documentTypeCode", dt.name AS "documentTypeName",
+                d.title, v.version_no AS "versionNo", v.file_name AS "fileName",
+                v.mime_type AS "mimeType", v.file_size_bytes AS "fileSizeBytes",
+                v.sha256, v.document_number AS "documentNumber",
+                v.issue_date AS "issueDate", v.expiry_date AS "expiryDate",
+                v.verification_status AS "verificationStatus", v.verified_at AS "verifiedAt",
+                v.verification_notes AS "verificationNotes", v.rejection_reason AS "rejectionReason",
+                v.uploaded_at AS "uploadedAt",
+                EXISTS (
+                  SELECT 1 FROM document_files f
+                  WHERE f.document_version_id = v.id AND octet_length(f.content) > 0
+                ) AS "hasFile"
+         FROM supplier_documents d
+         JOIN document_types dt ON dt.id = d.document_type_id
+         JOIN supplier_document_versions v ON v.id = d.current_version_id
+         WHERE d.supplier_id = $1 AND d.status = 'active'
+         ORDER BY dt.sort_order ASC, v.uploaded_at DESC`,
+        [id]
+      ),
+      query(
+        `SELECT deb.id, deb.reason, deb.starts_on AS "startsOn", deb.ends_on AS "endsOn",
+                deb.lifted_at AS "liftedAt", deb.evidence_ref AS "evidenceRef",
+                o.name AS "organizationName"
+         FROM debarments deb
+         LEFT JOIN organizations o ON o.id = deb.organization_id
+         WHERE deb.supplier_id = $1
+         ORDER BY deb.created_at DESC`,
+        [id]
+      )
+    ]);
+    if (!supRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Supplier not found." });
+    }
+    const directors = peopleRes.rows.map((p) => {
+      const rawId = p._rawId || null;
+      const idLast4 = rawId ? rawId.slice(-4) : null;
+      const hasId = Boolean(rawId);
+      let omangValid = null;
+      let omangMessage = null;
+      if ((p.identityType || "OMANG") === "OMANG" && rawId) {
+        const check = validateOmang(rawId, p.gender || void 0);
+        omangValid = check.ok;
+        omangMessage = check.ok ? null : check.message;
+      }
+      const { _rawId, ...safePerson } = p;
+      return {
+        ...safePerson,
+        hasId,
+        idLast4,
+        omangValid,
+        omangMessage
+      };
+    });
+    res.json({
+      supplier: {
+        ...supRes.rows[0],
+        citizenOwnedPercentage: Number(supRes.rows[0].citizenOwnedPercentage) || 0
+      },
+      directors,
+      documents: docsRes.rows,
+      debarments: debRes.rows
+    });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/suppliers/:id/verification", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid supplier ID." });
+    }
+    const verificationStatus = String(req.body?.verificationStatus || "").trim().toLowerCase();
+    if (!["unverified", "pending", "verified", "rejected"].includes(verificationStatus)) {
+      return res.status(400).json({
+        error: "INVALID_STATUS",
+        message: "verificationStatus must be unverified, pending, verified, or rejected."
+      });
+    }
+    const complianceStatusRaw = req.body?.complianceStatus ? String(req.body.complianceStatus).trim() : null;
+    const complianceStatus = complianceStatusRaw && ["Fully compliant", "Action required", "Non-compliant"].includes(complianceStatusRaw) ? complianceStatusRaw : verificationStatus === "verified" ? "Fully compliant" : verificationStatus === "rejected" ? "Non-compliant" : "Action required";
+    const statusRaw = req.body?.status ? String(req.body.status).trim().toLowerCase() : null;
+    const accountStatus = statusRaw && ["draft", "active", "suspended", "closed"].includes(statusRaw) ? statusRaw : null;
+    const notes = req.body?.notes ? String(req.body.notes).trim().slice(0, 500) : null;
+    const existing = await query(
+      `SELECT id, legal_name, verification_status, compliance_status FROM suppliers WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Supplier not found." });
+    }
+    const before = existing.rows[0];
+    const updated = await query(
+      `UPDATE suppliers
+       SET verification_status = $2::varchar,
+           compliance_status = $3::varchar,
+           status = COALESCE($4::varchar, CASE WHEN $2::varchar = 'verified' THEN 'active' ELSE status END),
+           verified_at = CASE WHEN $2::varchar = 'verified' THEN NOW() ELSE NULL END,
+           verified_by_user_id = CASE WHEN $2::varchar = 'verified' THEN $5::uuid ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, legal_name AS "legalName", status,
+                 verification_status AS "verificationStatus",
+                 compliance_status AS "complianceStatus",
+                 verified_at AS "verifiedAt"`,
+      [id, verificationStatus, complianceStatus, accountStatus, req.user.id]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_UPDATED_SUPPLIER_VERIFICATION",
+      entityType: "supplier",
+      entityId: id,
+      supplierId: id,
+      beforeJson: { verificationStatus: before.verification_status, complianceStatus: before.compliance_status },
+      afterJson: { verificationStatus, complianceStatus, notes },
+      details: `Updated supplier "${before.legal_name}" verification to ${verificationStatus} (${complianceStatus})${notes ? `. Notes: ${notes}` : ""}`
+    });
+    res.json(updated.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/verification/queue", async (_req, res) => {
+  try {
+    const encryptionKey = getIdKey();
+    const hasGender = await hasPeopleGenderColumn();
+    const genderSelect = hasGender ? "p.gender," : "NULL::varchar AS gender,";
+    const [peopleRes, docsRes] = await Promise.all([
+      query(
+        `SELECT p.id,
+                p.supplier_id AS "supplierId",
+                s.legal_name AS "supplierName",
+                s.cipa_uin AS "supplierCipa",
+                p.full_name AS "fullName",
+                p.person_role AS "personRole",
+                p.ownership_percent AS "ownershipPercent",
+                p.identity_type AS "identityType",
+                ${genderSelect}
+                p.nationality,
+                p.is_citizen AS "isCitizen",
+                p.kyc_status AS "kycStatus",
+                p.kyc_verified_at AS "kycVerifiedAt",
+                p.kyc_reference AS "kycReference",
+                p.created_at AS "createdAt",
+                p.updated_at AS "updatedAt",
+                CASE WHEN p.national_identity_number_encrypted IS NOT NULL
+                     THEN pgp_sym_decrypt(p.national_identity_number_encrypted, $1)
+                     ELSE NULL END AS "_rawId"
+         FROM supplier_people p
+         JOIN suppliers s ON s.id = p.supplier_id
+         WHERE p.is_active = TRUE
+         ORDER BY
+           CASE p.kyc_status
+             WHEN 'pending' THEN 0
+             WHEN 'not_started' THEN 1
+             WHEN 'failed' THEN 2
+             ELSE 3
+           END,
+           p.updated_at DESC`,
+        [encryptionKey]
+      ),
+      query(
+        `SELECT d.id AS "documentId",
+                v.id AS "versionId",
+                d.supplier_id AS "supplierId",
+                s.legal_name AS "supplierName",
+                s.cipa_uin AS "supplierCipa",
+                dt.code AS "documentTypeCode",
+                dt.name AS "documentTypeName",
+                d.title,
+                v.version_no AS "versionNo",
+                v.file_name AS "fileName",
+                v.mime_type AS "mimeType",
+                v.file_size_bytes AS "fileSizeBytes",
+                v.document_number AS "documentNumber",
+                v.issue_date AS "issueDate",
+                v.expiry_date AS "expiryDate",
+                v.verification_status AS "verificationStatus",
+                v.verified_via AS "verifiedVia",
+                v.verified_at AS "verifiedAt",
+                v.verification_notes AS "verificationNotes",
+                v.rejection_reason AS "rejectionReason",
+                v.extraction_confidence AS "extractionConfidence",
+                v.sha256,
+                v.uploaded_at AS "uploadedAt",
+                EXISTS (
+                  SELECT 1 FROM document_files f
+                  WHERE f.document_version_id = v.id AND octet_length(f.content) > 0
+                ) AS "hasFile"
+         FROM supplier_documents d
+         JOIN document_types dt ON dt.id = d.document_type_id
+         JOIN supplier_document_versions v ON v.id = d.current_version_id
+         JOIN suppliers s ON s.id = d.supplier_id
+         WHERE d.status = 'active'
+         ORDER BY
+           CASE v.verification_status
+             WHEN 'PENDING_VERIFICATION' THEN 0
+             WHEN 'UNVERIFIABLE' THEN 1
+             WHEN 'REJECTED' THEN 2
+             ELSE 3
+           END,
+           v.uploaded_at DESC`
+      )
+    ]);
+    const docsBySupplier = /* @__PURE__ */ new Map();
+    for (const doc of docsRes.rows) {
+      const list = docsBySupplier.get(doc.supplierId) || [];
+      list.push(doc);
+      docsBySupplier.set(doc.supplierId, list);
+    }
+    const people = peopleRes.rows.map((p) => {
+      const rawId = p._rawId || null;
+      const idLast4 = rawId ? rawId.slice(-4) : null;
+      const hasId = Boolean(rawId);
+      let omangValid = null;
+      let omangMessage = null;
+      if ((p.identityType || "OMANG") === "OMANG" && rawId) {
+        const check = validateOmang(rawId, p.gender || void 0);
+        omangValid = check.ok;
+        omangMessage = check.ok ? null : check.message;
+      }
+      const { _rawId, ...safePerson } = p;
+      return {
+        ...safePerson,
+        hasId,
+        idLast4,
+        omangValid,
+        omangMessage,
+        supportingDocuments: (docsBySupplier.get(p.supplierId) || []).map((d) => ({
+          documentId: d.documentId,
+          versionId: d.versionId,
+          documentTypeCode: d.documentTypeCode,
+          documentTypeName: d.documentTypeName,
+          title: d.title,
+          fileName: d.fileName,
+          mimeType: d.mimeType,
+          documentNumber: d.documentNumber,
+          verificationStatus: d.verificationStatus,
+          sha256: d.sha256 || null,
+          hasFile: Boolean(d.hasFile),
+          uploadedAt: d.uploadedAt
+        }))
+      };
+    });
+    res.json({
+      people,
+      documents: docsRes.rows
+    });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/verification/documents/:versionId/file", async (req, res) => {
+  try {
+    const { versionId } = req.params;
+    if (!UUID_REGEX2.test(versionId)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid document version ID." });
+    }
+    const file = await documentsRepository.getFileForAdmin(versionId);
+    if (!file) {
+      return res.status(404).json({
+        error: "NOT_FOUND",
+        message: "No uploaded file bytes found for this document version. Ask the supplier to re-upload the file."
+      });
+    }
+    const isDownload = req.query.download === "1" || req.query.download === "true";
+    const dispositionType = isDownload ? "attachment" : "inline";
+    const safeFileName = (file.fileName || "document").replace(/[\r\n"\\]/g, "_");
+    res.setHeader("Content-Type", file.mimeType || "application/octet-stream");
+    res.setHeader("Content-Length", String(file.content.length));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+    res.setHeader("Content-Disposition", `${dispositionType}; filename="${safeFileName}"; filename*=UTF-8''${encodeURIComponent(safeFileName)}`);
+    res.send(file.content);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/verification/people/:personId", async (req, res) => {
+  try {
+    const { personId } = req.params;
+    if (!UUID_REGEX2.test(personId)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid director ID." });
+    }
+    const rawStatus = String(req.body?.status || "").trim().toLowerCase();
+    if (!["verified", "failed", "pending"].includes(rawStatus)) {
+      return res.status(400).json({ error: "INVALID_STATUS", message: "Status must be verified, failed, or pending." });
+    }
+    const rawNotes = req.body?.notes !== void 0 && req.body?.notes !== null ? String(req.body.notes).trim().slice(0, 100) : null;
+    if (rawStatus === "failed" && !rawNotes) {
+      return res.status(400).json({
+        error: "REASON_REQUIRED",
+        message: "Please provide a reason when rejecting director verification."
+      });
+    }
+    const existing = await query(
+      `SELECT id, supplier_id AS "supplierId", full_name AS "fullName"
+       FROM supplier_people WHERE id = $1 AND is_active = TRUE LIMIT 1`,
+      [personId]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Director record not found." });
+    }
+    const updatedRes = await query(
+      `UPDATE supplier_people
+       SET kyc_status = $2::varchar,
+           kyc_verified_at = CASE WHEN $2::varchar = 'verified' THEN NOW() ELSE NULL END,
+           kyc_reference = $3::varchar,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, supplier_id AS "supplierId", full_name AS "fullName",
+                 kyc_status AS "kycStatus", kyc_verified_at AS "kycVerifiedAt",
+                 kyc_reference AS "kycReference"`,
+      [personId, rawStatus, rawNotes || (rawStatus === "verified" ? `Verified by ${req.user?.fullName || req.user?.email || "Admin"}`.slice(0, 100) : null)]
+    );
+    await logAdminAudit(req, {
+      action: rawStatus === "verified" ? "ADMIN_VERIFIED_DIRECTOR" : rawStatus === "failed" ? "ADMIN_REJECTED_DIRECTOR" : "ADMIN_RESET_DIRECTOR_KYC",
+      entityType: "supplier_person",
+      entityId: personId,
+      supplierId: existing.rows[0].supplierId,
+      details: `Set director ${existing.rows[0].fullName} KYC status to ${rawStatus}${rawNotes ? ` (${rawNotes})` : ""}`
+    });
+    res.json(updatedRes.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/verification/documents/:versionId", async (req, res) => {
+  try {
+    const { versionId } = req.params;
+    if (!UUID_REGEX2.test(versionId)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid document version ID." });
+    }
+    const rawStatus = String(req.body?.status || "").trim().toUpperCase();
+    if (!["VERIFIED", "REJECTED", "UNVERIFIABLE", "PENDING_VERIFICATION"].includes(rawStatus)) {
+      return res.status(400).json({
+        error: "INVALID_STATUS",
+        message: "Status must be VERIFIED, REJECTED, UNVERIFIABLE, or PENDING_VERIFICATION."
+      });
+    }
+    const notes = req.body?.notes !== void 0 && req.body?.notes !== null ? String(req.body.notes).trim().slice(0, 1e3) : null;
+    const rejectionReason = rawStatus === "REJECTED" ? String(req.body?.rejectionReason || req.body?.notes || "").trim().slice(0, 500) : null;
+    if (rawStatus === "REJECTED" && !rejectionReason) {
+      return res.status(400).json({
+        error: "REASON_REQUIRED",
+        message: "Please provide a rejection reason for the supplier."
+      });
+    }
+    const existing = await query(
+      `SELECT v.id AS "versionId", d.id AS "documentId", d.supplier_id AS "supplierId", d.title
+       FROM supplier_document_versions v
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE v.id = $1
+       LIMIT 1`,
+      [versionId]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Document version not found." });
+    }
+    const supplierId = existing.rows[0].supplierId;
+    const updatedRes = await query(
+      `UPDATE supplier_document_versions
+       SET verification_status = $2::varchar,
+           verified_via = 'manual',
+           verified_by_user_id = $3::uuid,
+           verified_at = CASE WHEN $2::varchar = 'VERIFIED' THEN NOW() ELSE NULL END,
+           verification_notes = COALESCE($4::varchar, verification_notes),
+           rejection_reason = $5::varchar
+       WHERE id = $1
+       RETURNING id AS "versionId", verification_status AS "verificationStatus",
+                 verified_via AS "verifiedVia", verified_at AS "verifiedAt",
+                 verification_notes AS "verificationNotes", rejection_reason AS "rejectionReason"`,
+      [versionId, rawStatus, req.user.id, notes, rejectionReason]
+    );
+    try {
+      const docSummaryRes = await query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE UPPER(v.verification_status) = 'VERIFIED')::int AS verified,
+                COUNT(*) FILTER (WHERE UPPER(v.verification_status) = 'REJECTED')::int AS rejected
+         FROM supplier_documents d
+         JOIN supplier_document_versions v ON v.id = d.current_version_id
+         WHERE d.supplier_id = $1 AND d.status = 'active'`,
+        [supplierId]
+      );
+      const summary = docSummaryRes.rows[0];
+      if (summary && summary.total > 0) {
+        if (summary.rejected > 0) {
+          await query(
+            `UPDATE suppliers SET verification_status = 'rejected', compliance_status = 'Action required', updated_at = NOW() WHERE id = $1`,
+            [supplierId]
+          );
+        } else if (summary.verified === summary.total) {
+          await query(
+            `UPDATE suppliers SET verification_status = 'verified', compliance_status = 'Fully compliant', verified_at = NOW(), verified_by_user_id = $2, updated_at = NOW() WHERE id = $1`,
+            [supplierId, req.user.id]
+          );
+        } else {
+          await query(
+            `UPDATE suppliers SET verification_status = 'pending', compliance_status = 'Action required', updated_at = NOW() WHERE id = $1`,
+            [supplierId]
+          );
+        }
+      }
+      await suppliersRepository.calculateCompleteness(supplierId);
+    } catch (syncErr) {
+      console.warn("[ADMIN DOC SYNC WARNING]:", syncErr?.message || syncErr);
+    }
+    await logAdminAudit(req, {
+      action: rawStatus === "VERIFIED" ? "ADMIN_VERIFIED_DOCUMENT" : "ADMIN_UPDATED_DOCUMENT_VERIFICATION",
+      entityType: "supplier_document_version",
+      entityId: versionId,
+      supplierId,
+      details: `Set document "${existing.rows[0].title}" status to ${rawStatus}${rejectionReason ? ` (${rejectionReason})` : ""}`
+    });
+    res.json(updatedRes.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/users", async (req, res) => {
+  try {
+    const search = String(req.query.search || "").trim();
+    const filter = String(req.query.filter || "all").toLowerCase();
+    const conditions = ["u.deleted_at IS NULL"];
+    const params = [];
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(u.full_name ILIKE $${params.length} OR u.email::text ILIKE $${params.length})`);
+    }
+    if (filter === "locked") {
+      conditions.push(`u.locked_until IS NOT NULL AND u.locked_until > NOW()`);
+    } else if (filter === "admins") {
+      conditions.push(`u.is_platform_admin = TRUE`);
+    } else if (filter === "suspended") {
+      conditions.push(`u.status = 'suspended'`);
+    }
+    const result = await query(
+      `SELECT u.id,
+              u.full_name AS "fullName",
+              u.email::text AS email,
+              u.phone,
+              u.status,
+              u.is_platform_admin AS "isPlatformAdmin",
+              u.email_verified_at AS "emailVerifiedAt",
+              u.mfa_enabled AS "mfaEnabled",
+              u.mfa_type AS "mfaType",
+              u.last_login_at AS "lastLoginAt",
+              u.failed_login_attempts AS "failedLoginAttempts",
+              u.locked_until AS "lockedUntil",
+              (u.locked_until IS NOT NULL AND u.locked_until > NOW()) AS "isLocked",
+              u.created_at AS "createdAt",
+              COALESCE(sess.active_sessions, 0)::int AS "activeSessionsCount",
+              COALESCE(org_m.org_name, sup_m.sup_name, CASE WHEN u.is_platform_admin THEN 'Platform Administration' ELSE 'Unassigned' END) AS "tenantName",
+              CASE
+                WHEN u.is_platform_admin THEN 'Super Admin'
+                WHEN org_m.role_name IS NOT NULL THEN org_m.role_name
+                WHEN sup_m.role_name IS NOT NULL THEN sup_m.role_name
+                ELSE 'User'
+              END AS "roleLabel",
+              CASE
+                WHEN u.is_platform_admin THEN 'platform'
+                WHEN org_m.org_name IS NOT NULL THEN 'organization'
+                WHEN sup_m.sup_name IS NOT NULL THEN 'supplier'
+                ELSE 'none'
+              END AS "tenantType"
+       FROM users u
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS active_sessions
+         FROM sessions s
+         WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at > NOW()
+       ) sess ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT o.name AS org_name, r.name AS role_name
+         FROM organization_members om
+         JOIN organizations o ON o.id = om.organization_id
+         JOIN roles r ON r.id = om.role_id
+         WHERE om.user_id = u.id AND om.status = 'active'
+         ORDER BY om.is_owner DESC, om.created_at ASC
+         LIMIT 1
+       ) org_m ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT s.legal_name AS sup_name, r.name AS role_name
+         FROM supplier_members sm
+         JOIN suppliers s ON s.id = sm.supplier_id
+         JOIN roles r ON r.id = sm.role_id
+         WHERE sm.user_id = u.id AND sm.status = 'active'
+         ORDER BY sm.is_owner DESC, sm.created_at ASC
+         LIMIT 1
+       ) sup_m ON TRUE
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY (u.locked_until IS NOT NULL AND u.locked_until > NOW()) DESC, u.is_platform_admin DESC, u.created_at DESC
+       LIMIT 200`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/users/:id/unlock", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid user ID." });
+    }
+    const updated = await query(
+      `UPDATE users
+       SET failed_login_attempts = 0,
+           locked_until = NULL,
+           updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING id, full_name AS "fullName", email::text AS email, status,
+                 failed_login_attempts AS "failedLoginAttempts", locked_until AS "lockedUntil"`,
+      [id]
+    );
+    if (!updated.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "User not found." });
+    }
+    await query(
+      `DELETE FROM login_attempts
+       WHERE LOWER(email_norm) = LOWER($1)
+         AND succeeded = FALSE
+         AND attempted_at > NOW() - INTERVAL '15 minutes'`,
+      [updated.rows[0].email]
+    ).catch(() => {
+    });
+    await logAdminAudit(req, {
+      action: "ADMIN_UNLOCKED_USER",
+      entityType: "user",
+      entityId: id,
+      details: `Unlocked locked user account ${updated.rows[0].email} and cleared failed login attempts.`
+    });
+    res.json({ ...updated.rows[0], isLocked: false });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/users/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid user ID." });
+    }
+    const status = String(req.body?.status || "").trim().toLowerCase();
+    if (!["active", "suspended"].includes(status)) {
+      return res.status(400).json({ error: "INVALID_STATUS", message: "Status must be active or suspended." });
+    }
+    if (id === req.user.id && status === "suspended") {
+      return res.status(400).json({ error: "SELF_SUSPEND_BLOCKED", message: "You cannot suspend your own administrator account." });
+    }
+    const updated = await query(
+      `UPDATE users
+       SET status = $2,
+           updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING id, full_name AS "fullName", email::text AS email, status`,
+      [id, status]
+    );
+    if (!updated.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "User not found." });
+    }
+    let revokedCount = 0;
+    if (status === "suspended") {
+      const rev = await query(
+        `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL RETURNING id`,
+        [id]
+      );
+      revokedCount = rev.rows.length;
+    }
+    await logAdminAudit(req, {
+      action: status === "suspended" ? "ADMIN_SUSPENDED_USER" : "ADMIN_ACTIVATED_USER",
+      entityType: "user",
+      entityId: id,
+      details: `${status === "suspended" ? "Suspended" : "Activated"} user account ${updated.rows[0].email}${revokedCount > 0 ? ` and revoked ${revokedCount} active session(s)` : ""}.`
+    });
+    res.json({ ...updated.rows[0], revokedSessions: revokedCount });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/users/:id/revoke-sessions", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid user ID." });
+    }
+    const userRes = await query(
+      `SELECT id, email::text AS email FROM users WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
+    if (!userRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "User not found." });
+    }
+    const revRes = await query(
+      `UPDATE sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL RETURNING id`,
+      [id]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_REVOKED_USER_SESSIONS",
+      entityType: "user",
+      entityId: id,
+      details: `Revoked ${revRes.rows.length} active session(s) for user ${userRes.rows[0].email}.`
+    });
+    res.json({ userId: id, revokedCount: revRes.rows.length });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/risk", async (_req, res) => {
+  try {
+    const [flagsRes, debarmentsRes] = await Promise.all([
+      query(
+        `SELECT rf.id,
+                rf.supplier_id AS "supplierId",
+                s.legal_name AS "supplierName",
+                s.cipa_uin AS "supplierCipa",
+                rf.call_id AS "callId",
+                c.reference_no AS "callRef",
+                o.name AS "organizationName",
+                rf.flag_type AS "flagType",
+                rf.severity,
+                rf.details,
+                rf.status,
+                rf.reviewed_at AS "reviewedAt",
+                u.full_name AS "reviewedByName",
+                rf.created_at AS "createdAt"
+         FROM risk_flags rf
+         JOIN suppliers s ON s.id = rf.supplier_id
+         LEFT JOIN calls c ON c.id = rf.call_id
+         LEFT JOIN organizations o ON o.id = c.organization_id
+         LEFT JOIN users u ON u.id = rf.reviewed_by_user_id
+         ORDER BY CASE rf.status WHEN 'open' THEN 0 WHEN 'reviewed' THEN 1 ELSE 2 END,
+                  CASE rf.severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                  rf.created_at DESC`
+      ),
+      query(
+        `SELECT d.id,
+                d.supplier_id AS "supplierId",
+                s.legal_name AS "entityName",
+                s.cipa_uin AS "cipaNumber",
+                d.organization_id AS "organizationId",
+                COALESCE(o.name, 'Platform-wide (All Procuring Entities)') AS "scope",
+                d.reason,
+                d.starts_on AS "startsOn",
+                d.ends_on AS "endsOn",
+                d.evidence_ref AS "evidenceRef",
+                d.lifted_at AS "liftedAt",
+                (d.lifted_at IS NULL AND d.starts_on <= CURRENT_DATE AND (d.ends_on IS NULL OR d.ends_on >= CURRENT_DATE)) AS "isActive",
+                u.full_name AS "issuedBy",
+                d.created_at AS "createdAt"
+         FROM debarments d
+         JOIN suppliers s ON s.id = d.supplier_id
+         LEFT JOIN organizations o ON o.id = d.organization_id
+         LEFT JOIN users u ON u.id = d.created_by_user_id
+         ORDER BY (d.lifted_at IS NULL) DESC, d.created_at DESC`
+      )
+    ]);
+    res.json({
+      flags: flagsRes.rows,
+      debarments: debarmentsRes.rows
+    });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/risk/flags", async (req, res) => {
+  try {
+    const { supplierId, flagType, severity, description, callId } = req.body || {};
+    if (!supplierId || !UUID_REGEX2.test(supplierId)) {
+      return res.status(400).json({ error: "INVALID_SUPPLIER", message: "Valid supplierId is required." });
+    }
+    const allowedFlagTypes = ["shared_director", "shared_address", "shared_phone", "duplicate_document", "price_pattern", "other"];
+    const normFlagType = allowedFlagTypes.includes(String(flagType || "").toLowerCase()) ? String(flagType).toLowerCase() : "other";
+    const normSeverity = ["low", "medium", "high"].includes(String(severity || "").toLowerCase()) ? String(severity).toLowerCase() : "medium";
+    const desc = String(description || "").trim().slice(0, 1e3);
+    if (!desc) {
+      return res.status(400).json({ error: "DESCRIPTION_REQUIRED", message: "Flag description is required." });
+    }
+    const safeCallId = callId && UUID_REGEX2.test(callId) ? callId : null;
+    const supRes = await query(`SELECT legal_name FROM suppliers WHERE id = $1 AND deleted_at IS NULL`, [supplierId]);
+    if (!supRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Supplier not found." });
+    }
+    const ins = await query(
+      `INSERT INTO risk_flags (supplier_id, call_id, flag_type, severity, details, status)
+       VALUES ($1, $2, $3, $4, $5::jsonb, 'open')
+       RETURNING id, supplier_id AS "supplierId", flag_type AS "flagType", severity, details, status, created_at AS "createdAt"`,
+      [supplierId, safeCallId, normFlagType, normSeverity, JSON.stringify({ description: desc })]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_CREATED_RISK_FLAG",
+      entityType: "risk_flag",
+      entityId: ins.rows[0].id,
+      supplierId,
+      details: `Flagged supplier "${supRes.rows[0].legal_name}" (${normSeverity} ${normFlagType}): ${desc}`
+    });
+    res.status(201).json(ins.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/risk/flags/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid risk flag ID." });
+    }
+    const status = String(req.body?.status || "").trim().toLowerCase();
+    if (!["open", "reviewed", "dismissed", "resolved"].includes(status)) {
+      return res.status(400).json({ error: "INVALID_STATUS", message: "Status must be open, reviewed, dismissed, or resolved." });
+    }
+    const updated = await query(
+      `UPDATE risk_flags
+       SET status = $2,
+           reviewed_by_user_id = $3,
+           reviewed_at = NOW()
+       WHERE id = $1
+       RETURNING id, supplier_id AS "supplierId", flag_type AS "flagType", severity, status, reviewed_at AS "reviewedAt"`,
+      [id, status, req.user.id]
+    );
+    if (!updated.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Risk flag not found." });
+    }
+    await logAdminAudit(req, {
+      action: "ADMIN_UPDATED_RISK_FLAG",
+      entityType: "risk_flag",
+      entityId: id,
+      supplierId: updated.rows[0].supplierId,
+      details: `Updated risk flag (${updated.rows[0].flagType}) status to ${status}.`
+    });
+    res.json(updated.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/debarments", async (req, res) => {
+  try {
+    const { supplierId, organizationId, reason, startsOn, endsOn, evidenceRef } = req.body || {};
+    if (!supplierId || !UUID_REGEX2.test(supplierId)) {
+      return res.status(400).json({ error: "INVALID_SUPPLIER", message: "Valid supplierId is required." });
+    }
+    const cleanReason = String(reason || "").trim().slice(0, 1e3);
+    if (!cleanReason || cleanReason.length < 5) {
+      return res.status(400).json({ error: "REASON_REQUIRED", message: "Debarment reason (at least 5 characters) is required." });
+    }
+    const safeOrgId = organizationId && UUID_REGEX2.test(organizationId) ? organizationId : null;
+    const effectiveStart = startsOn && /^\d{4}-\d{2}-\d{2}$/.test(String(startsOn)) ? String(startsOn) : (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const effectiveEnd = endsOn && /^\d{4}-\d{2}-\d{2}$/.test(String(endsOn)) ? String(endsOn) : null;
+    const cleanEvidence = evidenceRef ? String(evidenceRef).trim().slice(0, 255) : null;
+    const supRes = await query(`SELECT legal_name FROM suppliers WHERE id = $1 AND deleted_at IS NULL`, [supplierId]);
+    if (!supRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Supplier not found." });
+    }
+    const ins = await query(
+      `INSERT INTO debarments (organization_id, supplier_id, reason, starts_on, ends_on, evidence_ref, created_by_user_id)
+       VALUES ($1, $2, $3, $4::date, $5::date, $6, $7)
+       RETURNING id, organization_id AS "organizationId", supplier_id AS "supplierId",
+                 reason, starts_on AS "startsOn", ends_on AS "endsOn",
+                 evidence_ref AS "evidenceRef", lifted_at AS "liftedAt", created_at AS "createdAt"`,
+      [safeOrgId, supplierId, cleanReason, effectiveStart, effectiveEnd, cleanEvidence, req.user.id]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_APPLIED_DEBARMENT",
+      entityType: "debarment",
+      entityId: ins.rows[0].id,
+      supplierId,
+      organizationId: safeOrgId,
+      details: `Applied ${effectiveEnd ? `temporary debarment (${effectiveStart} to ${effectiveEnd})` : `permanent debarment (from ${effectiveStart})`} on "${supRes.rows[0].legal_name}". Reason: ${cleanReason}`
+    });
+    res.status(201).json(ins.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/debarments/:id/lift", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid debarment ID." });
+    }
+    const liftReason = req.body?.reason ? String(req.body.reason).trim().slice(0, 500) : "Debarment lifted by platform administrator";
+    const existing = await query(
+      `SELECT d.id, d.supplier_id AS "supplierId", s.legal_name AS "legalName"
+       FROM debarments d
+       JOIN suppliers s ON s.id = d.supplier_id
+       WHERE d.id = $1`,
+      [id]
+    );
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Debarment record not found." });
+    }
+    const updated = await query(
+      `UPDATE debarments
+       SET lifted_at = NOW()
+       WHERE id = $1
+       RETURNING id, supplier_id AS "supplierId", lifted_at AS "liftedAt"`,
+      [id]
+    );
+    await logAdminAudit(req, {
+      action: "ADMIN_LIFTED_DEBARMENT",
+      entityType: "debarment",
+      entityId: id,
+      supplierId: existing.rows[0].supplierId,
+      details: `Lifted debarment order for supplier "${existing.rows[0].legalName}". Note: ${liftReason}`
+    });
+    res.json(updated.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/catalogues", async (_req, res) => {
+  try {
+    const [categories, documentTypes] = await Promise.all([
+      referenceRepository.listAllCategoriesAdmin(),
+      referenceRepository.listAllDocumentTypesAdmin()
+    ]);
+    res.json({ categories, documentTypes });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/catalogues/categories", async (req, res) => {
+  try {
+    const { code, name, description, parentId, level, sortOrder } = req.body || {};
+    if (!code || !String(code).trim() || !name || !String(name).trim()) {
+      return res.status(400).json({ error: "INVALID_INPUT", message: "Category code and name are required." });
+    }
+    if (parentId && !UUID_REGEX2.test(parentId)) {
+      return res.status(400).json({ error: "INVALID_PARENT", message: "Invalid parentId." });
+    }
+    const created = await referenceRepository.createCategory({ code, name, description, parentId, level, sortOrder });
+    await logAdminAudit(req, {
+      action: "ADMIN_CREATED_CATEGORY",
+      entityType: "category",
+      entityId: created.id,
+      details: `Created procurement category ${created.code} \u2014 ${created.name}.`
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.put("/catalogues/categories/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid category ID." });
+    }
+    const updated = await referenceRepository.updateCategory(id, req.body || {});
+    if (!updated) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Category not found." });
+    }
+    await logAdminAudit(req, {
+      action: "ADMIN_UPDATED_CATEGORY",
+      entityType: "category",
+      entityId: id,
+      details: `Updated procurement category ${updated.code} \u2014 ${updated.name} (active: ${updated.isActive}).`
+    });
+    res.json(updated);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/catalogues/document-types", async (req, res) => {
+  try {
+    const { code, name, description, issuingAuthority, requiresExpiry, requiresNumber, defaultValidityDays, verificationMethod, isMandatoryDefault, sortOrder } = req.body || {};
+    if (!code || !String(code).trim() || !name || !String(name).trim()) {
+      return res.status(400).json({ error: "INVALID_INPUT", message: "Document type code and name are required." });
+    }
+    const created = await referenceRepository.createDocumentType({
+      code,
+      name,
+      description,
+      issuingAuthority,
+      requiresExpiry,
+      requiresNumber,
+      defaultValidityDays: defaultValidityDays ? Number(defaultValidityDays) : null,
+      verificationMethod,
+      isMandatoryDefault,
+      sortOrder
+    });
+    await logAdminAudit(req, {
+      action: "ADMIN_CREATED_DOCUMENT_TYPE",
+      entityType: "document_type",
+      entityId: created.id,
+      details: `Created compliance document type ${created.code} \u2014 ${created.name}.`
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.put("/catalogues/document-types/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid document type ID." });
+    }
+    const updated = await referenceRepository.updateDocumentType(id, req.body || {});
+    if (!updated) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Document type not found." });
+    }
+    await logAdminAudit(req, {
+      action: "ADMIN_UPDATED_DOCUMENT_TYPE",
+      entityType: "document_type",
+      entityId: id,
+      details: `Updated compliance document type ${updated.code} \u2014 ${updated.name} (active: ${updated.isActive}).`
+    });
+    res.json(updated);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/billing", async (_req, res) => {
+  try {
+    const [plansRes, invoicesRes] = await Promise.all([
+      query(
+        `SELECT p.id, p.code, p.name, p.audience, p.price, p.currency,
+                p.billing_interval AS "billingInterval", p.max_users AS "maxUsers",
+                p.max_calls_per_year AS "maxCallsPerYear", p.features, p.sort_order AS "sortOrder",
+                COUNT(sub.id) FILTER (WHERE sub.status = 'active')::int AS "subscribersCount"
+         FROM plans p
+         LEFT JOIN subscriptions sub ON sub.plan_id = p.id
+         WHERE p.is_active = TRUE
+         GROUP BY p.id
+         ORDER BY p.sort_order ASC, p.name ASC`
+      ),
+      query(
+        `SELECT pi.id,
+                pi.invoice_no AS "invoiceNumber",
+                COALESCE(o.name, s.legal_name, 'Tenant') AS "orgName",
+                pi.total::numeric AS "amountBWP",
+                pi.currency,
+                pi.status,
+                pi.issued_at AS "issuedAt",
+                pi.due_at AS "dueDate",
+                pi.paid_at AS "paidAt",
+                pi.created_at AS "createdAt"
+         FROM platform_invoices pi
+         LEFT JOIN organizations o ON o.id = pi.organization_id
+         LEFT JOIN suppliers s ON s.id = pi.supplier_id
+         ORDER BY pi.created_at DESC
+         LIMIT 100`
+      )
+    ]);
+    res.json({
+      plans: plansRes.rows.map((p) => ({ ...p, price: Number(p.price) || 0 })),
+      invoices: invoicesRes.rows.map((i) => ({ ...i, amountBWP: Number(i.amountBWP) || 0 }))
+    });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.put("/billing/plans/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid plan ID." });
+    }
+    const { price, maxCallsPerYear, description, reason } = req.body || {};
+    const numPrice = price !== void 0 ? Number(price) : void 0;
+    if (numPrice !== void 0 && (isNaN(numPrice) || numPrice < 0)) {
+      return res.status(400).json({ error: "INVALID_PRICE", message: "Price must be a non-negative number." });
+    }
+    const updated = await referenceRepository.updatePlan(id, {
+      price: numPrice,
+      maxCallsPerYear: maxCallsPerYear !== void 0 ? maxCallsPerYear === null ? null : Number(maxCallsPerYear) : void 0,
+      features: description !== void 0 ? { description: String(description).trim() } : void 0
+    });
+    if (!updated) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Plan not found." });
+    }
+    await logAdminAudit(req, {
+      action: "ADMIN_UPDATED_PLAN_PRICING",
+      entityType: "plan",
+      entityId: id,
+      details: `Updated plan "${updated.name}" rate to ${updated.currency} ${Number(updated.price).toLocaleString()}${reason ? ` (${String(reason).trim()})` : ""}.`
+    });
+    res.json(updated);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/notifications", async (_req, res) => {
+  try {
+    const resRows = await query(
+      `SELECT id,
+              channel,
+              recipient,
+              COALESCE(template_code, 'System notification') AS "templateCode",
+              status,
+              error_message AS "errorMessage",
+              retry_count AS "retryCount",
+              COALESCE(sent_at, queued_at) AS "sentAt"
+       FROM message_deliveries
+       ORDER BY queued_at DESC
+       LIMIT 100`
+    );
+    res.json(resRows.rows);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/notifications/:id/retry", async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_REGEX2.test(id)) {
+      return res.status(400).json({ error: "INVALID_ID", message: "Invalid delivery ID." });
+    }
+    const updated = await query(
+      `UPDATE message_deliveries
+       SET status = 'queued',
+           retry_count = retry_count + 1,
+           error_message = NULL,
+           sent_at = NOW()
+       WHERE id = $1
+       RETURNING id, channel, recipient, COALESCE(template_code, 'System notification') AS "templateCode",
+                 status, retry_count AS "retryCount", sent_at AS "sentAt"`,
+      [id]
+    );
+    if (!updated.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Delivery record not found." });
+    }
+    await logAdminAudit(req, {
+      action: "ADMIN_RETRIED_NOTIFICATION",
+      entityType: "message_delivery",
+      entityId: id,
+      details: `Queued retry #${updated.rows[0].retryCount} for ${updated.rows[0].channel} delivery to ${updated.rows[0].recipient}.`
+    });
+    res.json(updated.rows[0]);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/audit-log", async (req, res) => {
+  try {
+    const events = await auditRepository.listEvents({
+      entityType: req.query.entityType ? String(req.query.entityType) : void 0,
+      actor: req.query.actor ? String(req.query.actor) : void 0,
+      action: req.query.action ? String(req.query.action) : void 0,
+      search: req.query.search ? String(req.query.search) : void 0,
+      fromDate: req.query.fromDate ? String(req.query.fromDate) : void 0,
+      toDate: req.query.toDate ? String(req.query.toDate) : void 0,
+      limit: req.query.limit ? Number(req.query.limit) : 150
+    });
+    res.json(
+      events.map((e) => ({
+        ...e,
+        timestamp: e.occurredAt ? new Date(e.occurredAt).toLocaleString("en-BW", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        }) : "\u2014"
+      }))
+    );
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.post("/support/sessions", async (req, res) => {
+  try {
+    const { targetType, targetId, targetName, ticketRef, justification } = req.body || {};
+    const cleanTicket = String(ticketRef || "").trim().slice(0, 100);
+    const cleanJustification = String(justification || "").trim().slice(0, 500);
+    const cleanTargetName = String(targetName || "").trim().slice(0, 200);
+    if (!cleanTicket || cleanJustification.length < 10 || !cleanTargetName) {
+      return res.status(400).json({
+        error: "INVALID_INPUT",
+        message: "Ticket reference, target entity, and justification (min 10 chars) are required."
+      });
+    }
+    const entityType = targetType === "Supplier" ? "supplier" : "organization";
+    const safeTargetId = targetId && UUID_REGEX2.test(targetId) ? targetId : null;
+    await logAdminAudit(req, {
+      action: "ADMIN_SUPPORT_SESSION_STARTED",
+      entityType,
+      entityId: safeTargetId,
+      organizationId: entityType === "organization" ? safeTargetId : null,
+      supplierId: entityType === "supplier" ? safeTargetId : null,
+      details: `Support diagnostic session authorized for ${cleanTargetName} (${cleanTicket}): ${cleanJustification}`
+    });
+    res.status(201).json({ ok: true, targetName: cleanTargetName, ticketRef: cleanTicket });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.get("/settings", async (_req, res) => {
+  try {
+    const rows = await query(
+      `SELECT config_key AS "configKey", config_value AS "configValue"
+       FROM platform_financial_configs
+       WHERE config_key IN ('cipa_gateway_url', 'burs_gateway_url', 'statutory_retention_years')
+       ORDER BY created_at DESC`
+    );
+    const map = /* @__PURE__ */ new Map();
+    for (const r of rows.rows) {
+      if (!map.has(r.configKey)) {
+        map.set(r.configKey, r.configValue);
+      }
+    }
+    res.json({
+      cipaEndpoint: map.get("cipa_gateway_url")?.url || "https://api.cipa.gov.bw/v2/registry",
+      bursEndpoint: map.get("burs_gateway_url")?.url || "https://etax.burs.org.bw/gateway/api",
+      retentionYears: String(map.get("statutory_retention_years")?.years || "7")
+    });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router9.put("/settings", async (req, res) => {
+  try {
+    const cipaEndpoint = String(req.body?.cipaEndpoint || "").trim().slice(0, 300);
+    const bursEndpoint = String(req.body?.bursEndpoint || "").trim().slice(0, 300);
+    const retentionYears = String(req.body?.retentionYears || "7").trim();
+    if (!["7", "10", "15"].includes(retentionYears)) {
+      return res.status(400).json({ error: "INVALID_RETENTION", message: "Retention period must be 7, 10, or 15 years." });
+    }
+    for (const [label, val] of [["CIPA endpoint", cipaEndpoint], ["BURS endpoint", bursEndpoint]]) {
+      try {
+        const parsed = new URL(val);
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+          return res.status(400).json({ error: "INVALID_URL", message: `${label} must be a valid HTTP(S) URL.` });
+        }
+      } catch {
+        return res.status(400).json({ error: "INVALID_URL", message: `${label} must be a valid URL.` });
+      }
+    }
+    const entries = [
+      ["cipa_gateway_url", { url: cipaEndpoint }, "CIPA Companies Registry Gateway URL"],
+      ["burs_gateway_url", { url: bursEndpoint }, "BURS e-Tax Verification Gateway URL"],
+      ["statutory_retention_years", { years: Number(retentionYears) }, "Statutory tender dossier retention period (years)"]
+    ];
+    for (const [key, val, desc] of entries) {
+      const existing = await query(
+        `SELECT id FROM platform_financial_configs WHERE config_key = $1 ORDER BY created_at DESC LIMIT 1`,
+        [key]
+      );
+      if (existing.rows.length) {
+        await query(
+          `UPDATE platform_financial_configs SET config_value = $2::jsonb, description = $3 WHERE id = $1`,
+          [existing.rows[0].id, JSON.stringify(val), desc]
+        );
+      } else {
+        await query(
+          `INSERT INTO platform_financial_configs (config_key, config_value, description, effective_from)
+           VALUES ($1, $2::jsonb, $3, CURRENT_DATE)`,
+          [key, JSON.stringify(val), desc]
+        );
+      }
+    }
+    await logAdminAudit(req, {
+      action: "ADMIN_UPDATED_PLATFORM_SETTINGS",
+      entityType: "platform_config",
+      details: `Updated platform settings: retention=${retentionYears}y, CIPA=${cipaEndpoint}, BURS=${bursEndpoint}.`
+    });
+    res.json({ cipaEndpoint, bursEndpoint, retentionYears });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
 // server/app.ts
 var app = express();
 app.set("etag", false);
@@ -6461,7 +10050,7 @@ app.use("/api", (req, res, next) => {
   next();
 });
 app.use((req, res, next) => {
-  const unprefixedApi = req.path.startsWith("/reference") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/calls") || req.path.startsWith("/buyer") || req.path.startsWith("/audit") || req.path.startsWith("/bootstrap") || req.path.startsWith("/debug");
+  const unprefixedApi = req.path.startsWith("/reference") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/calls") || req.path.startsWith("/buyer") || req.path.startsWith("/audit") || req.path.startsWith("/bootstrap") || req.path.startsWith("/debug") || req.path.startsWith("/admin");
   if (unprefixedApi) {
     const s = secretsGuardStatus();
     if (!s.ok) {
@@ -6487,7 +10076,7 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Origin, Accept");
-  if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/bootstrap") || req.path.startsWith("/buyer") || req.path.startsWith("/reference") || req.path.startsWith("/calls") || req.path.startsWith("/audit")) {
+  if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/bootstrap") || req.path.startsWith("/buyer") || req.path.startsWith("/reference") || req.path.startsWith("/calls") || req.path.startsWith("/audit") || req.path.startsWith("/admin")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
@@ -6501,6 +10090,8 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
+app.use("/api", generalApiRateLimiter);
+app.use(["/reference", "/auth", "/supplier", "/calls", "/buyer", "/audit", "/bootstrap", "/debug", "/admin"], generalApiRateLimiter);
 app.use(csrfProtection);
 app.use(authenticate);
 app.get(["/api/health", "/health"], async (_req, res) => {
@@ -6565,21 +10156,23 @@ app.get(["/api/health", "/health"], async (_req, res) => {
   }
 });
 app.use("/api/reference", referenceRouter);
-app.use("/api/auth", authRouter);
+app.use("/api/auth", authEndpointRateLimiter, authRouter);
 app.use("/api/supplier", supplierRouter);
 app.use("/api/calls", callsRouter);
 app.use("/api/buyer", buyerRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/bootstrap", bootstrapRouter);
 app.use("/api/debug", debugRouter);
+app.use("/api/admin", router9);
 app.use("/reference", referenceRouter);
-app.use("/auth", authRouter);
+app.use("/auth", authEndpointRateLimiter, authRouter);
 app.use("/supplier", supplierRouter);
 app.use("/calls", callsRouter);
 app.use("/buyer", buyerRouter);
 app.use("/audit", auditRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/debug", debugRouter);
+app.use("/admin", router9);
 app.use((err, _req, res, _next) => {
   console.error("[EXPRESS UNHANDLED ERROR]:", err);
   if (err instanceof ConfigSecretError || err?.code === "CONFIG_SECRET") {

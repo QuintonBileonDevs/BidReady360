@@ -20,14 +20,6 @@ import {
   AwardDecision,
 } from '../types';
 import { ApiUser, ProfileSummary, authApi, callsApi, supplierApi, buyerApi } from '../services/api';
-import {
-  DEMO_SUPPLIER,
-  DEMO_DOCUMENTS,
-  DEMO_APPLICATIONS,
-  DEMO_CONSENT_GRANTS,
-  DEMO_PAST_PROJECTS,
-  DEMO_TEAM_MEMBERS,
-} from '../data/demoSupplierData';
 import { Language, TRANSLATIONS } from '../translations';
 import { calculateSupplierCompleteness, SupplierCompletenessResult } from '../utils/supplierOnboarding';
 
@@ -67,7 +59,7 @@ const EMPTY_SUPPLIER: Supplier = {
   documents: [],
   pastProjects: [],
   teamMembers: [],
-  isDemoAccount: false,
+  pendingInvitations: [],
   emailVerified: false,
   detailsSaved: false,
 };
@@ -170,6 +162,7 @@ interface AppContextType {
   
   // Buyer Verification State
   buyerOrgStatus: 'Pending' | 'Approved' | 'Rejected';
+  buyerOrgRejectionReason: string | null;
   registeredBuyerOrgName: string | null;
   registeredBuyerEmail: string | null;
   registerBuyerOrganization: (data: { orgName: string; email: string; orgType?: string; regNumber?: string; jobTitle?: string; phone?: string }) => void;
@@ -232,10 +225,7 @@ interface AppContextType {
   markNotificationRead: (id: string) => void;
   addAuditEvent: (event: Omit<AuditEvent, 'id' | 'timestamp'>) => void;
 
-  // Demo & Onboarding
-  loadDemoSupplier: () => void;
-  resetDemoData: () => void;
-  autoCompleteProfile: () => void;
+  // Completeness & Onboarding
   completenessResult: SupplierCompletenessResult;
 }
 
@@ -443,42 +433,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setBootstrapStep(3);
           setBootstrapMessage('Setting up your dashboard...');
 
-          // Validate against authoritative session
-          const meController = new AbortController();
-          const meTimeoutId = setTimeout(() => meController.abort(), 8000);
-          let currentSession: any;
-          try {
-            currentSession = await authApi.getMe();
-          } finally {
-            clearTimeout(meTimeoutId);
-          }
-
-          if (runIdRef.current !== runId) return false;
-
-          if (!currentSession || !currentSession.user) {
-            console.warn('[validate:mismatch] No active session found. Redirecting to login.');
+          // Authoritative session & tenant returned atomically by GET /api/bootstrap (no redundant /api/auth/me roundtrip)
+          if (!data.user || !data.user.id) {
+            console.warn('[validate:mismatch] No active session found in bootstrap payload. Signing out.');
             setIsBootstrapping(false);
             logout('user_initiated');
-            window.location.href = `/supplier-login?redirect=${encodeURIComponent(window.location.pathname)}`;
             return false;
           }
 
-          // ID validation
-          const sessionUserId = currentSession.user.id;
-          const bootstrapUserId = data.user?.id;
-
-          if (bootstrapUserId && sessionUserId && String(sessionUserId) !== String(bootstrapUserId)) {
-            console.warn('[validate:mismatch] User ID mismatch between session and bootstrap.');
-            if (!hasSelfHealed) {
-              hasSelfHealed = true;
-              continue;
-            } else {
-              setIsBootstrapping(false);
-              logout('user_initiated');
-              window.location.href = '/supplier-login?error=session_mismatch';
-              return false;
-            }
-          }
+          const currentSession = {
+            user: data.user,
+            activeTenant: data.activeTenant,
+            profileSummary: data.profileSummary || null,
+          };
 
           console.log('[validate:ok] Session and workspace validated for run #', runId);
 
@@ -497,26 +464,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             role: p.person_role === 'shareholder' || p.personRole === 'shareholder' ? 'Shareholder' : (p.person_role === 'director' || p.personRole === 'director' ? 'Director' : (p.person_role || p.personRole || 'Director')),
           }));
 
-          // 2. Map documents from bootstrap payload with authoritative codes and statuses
+          // 2. Map documents from bootstrap payload with authoritative codes, version IDs, and admin verification statuses
           const mappedDocs: SupplierDocument[] = (data.documents || []).map((d: any) => {
-            const isVerified = (d.verificationStatus || '').toUpperCase() === 'VERIFIED';
-            const isExpired = (d.status || '').toLowerCase() === 'expired';
-            const isRejected = (d.status || '').toLowerCase() === 'rejected';
-            const statusLabel = isVerified ? 'Verified' : (isExpired ? 'Expired' : (isRejected ? 'Rejected' : 'Pending'));
+            const verUpper = String(d.verificationStatus || '').toUpperCase();
+            const docStatusLower = String(d.status || '').toLowerCase();
+            const expiryUpper = String(d.expiryState || '').toUpperCase();
+
+            let statusLabel: SupplierDocument['status'] = 'Pending';
+            if (verUpper === 'REJECTED' || docStatusLower === 'rejected') {
+              statusLabel = 'Rejected';
+            } else if (verUpper === 'EXPIRED' || expiryUpper === 'EXPIRED' || docStatusLower === 'expired') {
+              statusLabel = 'Expired';
+            } else if (verUpper === 'UNVERIFIABLE') {
+              statusLabel = 'Cannot verify';
+            } else if (verUpper === 'VERIFIED' || verUpper === 'APPROVED') {
+              statusLabel = expiryUpper === 'EXPIRING_SOON' ? 'Expiring soon' : 'Verified';
+            } else if (expiryUpper === 'EXPIRING_SOON') {
+              statusLabel = 'Expiring soon';
+            }
 
             return {
               id: d.documentId || d.id,
+              versionId: d.versionId || null,
+              versionNo: d.versionNo || undefined,
               supplierId: d.supplierId || data.resolvedSupplierId,
               documentType: d.documentTypeName || d.documentTypeCode || d.title || 'Document',
               documentTypeCode: d.documentTypeCode,
               title: d.title || d.documentTypeName,
+              documentNumber: d.documentNumber || undefined,
               fileName: d.fileName || 'document.pdf',
               fileSize: d.fileSizeBytes ? `${Math.round(parseInt(d.fileSizeBytes) / 1024)} KB` : '100 KB',
               issueDate: d.issueDate || d.uploadedAt || new Date().toISOString(),
               expiryDate: d.expiryDate || undefined,
-              status: statusLabel as any,
-              verificationStatus: d.verificationStatus,
-              downloadUrl: `/api/supplier/documents/${d.documentId || d.id}/file`,
+              status: statusLabel,
+              verificationStatus: d.verificationStatus || null,
+              verificationNotes: d.verificationNotes || null,
+              rejectionReason: d.rejectionReason || (statusLabel === 'Rejected' ? d.verificationNotes : undefined) || undefined,
+              verifiedAt: d.verifiedAt || undefined,
+              issuingAuthority: d.issuingAuthority || undefined,
+              sha256: d.sha256 || undefined,
+              mimeType: d.mimeType || undefined,
+              hasFile: d.hasFile !== undefined ? Boolean(d.hasFile) : undefined,
+              uploadedAt: d.uploadedAt || undefined,
+              downloadUrl: `/api/supplier/documents/${d.versionId || d.documentId || d.id}/file`,
             };
           });
 
@@ -525,6 +515,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const completenessScore = data.completeness?.score ?? rawProfile.profileCompleteness ?? rawProfile.profile_completeness ?? 0;
           const complianceStatus = data.completeness?.complianceStatus ?? rawProfile.complianceStatus ?? rawProfile.compliance_status ?? (completenessScore >= 80 ? 'Fully compliant' : 'Action required');
 
+          const mappedCategories: string[] = Array.isArray(rawProfile.categories) && rawProfile.categories.length > 0
+            ? rawProfile.categories
+            : Array.isArray(rawProfile.secondaryCategories) && rawProfile.secondaryCategories.length > 0
+            ? rawProfile.secondaryCategories
+            : Array.isArray(rawProfile.secondary_categories)
+            ? rawProfile.secondary_categories
+            : rawProfile.category
+            ? [rawProfile.category]
+            : [];
+
           const normProfile: Supplier = {
             id: rawProfile.id || currentSession.activeTenant?.tenantId || data.resolvedSupplierId || '',
             legalName: rawProfile.legalName || rawProfile.legal_name || currentSession.activeTenant?.tenantName || currentSession.user.fullName || '',
@@ -532,11 +532,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             cipaNumber: rawProfile.cipaNumber || rawProfile.cipaUin || rawProfile.cipa_uin || '',
             tinNumber: rawProfile.tinNumber || rawProfile.bursTin || rawProfile.burs_tin || '',
             ppraCode: rawProfile.ppraCode || rawProfile.ppraRegistrationNo || rawProfile.ppra_registration_no || '',
-            ppraSubcodes: rawProfile.ppraSubcodes || [],
-            ppraGrade: rawProfile.ppraGrade || '',
-            category: rawProfile.category || '',
-            secondaryCategories: rawProfile.secondaryCategories || [],
-            categories: rawProfile.categories || [],
+            ppraSubcodes: rawProfile.ppraSubcodes || rawProfile.ppra_subcodes || [],
+            ppraGrade: rawProfile.ppraGrade || rawProfile.ppra_grade || '',
+            category: rawProfile.category || mappedCategories[0] || '',
+            secondaryCategories: mappedCategories,
+            categories: mappedCategories,
             physicalAddress: rawProfile.physicalAddress || rawProfile.physical_address || '',
             city: rawProfile.city || '',
             district: rawProfile.district || rawProfile.districtName || '',
@@ -548,8 +548,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             yearEstablished: rawProfile.yearEstablished || rawProfile.year_established || new Date().getFullYear(),
             companyType: rawProfile.companyType || rawProfile.company_type || 'Private Company (Pty) Ltd',
             description: rawProfile.description || '',
+            vatRegistered: Boolean(rawProfile.vatRegistered ?? rawProfile.vat_registered),
+            biddingPublicTenders: rawProfile.biddingPublicTenders ?? rawProfile.bidding_public_tenders ?? true,
             citizenOwnedPercentage: Number(rawProfile.citizenOwnedPercentage ?? rawProfile.citizen_owned_percentage ?? 0),
-            citizenOwnershipSet: Boolean(rawProfile.citizenOwnedPercentage ?? rawProfile.citizen_owned_percentage),
+            citizenOwnershipSet: Boolean(
+              rawProfile.citizenOwnershipSet ??
+              rawProfile.citizen_ownership_set ??
+              (rawProfile.citizenOwnedPercentage ?? rawProfile.citizen_owned_percentage)
+            ),
             youthOwned: Boolean(rawProfile.youthOwned ?? rawProfile.youth_owned),
             womenOwned: Boolean(rawProfile.womenOwned ?? rawProfile.women_owned),
             disabilityOwned: Boolean(rawProfile.disabilityOwned ?? rawProfile.disability_owned),
@@ -564,27 +570,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             profileCompleteness: completenessScore,
             complianceStatus: complianceStatus,
             missingItems: data.completeness?.missingItems ? data.completeness.missingItems.map((m: any) => m.label) : (rawProfile.missingItems || rawProfile.missing_items || []),
-            pastProjects: rawProfile.pastProjects || [],
-            teamMembers: rawProfile.teamMembers || [],
-            isDemoAccount: false,
+            pastProjects: data.pastProjects ?? rawProfile.pastProjects ?? [],
+            teamMembers: data.teamMembers ?? rawProfile.teamMembers ?? [],
+            pendingInvitations: data.pendingInvitations ?? rawProfile.pendingInvitations ?? [],
             emailVerified: Boolean(currentSession.user.emailVerifiedAt || currentSession.profileSummary?.emailVerified),
+            accountStatus: rawProfile.status || currentSession.activeTenant?.supplierStatus || 'active',
+            verificationStatus: rawProfile.verificationStatus || rawProfile.verification_status || currentSession.activeTenant?.verificationStatus || 'unverified',
+            activeDebarment: rawProfile.activeDebarment || null,
           };
+
+          // Hydrate consent grants strictly from live PostgreSQL bootstrap payload
+          const mappedConsents: ConsentGrant[] = Array.isArray(data.consent)
+            ? data.consent.map((c: any) => ({
+                id: c.id,
+                supplierId: c.supplierId || normProfile.id,
+                organizationId: c.organizationId,
+                organizationName: c.organizationName || 'Procuring Organization',
+                grantedAt: c.grantedAt ? new Date(c.grantedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+                status: String(c.status || '').toLowerCase() === 'revoked' ? 'Revoked' : 'Active',
+                scope: c.scope || {
+                  companyDetails: true,
+                  directorsOwners: true,
+                  pastProjects: true,
+                  selectedDocuments: true,
+                  taxCompliance: true,
+                  financialStatements: false,
+                  keyPersonnel: true,
+                  pastContracts: true,
+                  bankingDetails: false,
+                },
+                tiedApplicationNumbers: Array.isArray(c.tiedApplicationNumbers) ? c.tiedApplicationNumbers : [],
+              }))
+            : [];
 
           // Synchronously commit to React state behind opaque gate
           setCurrentUser(currentSession.user);
+          if (currentSession.profileSummary) {
+            setProfileSummary(currentSession.profileSummary);
+          }
           setIsAuthenticated(true);
           setSupplier(normProfile);
           setDocuments(mappedDocs);
           setApplications(normApps);
+          setConsentGrants(mappedConsents);
 
           let resolvedRole: UserRole = 'supplier';
           if (currentSession.user.isPlatformAdmin) {
             resolvedRole = 'admin';
           } else if (currentSession.activeTenant?.tenantType === 'organization') {
             resolvedRole = 'buyer';
-            setBuyerOrgStatus('Approved');
-            setRegisteredBuyerOrgName(currentSession.activeTenant.tenantName);
+            const orgStatusRaw = String(
+              rawProfile.status ||
+              currentSession.activeTenant.organizationStatus ||
+              currentSession.profileSummary?.organizationStatus ||
+              'pending'
+            ).toLowerCase();
+            const orgVerRaw = String(
+              rawProfile.verificationStatus ||
+              rawProfile.verification_status ||
+              currentSession.activeTenant.verificationStatus ||
+              currentSession.profileSummary?.verificationStatus ||
+              ''
+            ).toLowerCase();
+            const derivedBuyerStatus: 'Pending' | 'Approved' | 'Rejected' =
+              orgStatusRaw === 'active' && orgVerRaw !== 'rejected'
+                ? 'Approved'
+                : orgStatusRaw === 'pending' || orgVerRaw === 'pending_review' || orgVerRaw === 'pending'
+                ? 'Pending'
+                : 'Rejected';
+
+            setBuyerOrgStatus(derivedBuyerStatus);
+            setBuyerOrgRejectionReason(
+              rawProfile.rejectionReason ||
+              currentSession.activeTenant.rejectionReason ||
+              currentSession.profileSummary?.rejectionReason ||
+              null
+            );
+            setRegisteredBuyerOrgName(rawProfile.name || currentSession.activeTenant.tenantName);
             setRegisteredBuyerEmail(currentSession.user.email);
+            if (derivedBuyerStatus === 'Approved') {
+              setActiveNavState((prev) => (prev === 'buyer-pending' || prev === 'buyer-login' ? 'buyer-dashboard' : prev));
+            } else {
+              setActiveNavState('buyer-pending');
+            }
           } else if (currentSession.activeTenant?.tenantType === 'supplier') {
             resolvedRole = 'supplier';
           }
@@ -894,7 +962,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const loginSuccess = (
-    session: { user: ApiUser; activeTenant?: any; token?: string },
+    session: { user: ApiUser; activeTenant?: any; token?: string; profileSummary?: any },
     targetRole?: UserRole
   ) => {
     if (session.token) {
@@ -903,14 +971,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch {}
     }
 
-    runBootstrap();
+    runBootstrap({ force: true });
 
     let resolvedRole: UserRole = targetRole || 'supplier';
+    let derivedBuyerStatus: 'Pending' | 'Approved' | 'Rejected' = 'Pending';
+
     if (session.user.isPlatformAdmin) {
       resolvedRole = 'admin';
     } else if (session.activeTenant?.tenantType === 'organization') {
       resolvedRole = 'buyer';
-      setBuyerOrgStatus('Approved');
+      const orgStatusRaw = String(
+        session.activeTenant.organizationStatus ||
+        session.activeTenant.profile?.status ||
+        session.profileSummary?.organizationStatus ||
+        session.profileSummary?.status ||
+        'pending'
+      ).toLowerCase();
+      const orgVerRaw = String(
+        session.activeTenant.verificationStatus ||
+        session.activeTenant.profile?.verificationStatus ||
+        session.profileSummary?.verificationStatus ||
+        ''
+      ).toLowerCase();
+
+      derivedBuyerStatus =
+        orgStatusRaw === 'active' && orgVerRaw !== 'rejected'
+          ? 'Approved'
+          : orgStatusRaw === 'pending' || orgVerRaw === 'pending_review' || orgVerRaw === 'pending'
+          ? 'Pending'
+          : 'Rejected';
+
+      setBuyerOrgStatus(derivedBuyerStatus);
+      setBuyerOrgRejectionReason(
+        session.activeTenant.rejectionReason ||
+        session.activeTenant.profile?.rejectionReason ||
+        session.profileSummary?.rejectionReason ||
+        null
+      );
       setRegisteredBuyerOrgName(session.activeTenant.tenantName);
       setRegisteredBuyerEmail(session.user.email);
     } else if (session.activeTenant?.tenantType === 'supplier') {
@@ -922,8 +1019,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let destination = intendedRoute;
     if (destination) {
       setIntendedRoute(null);
+    } else if (resolvedRole === 'admin') {
+      destination = 'admin-dashboard';
+    } else if (resolvedRole === 'buyer') {
+      destination = derivedBuyerStatus === 'Approved' ? 'buyer-dashboard' : 'buyer-pending';
     } else {
-      destination = resolvedRole === 'admin' ? 'admin-dashboard' : 'dashboard';
+      destination = 'dashboard';
     }
     setActiveNavState(destination);
 
@@ -957,6 +1058,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Buyer Verification State
   const [buyerOrgStatus, setBuyerOrgStatus] = useState<'Pending' | 'Approved' | 'Rejected'>('Pending');
+  const [buyerOrgRejectionReason, setBuyerOrgRejectionReason] = useState<string | null>(null);
   const [registeredBuyerOrgName, setRegisteredBuyerOrgName] = useState<string | null>(null);
   const [registeredBuyerEmail, setRegisteredBuyerEmail] = useState<string | null>(null);
 
@@ -987,7 +1089,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBuyerOrgStatus('Approved');
     const targetName = orgName || registeredBuyerOrgName || 'Procuring Organization';
     addAuditEvent({
-      actorName: 'System Administrator (Registrar)',
+      actorName: currentUser?.fullName || 'Platform Registrar',
       actorRole: 'Super Admin',
       organizationName: targetName,
       action: 'Procuring Organization Verified & Approved',
@@ -1001,7 +1103,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBuyerOrgStatus('Rejected');
     const targetName = orgName || registeredBuyerOrgName || 'Procuring Organization';
     addAuditEvent({
-      actorName: 'System Administrator (Registrar)',
+      actorName: currentUser?.fullName || 'Platform Registrar',
       actorRole: 'Super Admin',
       organizationName: targetName,
       action: 'Procuring Organization Registration Rejected',
@@ -1031,169 +1133,83 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Persistence helpers
-  const saveSupplierToStorage = (nextSup: Supplier) => {
-    try {
-      localStorage.setItem('bidready_supplier_profile', JSON.stringify(nextSup));
-    } catch {}
-  };
-
-  const saveDocumentsToStorage = (nextDocs: SupplierDocument[]) => {
-    try {
-      localStorage.setItem('bidready_supplier_documents', JSON.stringify(nextDocs));
-    } catch {}
-  };
-
-  const saveApplicationsToStorage = (nextApps: Application[]) => {
-    try {
-      localStorage.setItem('bidready_supplier_applications', JSON.stringify(nextApps));
-    } catch {}
-  };
-
-  const saveConsentGrantsToStorage = (nextGrants: ConsentGrant[]) => {
-    try {
-      localStorage.setItem('bidready_supplier_consent_grants', JSON.stringify(nextGrants));
-    } catch {}
-  };
-
-  // Dynamic data states initialized clean to prevent legacy data flash
+  // Dynamic data states initialized clean from server bootstrap (no localStorage business-state fallbacks)
   const [supplier, setSupplier] = useState<Supplier>(EMPTY_SUPPLIER);
-  const [allSuppliers] = useState<Supplier[]>([EMPTY_SUPPLIER]);
+  const [allSuppliers] = useState<Supplier[]>([]);
   const [documents, setDocuments] = useState<SupplierDocument[]>([]);
   const supplierRef = useRef<Supplier>(supplier);
   supplierRef.current = supplier;
   const documentsRef = useRef<SupplierDocument[]>(documents);
   documentsRef.current = documents;
-  const [organizations] = useState<Organization[]>([
-    {
-      id: 'org-grc',
-      name: 'Gaborone Regional Council',
-      acronym: 'GRC',
-      type: 'Local Authority',
-      district: 'South-East',
-      city: 'Gaborone',
-      logoText: 'GRC',
-      contactEmail: 'procurement@grc.gov.bw',
-      contactPhone: '+267 391 2000',
-      address: 'Plot 1204, Khama Crescent, Gaborone',
-      activeCallsCount: 4,
-      suppliersRosterCount: 342,
-    },
-    {
-      id: 'org-burs',
-      name: 'Botswana Unified Revenue Service',
-      acronym: 'BURS',
-      type: 'Parastatal / Revenue',
-      district: 'South-East',
-      city: 'Gaborone',
-      logoText: 'BURS',
-      contactEmail: 'tenders@burs.org.bw',
-      contactPhone: '+267 363 8000',
-      address: 'BURS House, Gaborone CBD',
-      activeCallsCount: 3,
-      suppliersRosterCount: 512,
-    },
-    {
-      id: 'org-debswana',
-      name: 'Debswana Diamond Company',
-      acronym: 'DEBSWANA',
-      type: 'Mining Enterprise',
-      district: 'Central / Jwaneng',
-      city: 'Gaborone / Jwaneng',
-      logoText: 'DEBS',
-      contactEmail: 'procurement@debswana.bw',
-      contactPhone: '+267 361 4000',
-      address: 'Airport Road, Debswana House',
-      activeCallsCount: 5,
-      suppliersRosterCount: 890,
-    },
-    {
-      id: 'org-mof',
-      name: 'Ministry of Finance',
-      acronym: 'MoF',
-      type: 'Central Government Ministry',
-      district: 'South-East',
-      city: 'Gaborone',
-      logoText: 'MoF',
-      contactEmail: 'procurement@gov.bw',
-      contactPhone: '+267 395 0100',
-      address: 'Government Enclave, Khama Crescent',
-      activeCallsCount: 2,
-      suppliersRosterCount: 410,
-    },
-    {
-      id: 'org-ppra',
-      name: 'Public Procurement Regulatory Authority',
-      acronym: 'PPRA',
-      type: 'Regulatory Body',
-      district: 'South-East',
-      city: 'Gaborone',
-      logoText: 'PPRA',
-      contactEmail: 'info@ppra.co.bw',
-      contactPhone: '+267 360 5000',
-      address: 'PPRA House, Fairgrounds Office Park',
-      activeCallsCount: 1,
-      suppliersRosterCount: 1250,
-    },
-    {
-      id: 'org-fcc',
-      name: 'Francistown City Council',
-      acronym: 'FCC',
-      type: 'Local Authority',
-      district: 'North-East',
-      city: 'Francistown',
-      logoText: 'FCC',
-      contactEmail: 'tenders@fcc.gov.bw',
-      contactPhone: '+267 241 1000',
-      address: 'Town Hall, Civic Centre, Francistown',
-      activeCallsCount: 2,
-      suppliersRosterCount: 180,
-    },
-  ]);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
-  const [applications, setApplications] = useState<Application[]>(() => {
-    try {
-      const saved = localStorage.getItem('bidready_supplier_applications');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
-  });
+  const [applications, setApplications] = useState<Application[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     async function loadDatabaseCalls() {
       try {
         const fetchedCalls = await callsApi.listOpen();
-        if (isMounted && Array.isArray(fetchedCalls) && fetchedCalls.length > 0) {
+        if (isMounted && Array.isArray(fetchedCalls)) {
           const mappedCalls: Call[] = fetchedCalls.map((c: any) => ({
             id: c.id,
             callNumber: c.referenceNo || `CALL-${c.id.substring(0, 6)}`,
-            organizationId: c.organizationId || 'org-1',
+            organizationId: c.organizationId || '',
             organizationName: c.organizationName || 'Procuring Organization',
-            organizationSlug: c.organizationSlug || 'org-procuring',
+            organizationSlug: c.organizationSlug || '',
             title: c.title,
             summary: c.summary || c.description || '',
             type: c.callType === 'rfp' ? 'RFP' : c.callType === 'registration_drive' ? 'Registration drive' : 'EOI',
             category: (c.categories && c.categories[0]?.name) || 'General Procurement',
             subcategories: (c.categories || []).map((cat: any) => cat.name || String(cat)),
-            location: 'Gaborone, Botswana',
-            openingDate: c.opensAt ? new Date(c.opensAt).toISOString().split('T')[0] : '2026-10-01',
-            clarificationDeadline: c.clarificationDeadline ? new Date(c.clarificationDeadline).toISOString().split('T')[0] : '2026-11-15',
-            closingDate: c.closesAt ? new Date(c.closesAt).toISOString().split('T')[0] : '2026-12-31',
+            location: 'Botswana',
+            openingDate: c.opensAt ? new Date(c.opensAt).toISOString().split('T')[0] : '',
+            clarificationDeadline: c.clarificationDeadline ? new Date(c.clarificationDeadline).toISOString().split('T')[0] : '',
+            closingDate: c.closesAt ? new Date(c.closesAt).toISOString().split('T')[0] : '',
             closingTimeCAT: '12:00 PM',
             status: c.status === 'published' || c.status === 'open' ? 'Open' : c.status === 'closed' ? 'Closed' : 'Under evaluation',
-            requiredDocumentTypes: ['CIPA_CERT', 'BURS_TAX', 'PPRA_CERT'],
-            daysRemaining: typeof c.daysRemaining === 'number' ? Math.max(0, Math.floor(c.daysRemaining)) : 30,
+            requiredDocumentTypes: [],
+            daysRemaining: typeof c.daysRemaining === 'number' ? Math.max(0, Math.floor(c.daysRemaining)) : 0,
             isSealed: true,
-            documentsCount: c.documentsCount || 3,
+            documentsCount: c.documentsCount || 0,
             applicationsCount: c.applicationsCount || 0,
             estimatedBudgetBWP: Number(c.estimatedValue || 0),
             addenda: [],
           }));
           setCalls(mappedCalls);
+
+          // Derive live active organizations directly from open database calls (no hardcoded mock orgs)
+          const orgMap = new Map<string, Organization>();
+          for (const mc of mappedCalls) {
+            if (!mc.organizationId) continue;
+            const existing = orgMap.get(mc.organizationId);
+            if (existing) {
+              existing.activeCallsCount += 1;
+            } else {
+              const initials = mc.organizationName
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((w) => w[0])
+                .join('')
+                .slice(0, 4)
+                .toUpperCase();
+              orgMap.set(mc.organizationId, {
+                id: mc.organizationId,
+                name: mc.organizationName,
+                acronym: initials || 'ORG',
+                type: 'Procuring Entity',
+                district: 'Botswana',
+                city: 'Gaborone',
+                logoText: initials || 'ORG',
+                contactEmail: '',
+                contactPhone: '',
+                address: '',
+                activeCallsCount: 1,
+                suppliersRosterCount: 0,
+              });
+            }
+          }
+          setOrganizations(Array.from(orgMap.values()));
         }
       } catch (err) {
         console.warn('[APP CONTEXT] Database calls fetch notice:', err);
@@ -1212,16 +1228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Completeness is computed from pure database snapshots and recalculated only on mutation events.
 
   const [clarifications, setClarifications] = useState<Clarification[]>([]);
-  const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>(() => {
-    try {
-      const saved = localStorage.getItem('bidready_supplier_consent_grants');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {}
-    return [];
-  });
+  const [consentGrants, setConsentGrants] = useState<ConsentGrant[]>([]);
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [evaluators, setEvaluators] = useState<Evaluator[]>([]);
@@ -1232,59 +1239,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Real-time completeness result computed from current memory state
   const completenessResult = calculateSupplierCompleteness(supplier, documents);
-
-  const loadDemoSupplier = () => {
-    setSupplier({
-      ...DEMO_SUPPLIER,
-      pastProjects: DEMO_PAST_PROJECTS,
-      teamMembers: DEMO_TEAM_MEMBERS,
-      isDemoAccount: true,
-      profileCompleteness: 100,
-      missingItems: [],
-    });
-    setDocuments(DEMO_DOCUMENTS);
-    setApplications(DEMO_APPLICATIONS);
-    setConsentGrants(DEMO_CONSENT_GRANTS);
-  };
-
-  const resetDemoData = () => {
-    setSupplier({
-      ...DEMO_SUPPLIER,
-      pastProjects: DEMO_PAST_PROJECTS,
-      teamMembers: DEMO_TEAM_MEMBERS,
-      isDemoAccount: true,
-      profileCompleteness: 100,
-      missingItems: [],
-    });
-    setDocuments(DEMO_DOCUMENTS);
-    setApplications(DEMO_APPLICATIONS);
-    setConsentGrants(DEMO_CONSENT_GRANTS);
-  };
-
-  const autoCompleteProfile = () => {
-    const updated: Supplier = {
-      ...supplier,
-      detailsSaved: true,
-      profileCompleteness: 100,
-      missingItems: [],
-      complianceStatus: 'Fully compliant',
-      directors: supplier.directors?.length ? supplier.directors : [{
-        id: 'dir-1',
-        fullName: 'Kagiso Molosiwa',
-        nationalIdOrPassport: '123416789',
-        idType: 'National ID (Omang)',
-        gender: 'male',
-        idLast4: '6789',
-        hasId: true,
-        nationality: 'Botswana',
-        isCitizen: true,
-        shareholdingPercentage: 100,
-        role: 'Managing Director'
-      }]
-    };
-    setSupplier(updated);
-    saveSupplierToStorage(updated);
-  };
 
   const t = (key: string): string => {
     return TRANSLATIONS[language]?.[key] || key;
@@ -1382,7 +1336,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     supplierRef.current = nextMerged;
-    saveSupplierToStorage(nextMerged);
     setSupplier(nextMerged);
 
     // Directors are persisted via /api/supplier/people; syncing them into context should not trigger PUT /api/supplier/profile
@@ -1472,7 +1425,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               tradingLicenceReason: saved.tradingLicenceReason ?? curr.tradingLicenceReason,
             };
             supplierRef.current = reMerged;
-            saveSupplierToStorage(reMerged);
             return reMerged;
           });
         }
@@ -1497,13 +1449,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...docData,
       id: docData.id || `doc-${Date.now()}`,
     };
-    const nextDocs = [newDoc, ...documents];
+    const existingIdx = documents.findIndex((d) => d.id === newDoc.id);
+    const nextDocs =
+      existingIdx >= 0
+        ? documents.map((d) => (d.id === newDoc.id ? { ...d, ...newDoc } : d))
+        : [newDoc, ...documents];
     setDocuments(nextDocs);
-    saveDocumentsToStorage(nextDocs);
-    let nextCompleteness = 0;
     setSupplier((prev) => {
       const completeness = calculateSupplierCompleteness(prev, nextDocs);
-      nextCompleteness = completeness.score;
       const nextSup = {
         ...prev,
         documents: nextDocs,
@@ -1511,20 +1464,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         missingItems: completeness.missingItems.map((m) => m.label),
         complianceStatus: (completeness.score >= 80 ? 'Fully compliant' : 'Action required') as 'Fully compliant' | 'Action required',
       };
-      saveSupplierToStorage(nextSup);
       return nextSup;
     });
-
-    // Also update server completeness
-    const token = localStorage.getItem('bidready_token');
-    if (token) {
-      supplierApi.updateProfile({
-        profileCompleteness: nextCompleteness,
-        profile_completeness: nextCompleteness,
-        complianceStatus: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
-        compliance_status: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
-      }).catch(() => {});
-    }
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
@@ -1533,7 +1474,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'Uploaded Document to Vault',
       entityType: 'Document',
       entityId: newDoc.id,
-      details: `Uploaded ${newDoc.documentType} (Exp: ${newDoc.expiryDate}).`,
+      details: `Uploaded ${newDoc.documentType}${newDoc.expiryDate ? ` (Exp: ${newDoc.expiryDate})` : ''}.`,
     });
   };
 
@@ -1553,9 +1494,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }) +
             ', ' +
             new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-          fileFingerprint: `SHA-256: ${Math.random().toString(36).substring(2, 8)}...${Math.random().toString(36).substring(2, 6)}`,
+          fileFingerprint: updates.sha256 ? `SHA-256: ${updates.sha256}` : 'Pending checksum',
           fileName: updates.fileName || d.fileName,
-          fileSize: updates.fileSize || d.fileSize || '1.6 MB',
+          fileSize: updates.fileSize || d.fileSize || 'Unknown size',
           usedInApplications: [],
         };
         return {
@@ -1571,11 +1512,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setDocuments(nextDocs);
-    saveDocumentsToStorage(nextDocs);
-    let nextCompleteness = 0;
     setSupplier((prev) => {
       const completeness = calculateSupplierCompleteness(prev, nextDocs);
-      nextCompleteness = completeness.score;
       const nextSup = {
         ...prev,
         documents: nextDocs,
@@ -1583,19 +1521,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         missingItems: completeness.missingItems.map((m) => m.label),
         complianceStatus: (completeness.score >= 80 ? 'Fully compliant' : 'Action required') as 'Fully compliant' | 'Action required',
       };
-      saveSupplierToStorage(nextSup);
       return nextSup;
     });
-
-    const token = localStorage.getItem('bidready_token');
-    if (token) {
-      supplierApi.updateProfile({
-        profileCompleteness: nextCompleteness,
-        profile_completeness: nextCompleteness,
-        complianceStatus: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
-        compliance_status: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
-      }).catch(() => {});
-    }
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || 'Supplier Admin',
@@ -1611,11 +1538,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteDocument = (docId: string) => {
     const nextDocs = documents.filter((d) => d.id !== docId);
     setDocuments(nextDocs);
-    saveDocumentsToStorage(nextDocs);
-    let nextCompleteness = 0;
     setSupplier((prev) => {
       const completeness = calculateSupplierCompleteness(prev, nextDocs);
-      nextCompleteness = completeness.score;
       const nextSup = {
         ...prev,
         documents: nextDocs,
@@ -1623,19 +1547,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         missingItems: completeness.missingItems.map((m) => m.label),
         complianceStatus: (completeness.score >= 80 ? 'Fully compliant' : 'Action required') as 'Fully compliant' | 'Action required',
       };
-      saveSupplierToStorage(nextSup);
       return nextSup;
     });
 
     const token = localStorage.getItem('bidready_token');
     if (token) {
       supplierApi.deleteDocument(docId).catch(() => {});
-      supplierApi.updateProfile({
-        profileCompleteness: nextCompleteness,
-        profile_completeness: nextCompleteness,
-        complianceStatus: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
-        compliance_status: nextCompleteness >= 80 ? 'Fully compliant' : 'Action required',
-      }).catch(() => {});
     }
   };
 
@@ -1646,11 +1563,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       grantedAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       status: 'Active',
     };
-    setConsentGrants((prev) => {
-      const nextGrants = [grant, ...prev];
-      saveConsentGrantsToStorage(nextGrants);
-      return nextGrants;
-    });
+    setConsentGrants((prev) => [grant, ...prev]);
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
@@ -1658,17 +1571,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'Granted Data Sharing Access',
       entityType: 'Consent',
       entityId: grant.id,
-      details: `Authorized ${grant.organizationName} to inspect selected compliance credentials. Saved to database & local store.`,
+      details: `Authorized ${grant.organizationName} to inspect selected compliance credentials.`,
     });
   };
 
   const revokeConsent = (grantId: string) => {
     const grant = consentGrants.find((g) => g.id === grantId);
-    setConsentGrants((prev) => {
-      const nextGrants = prev.map((g) => (g.id === grantId ? { ...g, status: 'Revoked' as const } : g));
-      saveConsentGrantsToStorage(nextGrants);
-      return nextGrants;
-    });
+    setConsentGrants((prev) => prev.map((g) => (g.id === grantId ? { ...g, status: 'Revoked' as const } : g)));
 
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
@@ -1677,13 +1586,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       action: 'Revoked Data Sharing Consent',
       entityType: 'Consent',
       entityId: grantId,
-      details: `Revoked profile and document access for ${grant?.organizationName || 'buying organization'}. Saved to database & local store.`,
+      details: `Revoked profile and document access for ${grant?.organizationName || 'buying organization'}.`,
     });
   };
 
   const updateConsentScope = (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => {
-    setConsentGrants((prev) => {
-      const nextGrants = prev.map((g) => {
+    setConsentGrants((prev) =>
+      prev.map((g) => {
         if (g.id === grantId) {
           return {
             ...g,
@@ -1691,10 +1600,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
         return g;
-      });
-      saveConsentGrantsToStorage(nextGrants);
-      return nextGrants;
-    });
+      })
+    );
   };
 
   const saveApplicationDraft = (draftData: {
@@ -1742,7 +1649,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         const nextApps = [...prev];
         nextApps[existingDraftIndex] = updatedApp;
-        saveApplicationsToStorage(nextApps);
         return nextApps;
       } else {
         targetAppId = `app-draft-${Date.now()}`;
@@ -1773,38 +1679,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             },
           ],
         };
-        const nextApps = [newDraftApp, ...prev];
-        saveApplicationsToStorage(nextApps);
-        return nextApps;
+        return [newDraftApp, ...prev];
       }
     });
-
-    try {
-      localStorage.setItem(
-        `bidready_draft_tender_${supplier.id}_${draftData.callId}`,
-        JSON.stringify({
-          ...draftData,
-          savedAt: now,
-        })
-      );
-    } catch {}
-
     return targetAppId;
   };
 
   const deleteApplicationDraft = (appId: string) => {
-    setApplications((prev) => {
-      const target = prev.find((a) => a.id === appId);
-      const nextApps = prev.filter((a) => a.id !== appId);
-      saveApplicationsToStorage(nextApps);
-      if (target) {
-        try {
-          localStorage.removeItem(`bidready_draft_tender_${supplier.id}_${target.callId}`);
-          localStorage.removeItem(`bidready_draft_bid_${supplier.id}_${target.callId}`);
-        } catch {}
-      }
-      return nextApps;
-    });
+    setApplications((prev) => prev.filter((a) => a.id !== appId));
   };
 
   const submitApplication = (appData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string }): string => {
@@ -1839,7 +1721,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         const nextApps = [...prev];
         nextApps[existingDraftIndex] = updatedApp;
-        saveApplicationsToStorage(nextApps);
         return nextApps;
       }
 
@@ -1869,15 +1750,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ],
       };
 
-      const nextApps = [newApp, ...prev];
-      saveApplicationsToStorage(nextApps);
-      return nextApps;
+      return [newApp, ...prev];
     });
-
-    try {
-      localStorage.removeItem(`bidready_draft_tender_${appData.supplierId}_${appData.callId}`);
-      localStorage.removeItem(`bidready_draft_bid_${appData.supplierId}_${appData.callId}`);
-    } catch {}
 
     const appId = assignedAppId || `app-${Date.now()}`;
 
@@ -1909,11 +1783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         tiedApplicationNumbers: [appData.callNumber],
       };
-      setConsentGrants((prev) => {
-        const nextGrants = [newGrant, ...prev];
-        saveConsentGrantsToStorage(nextGrants);
-        return nextGrants;
-      });
+      setConsentGrants((prev) => [newGrant, ...prev]);
     }
 
     addAuditEvent({
@@ -1940,7 +1810,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return appId;
   };
 
-  const updateApplicationStatus = (appId: string, status: Application['status'], reason?: string, reviewer = 'K. Tau (Lead Procurement Officer)') => {
+  const updateApplicationStatus = (appId: string, status: Application['status'], reason?: string, reviewer?: string) => {
+    const actorName = reviewer || currentUser?.fullName || 'Authorized Procurement Officer';
+    const buyerOrgName = registeredBuyerOrgName || 'Procuring Organization';
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
     setApplications((prev) =>
       prev.map((app) => {
@@ -1949,14 +1821,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...app,
             status,
             statusReason: reason,
-            reviewedBy: reviewer,
+            reviewedBy: actorName,
             reviewedAt: now,
             timeline: [
               ...app.timeline,
               {
                 stage: status,
                 timestamp: now,
-                note: reason || `Status updated to ${status} by ${reviewer}.`,
+                note: reason || `Status updated to ${status} by ${actorName}.`,
               },
             ],
           };
@@ -1966,9 +1838,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     addAuditEvent({
-      actorName: reviewer,
+      actorName,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: buyerOrgName,
       action: `Updated Application Status to ${status}`,
       entityType: 'Application',
       entityId: appId,
@@ -2120,7 +1992,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditEvent({
       actorName: answeredBy,
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: registeredBuyerOrgName || 'Procuring Organization',
       action: 'Published Official Clarification Answer',
       entityType: 'Call',
       entityId: clarId,
@@ -2140,7 +2012,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCalls((prev) => [newCall, ...prev]);
 
     addAuditEvent({
-      actorName: 'K. Tau (Lead Procurement Specialist)',
+      actorName: currentUser?.fullName || 'Authorized Procurement Officer',
       actorRole: 'Procurement Officer',
       organizationName: newCall.organizationName,
       action: 'Created New Procurement Call',
@@ -2162,9 +2034,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFormTemplates((prev) => [newTemplate, ...prev]);
 
     addAuditEvent({
-      actorName: 'K. Tau',
+      actorName: currentUser?.fullName || 'Authorized Procurement Officer',
       actorRole: 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: registeredBuyerOrgName || 'Procuring Organization',
       action: 'Created Form Template',
       entityType: 'Form',
       entityId: newId,
@@ -2208,7 +2080,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addAuditEvent({
       actorName: scoreData.evaluatorName,
       actorRole: 'Evaluator',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: registeredBuyerOrgName || 'Procuring Organization',
       action: 'Recorded Evaluation Score',
       entityType: 'Evaluation',
       entityId: scoreData.applicationId,
@@ -2232,9 +2104,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     addAuditEvent({
-      actorName: evaluators.find((e) => e.id === evaluatorId)?.name || 'Evaluator',
+      actorName: evaluators.find((e) => e.id === evaluatorId)?.name || currentUser?.fullName || 'Evaluator',
       actorRole: 'Evaluator',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: registeredBuyerOrgName || 'Procuring Organization',
       action: 'Signed Conflict of Interest Declaration',
       entityType: 'Evaluation',
       entityId: evaluatorId,
@@ -2244,17 +2116,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateAwardDecision = (updates: Partial<AwardDecision>) => {
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const actorName = currentUser?.fullName || (updates.status === 'Approved & Published' ? 'Tender Board Approver' : 'Procurement Officer');
     setAwardDecision((prev) => ({
       ...prev,
       ...updates,
       approvedAt: updates.status === 'Approved & Published' ? now : prev.approvedAt,
-      approvedBy: updates.status === 'Approved & Published' ? 'Town Clerk / Head of Tender Board' : prev.approvedBy,
+      approvedBy: updates.status === 'Approved & Published' ? actorName : prev.approvedBy,
     }));
 
     addAuditEvent({
-      actorName: updates.status === 'Approved & Published' ? 'Town Clerk / Head of Tender Board' : 'K. Tau (Lead Procurement Specialist)',
+      actorName,
       actorRole: updates.status === 'Approved & Published' ? 'Approver' : 'Procurement Officer',
-      organizationName: 'Gaborone Regional Council',
+      organizationName: registeredBuyerOrgName || 'Procuring Organization',
       action: updates.status === 'Approved & Published' ? 'Approved and Published Contract Award' : 'Updated Draft Award Recommendation',
       entityType: 'Award',
       entityId: awardDecision.id,
@@ -2300,6 +2173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         inactivitySecondsLeft,
         resetInactivity,
         buyerOrgStatus,
+        buyerOrgRejectionReason,
         registeredBuyerOrgName,
         registeredBuyerEmail,
         registerBuyerOrganization,
@@ -2347,9 +2221,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateAwardDecision,
         markNotificationRead,
         addAuditEvent,
-        loadDemoSupplier,
-        resetDemoData,
-        autoCompleteProfile,
         completenessResult,
         profileSummary,
         isGateReady,

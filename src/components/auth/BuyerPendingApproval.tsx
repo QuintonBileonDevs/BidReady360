@@ -1,51 +1,98 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AuthLayout } from './AuthLayout';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { useApp } from '../../context/AppContext';
-import { CheckCircle2, ArrowRight } from 'lucide-react';
+import { RefreshCw, AlertTriangle, LogOut } from 'lucide-react';
 
 interface BuyerPendingApprovalProps {
   onNavigate: (route: string) => void;
 }
 
 export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNavigate }) => {
-  const { setRole, setActiveNav, buyerOrgStatus, registeredBuyerOrgName, registeredBuyerEmail, approveBuyerOrg } = useApp();
+  const {
+    setRole,
+    setActiveNav,
+    buyerOrgStatus,
+    buyerOrgRejectionReason,
+    registeredBuyerOrgName,
+    registeredBuyerEmail,
+    runBootstrap,
+    logout,
+    isAuthenticated,
+  } = useApp();
 
-  const handleSimulateSystemApproval = () => {
-    approveBuyerOrg(registeredBuyerOrgName || 'Procuring Organization');
-    setRole('buyer');
-    setActiveNav('dashboard');
+  const [isChecking, setIsChecking] = useState(false);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
+
+  const isRejectedOrSuspended = buyerOrgStatus === 'Rejected';
+
+  const handleCheckApprovalStatus = async () => {
+    setIsChecking(true);
+    setStatusNotice(null);
+    try {
+      await runBootstrap({ force: true });
+      setStatusNotice(
+        isRejectedOrSuspended
+          ? 'Status refreshed. Your organization remains restricted — please contact BidReady360 administration.'
+          : 'Status refreshed. If an administrator has approved your organization, your workspace will unlock automatically.'
+      );
+    } catch {
+      setStatusNotice('Could not refresh approval status. Please try signing in again.');
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   return (
     <AuthLayout
       leftMessage="Run fair, transparent procurement."
-      tagline="Your procuring organization registration has been submitted and is currently in review."
+      tagline={
+        isRejectedOrSuspended
+          ? 'Access for this procuring organization is currently restricted by platform administration.'
+          : 'Your procuring organization registration has been submitted and is currently under administrator review.'
+      }
     >
       <div className="space-y-6">
         <div className="space-y-2">
-          <Badge variant="warning" size="md">
-            Review in progress
+          <Badge variant={isRejectedOrSuspended ? 'alert' : 'warning'} size="md">
+            {isRejectedOrSuspended ? 'Organization restricted' : 'Review in progress'}
           </Badge>
 
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
-            Registration submitted
+            {isRejectedOrSuspended ? 'Organization access suspended or rejected' : 'Awaiting administrator approval'}
           </h2>
           <p className="text-[14px] text-[#6B7A87] leading-relaxed">
-            Thank you for registering <strong>{registeredBuyerOrgName || 'your organization'}</strong> ({registeredBuyerEmail || 'official account'}). 
-            In compliance with the Public Procurement Act, new buying entities must be verified by the platform system administration before publishing tenders or evaluating bids.
+            {isRejectedOrSuspended ? (
+              <>
+                <strong>{registeredBuyerOrgName || 'Your organization'}</strong> ({registeredBuyerEmail || 'official account'}) does not currently have active procuring entity approval. Publishing tenders and managing calls is blocked until reinstated by a platform administrator.
+              </>
+            ) : (
+              <>
+                Thank you for registering <strong>{registeredBuyerOrgName || 'your organization'}</strong> ({registeredBuyerEmail || 'official account'}).
+                In compliance with the Public Procurement Act, new buying entities must be verified and approved by a BidReady360 platform administrator before publishing tenders or managing calls.
+              </>
+            )}
           </p>
         </div>
+
+        {isRejectedOrSuspended && buyerOrgRejectionReason && (
+          <div className="p-4 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 flex items-start gap-2.5 text-[13px] text-[#C2412D]">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Administrator reason</span>
+              <span>{buyerOrgRejectionReason}</span>
+            </div>
+          </div>
+        )}
 
         {/* Three-step timeline */}
         <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
           <span className="text-[13px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
-            Verification timeline
+            Verification status
           </span>
 
           <div className="space-y-4 relative pl-6 border-l-2 border-[#D5E0EA] dark:border-[#1E364A]">
-            {/* Step 1: Submitted */}
             <div className="relative space-y-0.5">
               <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-[#2F8F5B] text-white flex items-center justify-center text-[10px] font-bold">
                 ✓
@@ -57,27 +104,31 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
                 <span className="text-[12px] text-[#2F8F5B] font-medium">Completed</span>
               </div>
               <p className="text-[13px] text-[#6B7A87]">
-                Official entity name: <strong>{registeredBuyerOrgName || 'New Entity'}</strong>
+                Official entity name: <strong>{registeredBuyerOrgName || 'Procuring Organization'}</strong>
               </p>
             </div>
 
-            {/* Step 2: Under review */}
             <div className="relative space-y-0.5">
-              <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-[#E8A33D] text-white flex items-center justify-center text-[10px] font-bold">
-                •
+              <span
+                className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full text-white flex items-center justify-center text-[10px] font-bold ${
+                  isRejectedOrSuspended ? 'bg-[#C2412D]' : 'bg-[#E8A33D]'
+                }`}
+              >
+                {isRejectedOrSuspended ? '!' : '•'}
               </span>
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
-                  2. System verification in progress
+                  2. Platform administrator verification
                 </span>
-                <span className="text-[12px] text-[#E8A33D] font-medium">Pending verification</span>
+                <span className={`text-[12px] font-medium ${isRejectedOrSuspended ? 'text-[#C2412D]' : 'text-[#E8A33D]'}`}>
+                  {isRejectedOrSuspended ? 'Rejected / Suspended' : 'Pending approval'}
+                </span>
               </div>
               <p className="text-[13px] text-[#6B7A87]">
-                Platform registrar verifies institutional authority standing and email domain. All tender creation and bidder evaluation controls remain locked until verified.
+                All tender creation, application review, and bid evaluation endpoints are enforced server-side and remain locked until approved in the Admin portal.
               </p>
             </div>
 
-            {/* Step 3: Approved */}
             <div className="relative space-y-0.5 opacity-60">
               <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-600 flex items-center justify-center text-[10px] font-bold">
                 3
@@ -86,42 +137,77 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
                 <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
                   3. Workspace activation
                 </span>
-                <span className="text-[12px] text-[#6B7A87]">Pending</span>
+                <span className="text-[12px] text-[#6B7A87]">Locked</span>
               </div>
               <p className="text-[13px] text-[#6B7A87]">
-                Unlocks tender publishing, multi-evaluator scoring panels, and sealed bid opening tools.
+                Once approved by an administrator, click &ldquo;Check approval status&rdquo; below to enter your buyer workspace immediately.
               </p>
             </div>
           </div>
         </div>
 
+        {statusNotice && (
+          <div className="p-3 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/40 border border-[#D5E0EA] dark:border-[#1E364A] text-[13px] text-[#10212E] dark:text-[#B2C3D2]">
+            {statusNotice}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="pt-2 space-y-2.5">
-          <Button
-            type="button"
-            variant="primary"
-            size="lg"
-            className="w-full"
-            onClick={handleSimulateSystemApproval}
-            rightIcon={<CheckCircle2 className="w-4 h-4" />}
-          >
-            Simulate System Approval (Verify & Activate Workspace)
-          </Button>
+          {isAuthenticated ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              disabled={isChecking}
+              isLoading={isChecking}
+              onClick={handleCheckApprovalStatus}
+              leftIcon={!isChecking ? <RefreshCw className="w-4 h-4" /> : undefined}
+            >
+              {isChecking ? 'Checking status...' : 'Check approval status'}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              className="w-full"
+              onClick={() => onNavigate('buyer-login')}
+            >
+              Go to buyer sign in
+            </Button>
+          )}
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            className="w-full"
-            onClick={() => {
-              setRole('public');
-              setActiveNav('about');
-            }}
-          >
-            Return to public portal
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onClick={() => {
+                setRole('public');
+                setActiveNav('about');
+              }}
+            >
+              Return to public portal
+            </Button>
+
+            {isAuthenticated && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="md"
+                onClick={() => logout('user_initiated')}
+                leftIcon={<LogOut className="w-4 h-4" />}
+              >
+                Sign out
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </AuthLayout>
   );
 };
+

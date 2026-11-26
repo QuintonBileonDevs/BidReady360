@@ -68,65 +68,39 @@ export const SupplierConsent: React.FC = () => {
 
   // "Share with an organization" Drawer Form State
   const [selectedOrgId, setSelectedOrgId] = useState<string>(
-    organizations[0]?.id || 'org-grc'
+    organizations[0]?.id || ''
   );
   const [shareCompanyDetails, setShareCompanyDetails] = useState<boolean>(true);
   const [shareDirectorsOwners, setShareDirectorsOwners] = useState<boolean>(true);
   const [sharePastProjects, setSharePastProjects] = useState<boolean>(true);
   const [shareSelectedDocs, setShareSelectedDocs] = useState<boolean>(true);
-  const [pickedDocNames, setPickedDocNames] = useState<string[]>([
-    'BURS Tax Clearance Certificate',
-    'PPRA Registration Certificate',
-  ]);
-  const [expiryDateInput, setExpiryDateInput] = useState<string>('2027-03-31');
+  const defaultVerifiedDocTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          documents
+            .filter((d) => d.status === 'Verified' || d.status === 'Expiring soon')
+            .map((d) => d.documentType)
+        )
+      ),
+    [documents]
+  );
+
+  const defaultOneYearExpiry = useMemo(() => {
+    const dt = new Date();
+    dt.setUTCFullYear(dt.getUTCFullYear() + 1);
+    return dt.toISOString().slice(0, 10);
+  }, []);
+
+  const [pickedDocNames, setPickedDocNames] = useState<string[]>(defaultVerifiedDocTypes);
+  const [expiryDateInput, setExpiryDateInput] = useState<string>(defaultOneYearExpiry);
   const [hasExpiryDate, setHasExpiryDate] = useState<boolean>(true);
   const [purposeLine, setPurposeLine] = useState<string>(
     'Vendor qualification and annual tender bidding accreditation'
   );
 
-  // Activity list records (incorporating exact user specification)
-  const [activitiesList] = useState<SharingActivityItem[]>([
-    {
-      id: 'act-1',
-      organizationName: 'Okavango Regional Council',
-      action: 'viewed your tax clearance',
-      dateStr: '3 Oct 2026',
-      timestamp: '3 Oct 2026, 14:15 CAT',
-      ipAddress: '168.167.44.12',
-    },
-    {
-      id: 'act-2',
-      organizationName: 'Gaborone Regional Council',
-      action: 'verified your PPRA registration',
-      dateStr: '2 Oct 2026',
-      timestamp: '2 Oct 2026, 11:30 CAT',
-      ipAddress: '168.167.44.18',
-    },
-    {
-      id: 'act-3',
-      organizationName: 'National Training Agency',
-      action: 'inspected your audited financial statements',
-      dateStr: '28 Sep 2026',
-      timestamp: '28 Sep 2026, 16:45 CAT',
-      ipAddress: '168.167.44.05',
-    },
-    {
-      id: 'act-4',
-      organizationName: 'Botswana Housing Corporation',
-      action: 'viewed your past projects',
-      dateStr: '24 Sep 2026',
-      timestamp: '24 Sep 2026, 10:20 CAT',
-      ipAddress: '168.167.44.22',
-    },
-    {
-      id: 'act-5',
-      organizationName: 'Gaborone Regional Council',
-      action: 'inspected your company details and directors',
-      dateStr: '20 Sep 2026',
-      timestamp: '20 Sep 2026, 09:15 CAT',
-      ipAddress: '168.167.44.18',
-    },
-  ]);
+  // Activity list records populated from live access logs (no fabricated mock entries)
+  const [activitiesList] = useState<SharingActivityItem[]>([]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -139,16 +113,13 @@ export const SupplierConsent: React.FC = () => {
       showToast('Email verification is mandatory before sharing documents or granting access.');
       return;
     }
-    setSelectedOrgId(organizations[0]?.id || 'org-grc');
+    setSelectedOrgId(organizations[0]?.id || '');
     setShareCompanyDetails(true);
     setShareDirectorsOwners(true);
     setSharePastProjects(true);
     setShareSelectedDocs(true);
-    setPickedDocNames([
-      'BURS Tax Clearance Certificate',
-      'PPRA Registration Certificate',
-    ]);
-    setExpiryDateInput('2027-03-31');
+    setPickedDocNames(defaultVerifiedDocTypes);
+    setExpiryDateInput(defaultOneYearExpiry);
     setHasExpiryDate(true);
     setPurposeLine('Vendor qualification and tender bidding accreditation');
     setIsShareDrawerOpen(true);
@@ -203,7 +174,6 @@ export const SupplierConsent: React.FC = () => {
       entityType: 'Organization',
       entityId: revokingGrant.organizationId,
       details: `Revoked data sharing agreement with ${revokingGrant.organizationName}. Access to company details, directors, and documents terminated.`,
-      ipAddress: '168.167.23.41',
     });
 
     showToast(`Access permissions revoked for ${revokingGrant.organizationName}.`);

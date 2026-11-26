@@ -111,19 +111,104 @@ export class ApplicationsRepository {
     actorRole: string;
     ipAddress?: string;
   }): Promise<{ applicationId: string; receiptNumber: string }> {
-    // 1. Fetch Call & verify closing date
-    const callRes = await query<{ id: string; organization_id: string; reference_no: string; title: string; closes_at: string | null }>(
-      `SELECT id, organization_id, reference_no, title, closes_at FROM calls WHERE id = $1`,
+    // 1. Fetch Call & verify active organization, call status, and closing date
+    const callRes = await query<{
+      id: string;
+      organization_id: string;
+      reference_no: string;
+      title: string;
+      status: string;
+      closes_at: string | null;
+      org_status: string;
+    }>(
+      `SELECT c.id, c.organization_id, c.reference_no, c.title, c.status, c.closes_at, o.status AS org_status
+       FROM calls c
+       JOIN organizations o ON o.id = c.organization_id AND o.deleted_at IS NULL
+       WHERE c.id = $1`,
       [data.callId]
     );
-    if (!callRes.rows.length) throw new Error('Call does not exist.');
+    if (!callRes.rows.length) {
+      const err: any = new Error('Call does not exist.');
+      err.status = 404;
+      err.code = 'CALL_NOT_FOUND';
+      throw err;
+    }
     const call = callRes.rows[0];
 
-    if (call.closes_at && new Date() > new Date(call.closes_at)) {
-      throw new Error('The closing time has passed; applications can no longer be submitted.');
+    if (call.org_status !== 'active') {
+      const err: any = new Error('This opportunity is unavailable because the procuring organization is not currently active.');
+      err.status = 403;
+      err.code = 'ORGANIZATION_INACTIVE';
+      throw err;
     }
 
-    // 2. Enforce Mandatory Documents check
+    if (!['open', 'published'].includes(String(call.status || '').toLowerCase())) {
+      const err: any = new Error('This call is not currently open for applications.');
+      err.status = 400;
+      err.code = 'CALL_NOT_OPEN';
+      throw err;
+    }
+
+    if (call.closes_at && new Date() > new Date(call.closes_at)) {
+      const err: any = new Error('The closing time has passed; applications can no longer be submitted.');
+      err.status = 400;
+      err.code = 'CALL_CLOSED';
+      throw err;
+    }
+
+    // 1a. Enforce Supplier Standing (block suspended or rejected suppliers)
+    const supRes = await query<{ status: string; verification_status: string }>(
+      `SELECT status, verification_status FROM suppliers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+      [data.supplierId]
+    );
+    if (!supRes.rows.length) {
+      const err: any = new Error('Supplier profile not found.');
+      err.status = 403;
+      err.code = 'SUPPLIER_NOT_FOUND';
+      throw err;
+    }
+    const sup = supRes.rows[0];
+    if (String(sup.status || '').toLowerCase() !== 'active') {
+      const err: any = new Error(
+        `Application blocked: your supplier account is currently ${sup.status}. Contact BidReady360 compliance administration.`
+      );
+      err.status = 403;
+      err.code = 'SUPPLIER_SUSPENDED';
+      throw err;
+    }
+    if (String(sup.verification_status || '').toLowerCase() === 'rejected') {
+      const err: any = new Error(
+        'Application blocked: your supplier verification was rejected. Please address compliance findings before applying.'
+      );
+      err.status = 403;
+      err.code = 'SUPPLIER_REJECTED';
+      throw err;
+    }
+
+    // 1b. Enforce statutory debarment block (platform-wide or procuring-entity-specific)
+    const debarRes = await query<{ id: string; reason: string; ends_on: string | null }>(
+      `SELECT id, reason, ends_on
+       FROM debarments
+       WHERE supplier_id = $1
+         AND lifted_at IS NULL
+         AND starts_on <= CURRENT_DATE
+         AND (ends_on IS NULL OR ends_on >= CURRENT_DATE)
+         AND (organization_id IS NULL OR organization_id = $2)
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [data.supplierId, call.organization_id]
+    );
+    if (debarRes.rows.length > 0) {
+      const deb = debarRes.rows[0];
+      const err: any = new Error(
+        `Application blocked: supplier is currently debarred (${deb.reason})${deb.ends_on ? ` until ${deb.ends_on}` : ' (permanent)'}.`
+      );
+      err.status = 403;
+      err.code = 'SUPPLIER_DEBARRED';
+      throw err;
+    }
+
+    // 2. Enforce Mandatory Documents check (exclude rejected/expired/unverifiable versions)
     const reqDocsRes = await query<{ document_type_id: string; code: string; name: string }>(
       `SELECT crd.document_type_id, dt.code, dt.name
        FROM call_required_documents crd
@@ -132,24 +217,47 @@ export class ApplicationsRepository {
       [data.callId]
     );
 
-    // Fetch supplier's attached versions
+    // Fetch supplier's attached versions (accepting versionId or documentId for compatibility)
     let attachedVersions: any[] = [];
     if (data.attachedDocumentVersionIds.length > 0) {
-      const vRes = await query<{ id: string; document_type_id: string; version_no: number; sha256: string; document_number: string | null; expiry_date: string | null }>(
-        `SELECT sdv.id, sd.document_type_id, sdv.version_no, sdv.sha256, sdv.document_number, sdv.expiry_date
-         FROM supplier_document_versions sdv
-         JOIN supplier_documents sd ON sd.id = sdv.document_id
-         WHERE sdv.id = ANY($1::uuid[]) AND sd.supplier_id = $2`,
-        [data.attachedDocumentVersionIds, data.supplierId]
+      const validUuids = data.attachedDocumentVersionIds.filter((id) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))
       );
-      attachedVersions = vRes.rows;
+      if (validUuids.length > 0) {
+        const vRes = await query<{
+          id: string;
+          document_type_id: string;
+          version_no: number;
+          sha256: string;
+          document_number: string | null;
+          expiry_date: string | null;
+          verification_status: string | null;
+        }>(
+          `SELECT sdv.id, sd.document_type_id, sdv.version_no, sdv.sha256,
+                  sdv.document_number, sdv.expiry_date, sdv.verification_status
+           FROM supplier_document_versions sdv
+           JOIN supplier_documents sd ON sd.id = sdv.document_id
+           WHERE (sdv.id = ANY($1::uuid[]) OR (sd.id = ANY($1::uuid[]) AND sd.current_version_id = sdv.id))
+             AND sd.supplier_id = $2
+             AND sd.status = 'active'
+             AND COALESCE(UPPER(sdv.verification_status), 'PENDING_VERIFICATION') NOT IN ('REJECTED', 'EXPIRED', 'UNVERIFIABLE')
+             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)`,
+          [validUuids, data.supplierId]
+        );
+        attachedVersions = vRes.rows;
+      }
     }
 
-    // Check that every mandatory document is provided
+    // Check that every mandatory document is provided and valid
     const attachedTypeIds = new Set(attachedVersions.map((v) => v.document_type_id));
     for (const reqDoc of reqDocsRes.rows) {
       if (!attachedTypeIds.has(reqDoc.document_type_id)) {
-        throw new Error(`Mandatory document missing: You must attach a valid ${reqDoc.name} (${reqDoc.code}) to submit this application.`);
+        const err: any = new Error(
+          `Mandatory document missing or invalid: You must attach a valid, non-rejected ${reqDoc.name} (${reqDoc.code}) to submit this application.`
+        );
+        err.status = 400;
+        err.code = 'MANDATORY_DOCUMENT_MISSING';
+        throw err;
       }
     }
 

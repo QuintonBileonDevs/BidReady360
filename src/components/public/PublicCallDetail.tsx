@@ -1,28 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { callsApi } from '../../services/api';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { RingMotif } from '../ui/RingMotif';
 import {
   ArrowLeft,
-  Calendar,
-  Clock,
   Building2,
   Lock,
   FileCheck2,
-  FileText,
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   Send,
-  Download,
-  Share2,
-  HelpCircle,
-  ExternalLink,
   ChevronRight,
-  Info,
 } from 'lucide-react';
 
 interface PublicCallDetailProps {
@@ -34,8 +24,7 @@ interface PublicCallDetailProps {
 export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBack, onApply }) => {
   const {
     calls,
-    clarifications,
-    submitClarificationQuestion,
+    clarifications: contextClarifications,
     role,
     supplier,
     documents,
@@ -43,13 +32,33 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     setIntendedRoute,
     setActiveNav,
     setSelectedCallId,
-    autoCompleteProfile,
   } = useApp();
 
   const [questionText, setQuestionText] = useState('');
   const [questionSuccess, setQuestionSuccess] = useState(false);
+  const [questionError, setQuestionError] = useState<string | null>(null);
+  const [isSubmittingQuestion, setIsSubmittingQuestion] = useState(false);
+  const [liveClarifications, setLiveClarifications] = useState<any[] | null>(null);
 
   const call = calls.find((c) => c.id === callId);
+
+  useEffect(() => {
+    let active = true;
+    if (!callId) return;
+    callsApi
+      .listClarifications(callId)
+      .then((rows) => {
+        if (active && Array.isArray(rows)) {
+          setLiveClarifications(rows);
+        }
+      })
+      .catch(() => {
+        // Fallback to context clarifications only if endpoint unavailable
+      });
+    return () => {
+      active = false;
+    };
+  }, [callId]);
 
   if (!call) {
     return (
@@ -68,15 +77,35 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     );
   }
 
-  const callClarifications = clarifications.filter((c) => c.callId === call.id);
+  const callClarifications = liveClarifications ?? contextClarifications.filter((c) => c.callId === call.id);
 
-  const handleAskQuestion = (e: React.FormEvent) => {
+  const handleAskQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
+    setQuestionError(null);
     if (!questionText.trim()) return;
-    submitClarificationQuestion(call.id, questionText.trim());
-    setQuestionText('');
-    setQuestionSuccess(true);
-    setTimeout(() => setQuestionSuccess(false), 4000);
+    if (!isAuthenticated || role !== 'supplier') {
+      setIntendedRoute('opportunities');
+      setSelectedCallId(call.id);
+      if (onBack) onBack();
+      setActiveNav('supplier-login');
+      return;
+    }
+
+    setIsSubmittingQuestion(true);
+    try {
+      await callsApi.askClarification(call.id, questionText.trim());
+      setQuestionText('');
+      setQuestionSuccess(true);
+      const updated = await callsApi.listClarifications(call.id).catch(() => null);
+      if (Array.isArray(updated)) {
+        setLiveClarifications(updated);
+      }
+      setTimeout(() => setQuestionSuccess(false), 5000);
+    } catch (err: any) {
+      setQuestionError(err?.message || 'Unable to submit clarification inquiry.');
+    } finally {
+      setIsSubmittingQuestion(false);
+    }
   };
 
   const handleApply = () => {
@@ -92,9 +121,6 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
       setActiveNav('supplier-verify-email');
       return;
     }
-    if ((supplier.profileCompleteness || 0) < 100) {
-      autoCompleteProfile();
-    }
     if (onApply) {
       onApply();
     } else {
@@ -103,13 +129,15 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
     }
   };
 
+  const isDocVerifiedAndCurrent = (status?: string) =>
+    status === 'Verified' || status === 'Expiring soon';
+
   const hasCipa = (documents || []).some(
     (d) =>
       (d.documentType?.toLowerCase().includes('cipa') ||
         d.title?.toLowerCase().includes('cipa') ||
         d.documentType?.toLowerCase().includes('incorporation')) &&
-      d.status !== 'Expired' &&
-      d.status !== 'Rejected'
+      isDocVerifiedAndCurrent(d.status)
   );
 
   const hasTax = (documents || []).some(
@@ -117,19 +145,15 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
       (d.documentType?.toLowerCase().includes('tax') ||
         d.title?.toLowerCase().includes('tax') ||
         d.documentType?.toLowerCase().includes('burs')) &&
-      d.status !== 'Expired' &&
-      d.status !== 'Rejected'
+      isDocVerifiedAndCurrent(d.status)
   );
 
-  const hasPpra =
-    Boolean(supplier?.ppraCode) ||
-    (documents || []).some(
-      (d) =>
-        (d.documentType?.toLowerCase().includes('ppra') ||
-          d.title?.toLowerCase().includes('ppra')) &&
-        d.status !== 'Expired' &&
-        d.status !== 'Rejected'
-    );
+  const hasPpra = (documents || []).some(
+    (d) =>
+      (d.documentType?.toLowerCase().includes('ppra') ||
+        d.title?.toLowerCase().includes('ppra')) &&
+      isDocVerifiedAndCurrent(d.status)
+  );
 
   const hasSafety = (documents || []).some(
     (d) =>
@@ -140,16 +164,14 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
         d.title?.toLowerCase().includes('workers') ||
         d.title?.toLowerCase().includes('safety') ||
         d.title?.toLowerCase().includes('compensation')) &&
-      d.status !== 'Expired' &&
-      d.status !== 'Rejected'
+      isDocVerifiedAndCurrent(d.status)
   );
 
   const getDaysRemaining = (deadlineStr: string) => {
-    const now = new Date('2026-10-05T00:00:00');
+    const now = new Date();
     const deadline = new Date(deadlineStr);
     const diffTime = deadline.getTime() - now.getTime();
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return days;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const daysLeft = getDaysRemaining(call.closingDate);
@@ -409,10 +431,17 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
                 />
               </div>
 
+              {questionError && (
+                <div className="p-2.5 rounded-[6px] bg-rose-50 text-[#C2412D] text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{questionError}</span>
+                </div>
+              )}
+
               {questionSuccess && (
                 <div className="p-2.5 rounded-[6px] bg-[#ECFDF5] text-[#065F46] text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Your clarification inquiry was submitted for public review.</span>
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Your clarification inquiry was submitted privately to the procuring organization and will appear on the public bulletin once answered.</span>
                 </div>
               )}
 
@@ -420,9 +449,10 @@ export const PublicCallDetail: React.FC<PublicCallDetailProps> = ({ callId, onBa
                 type="submit"
                 variant="secondary"
                 size="sm"
+                disabled={isSubmittingQuestion}
                 rightIcon={<Send className="w-3.5 h-3.5" />}
               >
-                Submit Inquiry
+                {isSubmittingQuestion ? 'Submitting...' : isAuthenticated && role === 'supplier' ? 'Submit Inquiry' : 'Sign in as Supplier to Inquire'}
               </Button>
             </form>
           </Card>

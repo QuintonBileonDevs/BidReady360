@@ -1,27 +1,61 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
-import { ShieldCheck, Download, Search, Filter, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { adminApi, AdminAuditEventRecord } from '../../services/api';
+import {
+  Download,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+} from 'lucide-react';
 
 export const AdminAuditLog: React.FC = () => {
-  const { auditEvents } = useApp();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterAction, setFilterAction] = useState<string>('ALL');
+  const [events, setEvents] = useState<AdminAuditEventRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredEvents = auditEvents.filter((e) => {
-    const matchesSearch =
-      e.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.actorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.details.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesAction = filterAction === 'ALL' || e.action.includes(filterAction);
-    return matchesSearch && matchesAction;
-  });
+  // Server-backed filter inputs
+  const [searchQuery, setSearchQuery] = useState('');
+  const [actorFilter, setActorFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+  const [entityTypeFilter, setEntityTypeFilter] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  const loadLogs = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await adminApi.listAuditLogs({
+        search: searchQuery.trim() || undefined,
+        actor: actorFilter.trim() || undefined,
+        action: actionFilter.trim() || undefined,
+        entityType: entityTypeFilter || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
+        limit: 200,
+      });
+      setEvents(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to load cross-tenant audit log.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery, actorFilter, actionFilter, entityTypeFilter, fromDate, toDate]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      loadLogs();
+    }, 200);
+    return () => clearTimeout(t);
+  }, [loadLogs]);
 
   const handleExportCSV = () => {
-    const headers = 'ID,Timestamp,Actor,Role,Action,EntityType,Details\n';
-    const rows = filteredEvents
+    const headers = 'ID,Timestamp,Actor,Role,Action,EntityType,EntityID,Details\n';
+    const rows = events
       .map(
         (e) =>
-          `"${e.id}","${e.timestamp}","${e.actorName}","${e.actorRole}","${e.action}","${e.entityType}","${e.details.replace(/"/g, '""')}"`
+          `"${e.id}","${e.timestamp}","${(e.actorName || '').replace(/"/g, '""')}","${(e.actorRole || '').replace(/"/g, '""')}","${(e.action || '').replace(/"/g, '""')}","${(e.entityType || '').replace(/"/g, '""')}","${e.entityId || ''}","${(e.details || '').replace(/"/g, '""')}"`
       )
       .join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv' });
@@ -42,18 +76,30 @@ export const AdminAuditLog: React.FC = () => {
             Statutory audit log
           </h1>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Immutable chronological record of all administrative actions, tender evaluations, and system approvals.
+            Cross-tenant chronological record of administrative approvals, rejections, unlocks, debarments, and tender operations.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCSV}
-          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#132635] rounded-[6px] text-[14px] font-medium transition-colors inline-flex items-center gap-2 cursor-pointer shrink-0"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export audit CSV</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={loadLogs}
+            disabled={isLoading}
+            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:bg-[#F7FAFD] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={events.length === 0}
+            className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#132635] rounded-[6px] text-[14px] font-medium transition-colors inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Audit Integrity Banner */}
@@ -61,56 +107,144 @@ export const AdminAuditLog: React.FC = () => {
         <div className="flex items-center gap-2.5">
           <CheckCircle2 className="w-5 h-5 shrink-0 text-[#2F8F5B]" />
           <span>
-            <strong>Audit log integrity verified:</strong> Cryptographic SHA-256 seal verified 4 minutes ago. No retroactive modifications detected.
+            <strong>Persisted PostgreSQL audit trail:</strong> Showing {events.length} recorded event{events.length === 1 ? '' : 's'} matching your filters.
           </span>
         </div>
-        <span className="font-sans text-[13px] text-[#2F8F5B] whitespace-nowrap">
-          Ledger valid
-        </span>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative w-full md:w-80">
+      {error && (
+        <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-[#C2412D] dark:text-rose-200 text-[14px] flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Filter Bar */}
+      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-[13px]">
+        <div className="relative lg:col-span-2">
           <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search actor, action, details..."
+            placeholder="Search details, action, actor..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white text-[14px]"
+            className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
           />
+        </div>
+        <input
+          type="text"
+          placeholder="Actor name/email"
+          value={actorFilter}
+          onChange={(e) => setActorFilter(e.target.value)}
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+        />
+        <select
+          value={entityTypeFilter}
+          onChange={(e) => setEntityTypeFilter(e.target.value)}
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+        >
+          <option value="">All entities</option>
+          <option value="organization">Organization</option>
+          <option value="supplier">Supplier</option>
+          <option value="supplier_person">Director</option>
+          <option value="supplier_document_version">Document</option>
+          <option value="user">User</option>
+          <option value="debarment">Debarment</option>
+          <option value="risk_flag">Risk flag</option>
+          <option value="category">Category</option>
+          <option value="document_type">Document type</option>
+          <option value="plan">Plan</option>
+          <option value="platform_config">Platform config</option>
+        </select>
+        <input
+          type="date"
+          aria-label="From date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+        />
+        <input
+          type="date"
+          aria-label="To date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+        />
+        <div className="sm:col-span-2 lg:col-span-6 flex items-center justify-between gap-3 pt-1">
+          <input
+            type="text"
+            placeholder="Filter by action code (e.g. ADMIN_APPROVED, ADMIN_UNLOCKED, DEBARMENT)..."
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+            className="flex-1 px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+          />
+          {(searchQuery || actorFilter || actionFilter || entityTypeFilter || fromDate || toDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setActorFilter('');
+                setActionFilter('');
+                setEntityTypeFilter('');
+                setFromDate('');
+                setToDate('');
+              }}
+              className="text-[12px] text-[#1F5F99] font-medium hover:underline cursor-pointer shrink-0"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       </div>
 
       {/* Table */}
       <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-            <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
-              <tr>
-                <th className="p-4">Timestamp (CAT)</th>
-                <th className="p-4">Actor</th>
-                <th className="p-4">Role</th>
-                <th className="p-4">Action</th>
-                <th className="p-4">Details</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
-              {filteredEvents.map((evt) => (
-                <tr key={evt.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
-                  <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] whitespace-nowrap text-[13px]">
-                    {evt.timestamp}
-                  </td>
-                  <td className="p-4 font-semibold">{evt.actorName}</td>
-                  <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] text-[13px]">{evt.actorRole}</td>
-                  <td className="p-4 font-medium text-[#1F5F99] dark:text-[#6FAEE0]">{evt.action}</td>
-                  <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] max-w-md">{evt.details}</td>
+        {isLoading ? (
+          <div className="p-12 flex items-center justify-center gap-2 text-[#6B7A87] text-[14px]">
+            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+            <span>Querying audit ledger...</span>
+          </div>
+        ) : events.length === 0 ? (
+          <div className="p-12 text-center text-[#6B7A87] text-[15px]">
+            No audit events match your current filters.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
+                <tr>
+                  <th className="p-4">Timestamp</th>
+                  <th className="p-4">Actor</th>
+                  <th className="p-4">Entity</th>
+                  <th className="p-4">Action</th>
+                  <th className="p-4">Details</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+                {events.map((evt) => (
+                  <tr key={evt.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
+                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] whitespace-nowrap text-[13px]">
+                      {evt.timestamp}
+                    </td>
+                    <td className="p-4">
+                      <div className="font-semibold text-[13px]">{evt.actorName}</div>
+                      <div className="text-[11px] text-[#6B7A87]">{evt.actorRole}</div>
+                    </td>
+                    <td className="p-4 text-[12px] text-[#43525F] dark:text-[#B2C3D2] capitalize">
+                      {(evt.entityType || 'system').replace(/_/g, ' ')}
+                    </td>
+                    <td className="p-4 font-medium text-[#1F5F99] dark:text-[#6FAEE0] text-[13px]">
+                      {evt.action}
+                    </td>
+                    <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] max-w-md text-[13px]">
+                      {evt.details}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

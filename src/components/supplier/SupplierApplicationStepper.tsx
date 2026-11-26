@@ -86,6 +86,8 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
   // Stepper state: 1: Check eligibility, 2: Choose what to share, 3: Answer questions, 4: Review, 5: Submit
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Check if buyer specifically requires a trading licence for this call
   const callRequiresTradingLicence = useMemo(() => {
@@ -119,6 +121,8 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   const [quickUploadDocNumber, setQuickUploadDocNumber] = useState('');
   const [quickUploadFile, setQuickUploadFile] = useState<File | null>(null);
   const [quickUploadLoading, setQuickUploadLoading] = useState(false);
+  const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
+  const [stepperNotice, setStepperNotice] = useState<string | null>(null);
   const quickUploadInputRef = useRef<HTMLInputElement>(null);
 
   const handleQuickUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,9 +130,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     if (file) {
       setQuickUploadFile(file);
       setQuickUploadFileName(file.name);
-      if (!quickUploadDocNumber) {
-        setQuickUploadDocNumber(`CERT-${Math.floor(1000 + Math.random() * 9000)}`);
-      }
+      setQuickUploadError(null);
     }
   };
 
@@ -143,18 +145,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     return formTemplates.find((t) => t.id === selectedCall.formTemplateId);
   }, [selectedCall, formTemplates]);
 
-  const [formAnswers, setFormAnswers] = useState<Record<string, any>>({
-    f1: 5,
-    f2: true,
-    f3: 'Plot 22019 G-West Industrial Park, Gaborone',
-    f4: false,
-    f5: '',
-    f6: 'BW_LOCAL',
-    f7: supplier.isDemoAccount ? 'We maintain 45-day reserve stock at our Gaborone industrial facility with primary and secondary logistics trucks.' : '',
-    'nta-f1': 24,
-    'nta-f2': true,
-    'nta-f3': supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Authorized Officer',
-  });
+  const [formAnswers, setFormAnswers] = useState<Record<string, any>>({});
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -211,17 +202,21 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   const vatAmountBWP = Math.round(subtotalBidBWP * 0.14);
   const totalCalculatedBidBWP = subtotalBidBWP + vatAmountBWP;
 
-  // Helper: check if a doc in vault is valid
+  // Helper: check if a doc in vault is verified and valid
   const getDocStatusInVault = (
     type: SupplierDocument['documentType']
-  ): { doc?: SupplierDocument; status: 'Passed' | 'Missing' | 'Expired' } => {
+  ): { doc?: SupplierDocument; status: 'Passed' | 'Missing' | 'Expired'; isPending?: boolean } => {
     const matched = documents.find((d) => d.documentType === type);
     if (!matched) return { status: 'Missing' };
 
-    const ref = new Date('2026-10-05').getTime();
+    const ref = new Date();
+    ref.setUTCHours(0, 0, 0, 0);
     const exp = matched.expiryDate ? new Date(matched.expiryDate).getTime() : Infinity;
-    if (exp < ref || matched.status === 'Expired') {
+    if (exp < ref.getTime() || matched.status === 'Expired') {
       return { doc: matched, status: 'Expired' };
+    }
+    if (matched.status !== 'Verified' && matched.status !== 'Expiring soon') {
+      return { doc: matched, status: 'Missing', isPending: matched.status === 'Pending' };
     }
     return { doc: matched, status: 'Passed' };
   };
@@ -242,9 +237,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
       requiredDocType: 'BURS Tax Clearance Certificate',
       note:
         taxCheck.status === 'Passed'
-          ? `Verified valid until ${taxCheck.doc?.expiryDate}`
+          ? `Verified valid until ${taxCheck.doc?.expiryDate || 'registry record'}`
           : taxCheck.status === 'Expired'
-          ? 'Certificate expired on 30 Sep 2026'
+          ? `Certificate expired on ${taxCheck.doc?.expiryDate || 'record'}`
+          : taxCheck.isPending
+          ? 'Uploaded and awaiting officer verification'
           : 'Certificate not found in digital vault',
     });
 
@@ -324,7 +321,9 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     });
 
     // 7. Operating track record
-    const hasTrackRecord = supplier.yearEstablished <= 2021;
+    const currentYear = new Date().getFullYear();
+    const yearsOperating = supplier.yearEstablished ? Math.max(0, currentYear - supplier.yearEstablished) : 0;
+    const hasTrackRecord = yearsOperating >= 5;
     list.push({
       id: 'years',
       title: 'Track record in business (Minimum 5 years)',
@@ -332,7 +331,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
       isMandatory: true,
       status: hasTrackRecord ? 'Passed' : 'Missing',
       note: hasTrackRecord
-        ? `Established in ${supplier.yearEstablished} (14 years of commercial operations)`
+        ? `Established in ${supplier.yearEstablished} (${yearsOperating} years of commercial operations)`
         : 'Less than 5 years since incorporation',
     });
 
@@ -350,11 +349,19 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   const handleSaveQuickUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickUploadDocType) return;
+    if (!quickUploadFile) {
+      setQuickUploadError('Please select a PDF, image, or document file to upload.');
+      return;
+    }
 
+    setQuickUploadError(null);
     setQuickUploadLoading(true);
-    const fileName =
-      quickUploadFileName || `${quickUploadDocType.replace(/\s+/g, '_')}_2026.pdf`;
-    const docNumber = quickUploadDocNumber || `CERT-${Date.now().toString().slice(-6)}`;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const nextYear = new Date();
+    nextYear.setUTCFullYear(nextYear.getUTCFullYear() + 1);
+    const nextYearIso = nextYear.toISOString().slice(0, 10);
+    const fileName = quickUploadFileName || quickUploadFile.name;
+    const docNumber = quickUploadDocNumber.trim();
 
     const getCode = (t: string) => {
       const lower = t.toLowerCase();
@@ -369,21 +376,21 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     };
 
     try {
-      let fileToUpload = quickUploadFile;
-      if (!fileToUpload) {
-        // Minimal standard PDF file so database binary row is always valid
-        const pdfContent = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000108 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n168\n%%EOF\n';
-        fileToUpload = new File([pdfContent], fileName, { type: 'application/pdf' });
-      }
-
       const res = await supplierApi.uploadDocument({
         documentTypeCode: getCode(quickUploadDocType),
-        file: fileToUpload,
+        file: quickUploadFile,
         documentNumber: docNumber,
-        issueDate: '2026-10-01',
-        expiryDate: '2027-09-30',
+        issueDate: todayIso,
+        expiryDate: nextYearIso,
         title: quickUploadDocType,
       });
+
+      const uploadedStatus =
+        res.verificationStatus === 'verified'
+          ? 'Verified'
+          : res.verificationStatus === 'rejected'
+          ? 'Rejected'
+          : 'Pending';
 
       uploadDocument({
         id: res.documentId || `doc-${Date.now()}`,
@@ -391,21 +398,21 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
         documentType: res.documentTypeName || quickUploadDocType,
         documentNumber: res.documentNumber || docNumber,
         fileName: res.fileName || fileName,
-        fileSize: res.fileSizeBytes ? `${Math.round(parseInt(res.fileSizeBytes) / 1024)} KB` : '1.8 MB',
-        issueDate: res.issueDate || '2026-10-01',
-        expiryDate: res.expiryDate || '2027-09-30',
-        status: 'Verified',
-        statusMessage: 'Uploaded during tender qualification.',
+        fileSize: res.fileSizeBytes ? `${Math.round(parseInt(res.fileSizeBytes) / 1024)} KB` : `${Math.max(1, Math.round(quickUploadFile.size / 1024))} KB`,
+        issueDate: res.issueDate || todayIso,
+        expiryDate: res.expiryDate || nextYearIso,
+        status: uploadedStatus,
+        statusMessage: 'Pending verification by procurement registry officers.',
         downloadUrl: `/api/supplier/documents/${res.documentId}/file`,
         sha256: res.sha256,
         versionHistory: [
           {
             version: res.versionNo || 1,
             uploadedBy: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
-            uploadedAt: '6 Oct 2026, 14:00',
-            fileFingerprint: res.sha256 ? `SHA-256: ${res.sha256.substring(0, 10)}...` : 'SHA-256: Verified',
+            uploadedAt: new Date().toLocaleString(),
+            fileFingerprint: res.sha256 ? `SHA-256: ${res.sha256.substring(0, 10)}...` : 'SHA-256 recorded',
             fileName: res.fileName || fileName,
-            fileSize: res.fileSizeBytes ? `${Math.round(parseInt(res.fileSizeBytes) / 1024)} KB` : '1.8 MB',
+            fileSize: res.fileSizeBytes ? `${Math.round(parseInt(res.fileSizeBytes) / 1024)} KB` : `${Math.max(1, Math.round(quickUploadFile.size / 1024))} KB`,
             usedInApplications: [selectedCall?.callNumber || 'Tender Submission'],
           },
         ],
@@ -418,8 +425,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
         organizationName: supplier.legalName,
         entityType: 'Document',
         entityId: res.documentId || `doc-${Date.now()}`,
-        details: `Directly uploaded ${quickUploadDocType} during application qualification.`,
-        ipAddress: '168.167.23.41',
+        details: `Uploaded ${quickUploadDocType} during application qualification.`,
       });
 
       setQuickUploadDocType(null);
@@ -428,7 +434,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
       setQuickUploadDocNumber('');
       setAutosaveTime('Just now');
     } catch (err: any) {
-      alert(err.message || 'Failed to upload document.');
+      setQuickUploadError(err?.message || 'Failed to upload document.');
     } finally {
       setQuickUploadLoading(false);
     }
@@ -460,82 +466,119 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     return Object.keys(errors).length === 0;
   };
 
-  // Submit Application Handler
-  const handleFinalSubmit = () => {
-    if (!selectedCall) return;
+  // Submit Application Handler (authoritative server-side enforcement)
+  const handleFinalSubmit = async () => {
+    if (!selectedCall || isSubmitting) return;
+    setSubmitError(null);
+
     if (isCallTradingLicenceBlocked) {
-      alert('This buyer requires a trading licence. Please upload and verify your trading licence before submitting.');
+      setSubmitError('This buyer requires a trading licence. Please upload and verify your trading licence before submitting.');
       return;
     }
     if (!supplier.emailVerified) {
-      alert('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
+      setSubmitError('Email verification is mandatory before applying to calls or submitting bids. Please verify your email first.');
       return;
     }
 
-    const receiptNum = `REC-2026-${selectedCall.organizationName.substring(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
-    const nowTime = '6 October 2026, 14:35 CAT';
-    const sealedHash = `SHA-256: 9a2f7c00e1b8${Date.now().toString(16)}fa88`;
+    setIsSubmitting(true);
+    try {
+      const attachedDocumentVersionIds = selectedDocIds
+        .map((docId) => {
+          const matched = documents.find((d) => d.id === docId || d.versionId === docId);
+          return matched?.versionId || matched?.id || docId;
+        })
+        .filter(Boolean);
 
-    const responsesPayload: ApplicationResponse[] = Object.entries(formAnswers).map(
-      ([fieldId, value]) => ({
-        fieldId,
-        label: fieldId,
-        value,
-      })
-    );
+      const appRes = await supplierApi.submitApplication({
+        callId: selectedCall.id,
+        answers: formAnswers,
+        attachedDocumentVersionIds,
+      });
 
-    const newAppId = submitApplication({
-      callId: selectedCall.id,
-      callNumber: selectedCall.callNumber,
-      callTitle: selectedCall.title,
-      callType: selectedCall.type,
-      organizationId: selectedCall.organizationId,
-      organizationName: selectedCall.organizationName,
-      supplierId: supplier.id,
-      supplierName: supplier.legalName,
-      status: 'Submitted',
-      statusReason: 'Electronic sealed submission verified. Stored in digital vault.',
-      sharedDocumentIds: selectedDocIds,
-      responses: responsesPayload,
-      bid:
-        selectedCall.type === 'RFP'
-          ? {
-              id: `bid-${Date.now()}`,
-              applicationId: '',
-              callId: selectedCall.id,
-              supplierId: supplier.id,
-              supplierName: supplier.legalName,
-              currency: 'BWP',
-              pricingLineItems: lineItemsState,
-              totalAmountBWP: totalCalculatedBidBWP,
-              technicalProposalFileName: `Technical_Proposal_${(supplier.legalName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-              financialProposalFileName: 'Commercial_Schedule_Sealed.pdf',
-              isSealed: true,
-              sealedHash,
-            }
-          : undefined,
-      initialTimelineNote: `Application submitted by ${supplier.legalName || 'Supplier'}. Receipt ${receiptNum} issued on ledger.`,
-    });
+      let sealedHash = `APP-RECEIPT:${appRes.receiptNumber}`;
+      let sealedBidId = '';
+      if (selectedCall.type === 'RFP' && lineItemsState.length > 0) {
+        const bidRes = await supplierApi.sealBid({
+          callId: selectedCall.id,
+          financialSchedule: lineItemsState.map((li, idx) => ({
+            lineNo: li.itemNumber || idx + 1,
+            description: li.description,
+            quantity: Number(li.quantity || 0),
+            unitPrice: Number(li.unitPriceBWP || 0),
+          })),
+        });
+        sealedHash = bidRes.sealedHash;
+        sealedBidId = bidRes.bidId;
+      }
 
-    addAuditEvent({
-      action: 'Tender Application & Sealed Bid Submitted',
-      actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
-      actorRole: 'Supplier',
-      organizationName: selectedCall.organizationName,
-      entityType: 'Application',
-      entityId: newAppId,
-      details: `Submitted sealed tender application for ${selectedCall.callNumber}: ${selectedCall.title}. Receipt: ${receiptNum}.`,
-      ipAddress: '168.167.23.41',
-    });
+      const receiptNum = appRes.receiptNumber;
+      const nowTime = new Date().toLocaleString('en-BW', { timeZone: 'Africa/Gaborone' }) + ' CAT';
 
-    setSubmittedReceipt({
-      appId: newAppId,
-      receiptNumber: receiptNum,
-      submittedAt: nowTime,
-      sealedHash,
-    });
+      const responsesPayload: ApplicationResponse[] = Object.entries(formAnswers).map(
+        ([fieldId, value]) => ({
+          fieldId,
+          label: fieldId,
+          value,
+        })
+      );
 
-    setCurrentStep(5);
+      const newAppId = submitApplication({
+        callId: selectedCall.id,
+        callNumber: selectedCall.callNumber,
+        callTitle: selectedCall.title,
+        callType: selectedCall.type,
+        organizationId: selectedCall.organizationId,
+        organizationName: selectedCall.organizationName,
+        supplierId: supplier.id,
+        supplierName: supplier.legalName,
+        receiptNumber: receiptNum,
+        status: 'Submitted',
+        statusReason: 'Electronic sealed submission verified. Stored in digital vault.',
+        sharedDocumentIds: attachedDocumentVersionIds,
+        responses: responsesPayload,
+        bid:
+          selectedCall.type === 'RFP'
+            ? {
+                id: sealedBidId || `bid-${Date.now()}`,
+                applicationId: appRes.applicationId,
+                callId: selectedCall.id,
+                supplierId: supplier.id,
+                supplierName: supplier.legalName,
+                currency: 'BWP',
+                pricingLineItems: lineItemsState,
+                totalAmountBWP: totalCalculatedBidBWP,
+                technicalProposalFileName: `Technical_Proposal_${(supplier.legalName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+                financialProposalFileName: 'Commercial_Schedule_Sealed.pdf',
+                isSealed: true,
+                sealedHash,
+              }
+            : undefined,
+        initialTimelineNote: `Application submitted by ${supplier.legalName || 'Supplier'}. Receipt ${receiptNum} issued on ledger.`,
+      });
+
+      addAuditEvent({
+        action: 'Tender Application & Sealed Bid Submitted',
+        actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
+        actorRole: 'Supplier',
+        organizationName: selectedCall.organizationName,
+        entityType: 'Application',
+        entityId: appRes.applicationId || newAppId,
+        details: `Submitted sealed tender application for ${selectedCall.callNumber}: ${selectedCall.title}. Receipt: ${receiptNum}.`,
+      });
+
+      setSubmittedReceipt({
+        appId: appRes.applicationId || newAppId,
+        receiptNumber: receiptNum,
+        submittedAt: nowTime,
+        sealedHash,
+      });
+
+      setCurrentStep(5);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Submission was rejected by the server. Please verify your compliance standing and attached documents.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Withdraw newly submitted application
@@ -1378,6 +1421,27 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </div>
           )}
 
+          {(submitError || supplier.activeDebarment || supplier.accountStatus === 'suspended') && (
+            <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[13px] text-[#C2412D] flex items-start gap-2.5">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="font-semibold block">
+                  {submitError
+                    ? 'Submission blocked'
+                    : supplier.activeDebarment
+                    ? 'Active statutory debarment on account'
+                    : 'Supplier account suspended'}
+                </span>
+                <span>
+                  {submitError ||
+                    (supplier.activeDebarment
+                      ? `Your supplier account is currently debarred (${supplier.activeDebarment.reason})${supplier.activeDebarment.endsOn ? ` until ${supplier.activeDebarment.endsOn}` : ' (permanent)'}.`
+                      : 'Your supplier account is currently suspended by platform administration.')}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Footer Navigation */}
           <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
             <button
@@ -1391,7 +1455,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
             <button
               type="button"
-              disabled={!declarationAgreed || !supplier.emailVerified || isCallTradingLicenceBlocked}
+              disabled={!declarationAgreed || !supplier.emailVerified || isCallTradingLicenceBlocked || isSubmitting}
               onClick={handleFinalSubmit}
               title={
                 !supplier.emailVerified
@@ -1401,13 +1465,13 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   : undefined
               }
               className={`px-6 py-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 transition-colors ${
-                declarationAgreed && supplier.emailVerified && !isCallTradingLicenceBlocked
+                declarationAgreed && supplier.emailVerified && !isCallTradingLicenceBlocked && !isSubmitting
                   ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white cursor-pointer shadow-sm'
                   : 'bg-[#D5E0EA] dark:bg-[#1E364A] text-[#6B7A87] cursor-not-allowed'
               }`}
             >
               <Lock className="w-4 h-4" />
-              <span>Submit sealed proposal</span>
+              <span>{isSubmitting ? 'Submitting...' : 'Submit sealed proposal'}</span>
             </button>
           </div>
         </div>
@@ -1520,10 +1584,33 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               <span>Withdraw application</span>
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col items-end gap-2">
+              {stepperNotice && (
+                <span className="text-[12px] text-[#2F8F5B] font-medium">{stepperNotice}</span>
+              )}
+              <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => {
+                  const text = [
+                    'BIDREADY360 SUBMISSION RECEIPT',
+                    `Receipt Number: ${submittedReceipt.receiptNumber}`,
+                    `Application ID: ${submittedReceipt.appId}`,
+                    `Call: ${selectedCall.callNumber} - ${selectedCall.title}`,
+                    `Supplier: ${supplier.legalName}`,
+                    `Submitted At: ${submittedReceipt.submittedAt}`,
+                    `Integrity Seal: ${submittedReceipt.sealedHash}`,
+                  ].join('\n');
+                  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `Receipt_${submittedReceipt.receiptNumber}.txt`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
                   addAuditEvent({
                     action: 'Downloaded Submission Receipt',
                     actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
@@ -1532,9 +1619,8 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                     entityType: 'Application',
                     entityId: submittedReceipt.appId,
                     details: `Downloaded certified submission receipt ${submittedReceipt.receiptNumber}.`,
-                    ipAddress: '168.167.23.41',
                   });
-                  alert(`Receipt ${submittedReceipt.receiptNumber} downloaded.`);
+                  setStepperNotice(`Receipt ${submittedReceipt.receiptNumber} downloaded.`);
                 }}
                 className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] rounded-[6px] font-medium text-[14px] inline-flex items-center gap-1.5 cursor-pointer"
               >
@@ -1549,6 +1635,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               >
                 View my applications
               </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1702,9 +1789,15 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 </div>
               </div>
 
+              {quickUploadError && (
+                <div className="p-3 bg-[#FEF2F2] dark:bg-[#7F1D1D]/20 border border-[#FCA5A5] rounded-[6px] text-[#8E2A1B] dark:text-red-300 text-[13px]">
+                  {quickUploadError}
+                </div>
+              )}
+
               <div className="p-3 bg-[#EAF2FA] dark:bg-[#1E364A]/50 rounded-[6px] text-[#1F5F99] dark:text-[#6FAEE0] text-[14px] flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Document will be verified and stored in your digital vault.</span>
+                <span>Document will be stored in your digital vault as Pending review until verified by procurement officers.</span>
               </div>
 
               <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">

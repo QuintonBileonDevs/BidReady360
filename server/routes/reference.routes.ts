@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { referenceRepository, clearReferenceCache } from '../repositories/reference.repository';
 import { DbGuardError } from '../db/client';
+import { requireAuth, requirePlatformAdmin } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -46,8 +47,8 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-// POST /api/reference/refresh: Clear reference cache and reload from PostgreSQL
-router.post('/refresh', async (_req: Request, res: Response, next: NextFunction) => {
+// POST /api/reference/refresh: Clear reference cache and reload from PostgreSQL (platform admin only)
+router.post('/refresh', requireAuth, requirePlatformAdmin, async (_req: Request, res: Response, next: NextFunction) => {
   try {
     clearReferenceCache();
     const data = await referenceRepository.loadAll();

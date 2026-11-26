@@ -51,6 +51,14 @@ const MainContent: React.FC = () => {
   const [viewingCallId, setViewingCallId] = useState<string | null>(null);
   const [profileInitialSection, setProfileInitialSection] = useState<'details'|'directors'|'categories'|'projects'|'preferences'|'team'>('details');
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes('/accept-invite') || params.has('inviteToken') || (path.includes('invite') && params.has('token'))) {
+      setActiveNav('accept-invite');
+    }
+  }, [setActiveNav]);
+
   useEffect(() => { if (activeNav !== 'opportunities' && viewingCallId) setViewingCallId(null); }, [activeNav, viewingCallId]);
 
   const supplierCompleteness = calculateSupplierCompleteness(supplier, documents);
@@ -113,6 +121,15 @@ const MainContent: React.FC = () => {
     return <PublicAbout />;
   };
 
+  const isAdminWorkspace =
+    isAuthenticated && role === 'admin' && ADMIN_PROTECTED_ROUTES.includes(activeNav);
+  const isBuyerWorkspace =
+    isAuthenticated &&
+    role === 'buyer' &&
+    BUYER_PROTECTED_ROUTES.includes(activeNav) &&
+    buyerOrgStatus === 'Approved';
+  const isWorkspaceShell = isAdminWorkspace || isBuyerWorkspace;
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA] transition-colors duration-150">
       <LoadingGate isVisible={isBootstrapping} step={bootstrapStep} statusMessage={bootstrapMessage} />
@@ -121,9 +138,11 @@ const MainContent: React.FC = () => {
         inert={isBootstrapping ? true : undefined}
         aria-hidden={isBootstrapping}
       >
-        <Header />
-        <main className="flex-1 container-1160 w-full py-0">{renderContent()}</main>
-        <Footer />
+        {!isWorkspaceShell && <Header />}
+        <main className={isWorkspaceShell ? 'flex-1 w-full' : 'flex-1 container-1160 w-full py-0'}>
+          {renderContent()}
+        </main>
+        {!isWorkspaceShell && <Footer />}
         <PWAInstallPrompt />
       </div>
     </div>

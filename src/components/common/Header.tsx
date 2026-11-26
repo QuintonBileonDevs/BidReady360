@@ -1,18 +1,12 @@
-import React, { useState } from 'react';
-import { useApp, UserRole } from '../../context/AppContext';
+import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../../context/AppContext';
 import { Logo } from './Logo';
 import {
   Bell,
   Menu,
   X,
-  Globe,
   ChevronDown,
-  Building2,
-  Briefcase,
   LogOut,
-  UserPlus,
-  LogIn,
-  RotateCw,
   Lock,
   Loader2,
 } from 'lucide-react';
@@ -24,18 +18,13 @@ export const Header: React.FC = () => {
   const { setReady: setHeaderReady } = useReadiness('header.user');
   const {
     role,
-    setRole,
     activeNav,
     setActiveNav,
     supplier,
     documents,
     notifications,
-    language,
-    setLanguage,
     isAuthenticated,
-    currentUser,
     logout,
-    resetDemoData,
   } = useApp();
 
   const supplierCompleteness = calculateSupplierCompleteness(supplier, documents);
@@ -44,9 +33,9 @@ export const Header: React.FC = () => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isSignInDropdownOpen, setIsSignInDropdownOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (role === 'supplier') {
       const isReady = Boolean(
         supplier &&
@@ -61,6 +50,24 @@ export const Header: React.FC = () => {
     }
   }, [role, supplier, setHeaderReady]);
 
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isUserMenuOpen]);
+
   const unreadNotifs = notifications.filter(
     (n) =>
       !n.read &&
@@ -68,7 +75,6 @@ export const Header: React.FC = () => {
         (role === 'buyer' && n.recipientRole === 'Buyer'))
   ).length;
 
-  // Shortened navigation labels per user specification
   const publicNavItems = [
     { id: 'opportunities', label: 'Opportunities' },
     { id: 'suppliers', label: 'For suppliers' },
@@ -84,15 +90,6 @@ export const Header: React.FC = () => {
     { id: 'my-applications', label: 'Applications' },
   ];
 
-  const buyerNavItems = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'review-queue', label: 'Review queue' },
-    { id: 'rfp-management', label: 'Tenders' },
-    { id: 'evaluation', label: 'Evaluation' },
-    { id: 'awards', label: 'Awards' },
-    { id: 'supplier-database', label: 'Roster' },
-  ];
-
   const isAuthRoute = [
     'auth',
     'signin',
@@ -100,6 +97,8 @@ export const Header: React.FC = () => {
     'register',
     'supplier-login',
     'supplier-signup',
+    'supplier-verify-email',
+    'supplier-welcome',
     'buyer-login',
     'buyer-signup',
     'buyer-pending',
@@ -110,15 +109,15 @@ export const Header: React.FC = () => {
     'accept-invite',
     'choose-workspace',
     'session-expired',
+    'account-locked',
   ].includes(activeNav);
 
-  const navItems = isAuthRoute
-    ? []
-    : (!isAuthenticated || role === 'public')
-    ? publicNavItems
-    : role === 'supplier'
-    ? supplierNavItems
-    : buyerNavItems;
+  const navItems =
+    isAuthRoute || role === 'admin' || role === 'buyer'
+      ? []
+      : !isAuthenticated || role === 'public'
+      ? publicNavItems
+      : supplierNavItems;
 
   const handleNavClick = (id: string) => {
     setActiveNav(id);
@@ -133,61 +132,68 @@ export const Header: React.FC = () => {
     }
     setIsMobileMenuOpen(false);
     setIsUserMenuOpen(false);
-    setIsSignInDropdownOpen(false);
   };
 
   const handleSignOut = async () => {
     setIsUserMenuOpen(false);
     setIsMobileMenuOpen(false);
-    await logout();
+    await logout('user_initiated');
+  };
+
+  const handleLogoClick = () => {
+    if (!isAuthenticated || role === 'public') setActiveNav('about');
+    else if (role === 'admin') setActiveNav('admin-dashboard');
+    else if (role === 'buyer') setActiveNav('buyer-dashboard');
+    else setActiveNav('dashboard');
   };
 
   return (
     <>
       <header className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] transition-colors">
-        <div className="container-1160 h-16 flex items-center justify-between gap-6">
-          {/* 1. Left: Logo */}
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => {
-                if (role === 'public') setActiveNav('about');
-                else setActiveNav('dashboard');
-              }}
-              className="text-left focus:outline-none cursor-pointer"
-              aria-label="BidReady360 home"
-            >
-              <Logo size="md" />
-            </button>
-          </div>
+        <div className="container-1160 h-16 flex items-center justify-between gap-6 lg:gap-8">
+          {/* Zone 1: Brand Wordmark */}
+          <button
+            type="button"
+            onClick={handleLogoClick}
+            className="text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5F99] rounded-[4px] cursor-pointer whitespace-nowrap shrink-0"
+            aria-label="BidReady360 home"
+          >
+            <Logo size="md" />
+          </button>
 
-          {/* 2. Center: Navigation with 2px Pula Deep underline for active item */}
+          {/* Zone 2: Primary Navigation Links */}
           {navItems.length > 0 && (
-            <nav className="hidden lg:flex items-center gap-6 h-full">
+            <nav aria-label="Primary navigation" className="hidden lg:flex items-center gap-6 h-full min-w-0">
               {navItems.map((item) => {
-                const isActive = activeNav === item.id || (item.id === 'sharing' && activeNav === 'consent');
-                const isLocked = (item.id === 'my-applications' || item.id === 'sharing') && role === 'supplier' && !isProfileComplete;
+                const isActive =
+                  activeNav === item.id ||
+                  (item.id === 'sharing' && activeNav === 'consent') ||
+                  (item.id === 'dashboard' && activeNav === 'supplier-dashboard');
+                const isLocked =
+                  (item.id === 'my-applications' || item.id === 'sharing') &&
+                  role === 'supplier' &&
+                  !isProfileComplete;
                 return (
                   <button
                     key={item.id}
+                    type="button"
                     onClick={() => handleNavClick(item.id)}
-                    className={`h-full flex items-center gap-1.5 px-1 text-[15px] font-medium transition-colors cursor-pointer border-b-2 -mb-[1px] ${
+                    className={`h-full flex items-center gap-1.5 px-1 text-[14px] xl:text-[15px] font-medium transition-colors cursor-pointer border-b-2 -mb-[1px] whitespace-nowrap shrink-0 ${
                       isActive
-                        ? 'border-[#1F5F99] text-[#10212E] dark:text-white font-semibold'
+                        ? 'border-[#1F5F99] dark:border-[#6FAEE0] text-[#10212E] dark:text-white font-semibold'
                         : 'border-transparent text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E] dark:hover:text-white'
                     }`}
                   >
                     <span>{item.label}</span>
                     {isLocked && (
-                      <span
-                        className="p-0.5 rounded text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800"
-                        title={
+                      <Lock
+                        className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0"
+                        aria-label={
                           item.id === 'sharing'
                             ? `Document sharing locked (${supplierCompleteness.score}% completed)`
                             : `Applications locked (${supplierCompleteness.score}% completed)`
                         }
-                      >
-                        <Lock className="w-3 h-3" />
-                      </span>
+                      />
                     )}
                   </button>
                 );
@@ -195,61 +201,55 @@ export const Header: React.FC = () => {
             </nav>
           )}
 
-          {/* 3. Right: Language toggle, Notification Bell, User Menu */}
-          <div className="flex items-center gap-4 shrink-0">
-            {/* Language Indicator: Defaulted to EN */}
-            <button
-              type="button"
-              aria-label="Select language"
-              aria-haspopup="menu"
-              className="min-w-[44px] min-h-[44px] flex items-center justify-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#B2C3D2] px-2 py-1 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] cursor-pointer"
-              title="Language: English (EN)"
-            >
-              <Globe className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
-              <span className="font-semibold text-[#10212E] dark:text-white">EN</span>
-            </button>
-
-            {/* Notification Bell (Only when signed in) */}
-            {isAuthenticated && role !== 'public' && (
-              <button
-                onClick={() => setIsNotifOpen(true)}
-                className="relative min-w-[44px] min-h-[44px] flex items-center justify-center p-2 text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] rounded-[6px] hover:bg-[#F7FAFD] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
-                aria-label="Open notifications"
-              >
-                <Bell className="w-4 h-4" strokeWidth={1.5} />
-                {unreadNotifs > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#C2412D] rounded-full" />
-                )}
-              </button>
-            )}
-
+          {/* Zone 3: Actions & Account Menu */}
+          <div className="flex items-center gap-3 shrink-0">
             {/* Public Role Action Buttons */}
-            {role === 'public' && (
-              <div className="hidden sm:flex items-center gap-3">
+            {(!isAuthenticated || role === 'public') && (
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
                 <button
+                  type="button"
                   onClick={() => openAuth('supplier', 'signin')}
-                  className="px-3.5 py-2 text-[15px] font-medium text-[#10212E] dark:text-white hover:text-[#1F5F99] transition-colors cursor-pointer"
+                  className="px-3.5 py-2 text-[14px] font-medium text-[#10212E] dark:text-white hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Sign in
                 </button>
                 <button
+                  type="button"
                   onClick={() => openAuth('supplier', 'signup')}
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[15px] font-medium rounded-[6px] transition-colors cursor-pointer"
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[14px] font-medium rounded-[6px] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Register company
                 </button>
               </div>
             )}
 
-            {/* Supplier User Menu: Avatar, Full Company Name with Tooltip, Status */}
-            {role === 'supplier' && (
-              <div className="relative">
+            {/* Notification Bell (Signed-in Supplier or Buyer) */}
+            {isAuthenticated && (role === 'supplier' || role === 'buyer') && (
+              <button
+                type="button"
+                onClick={() => setIsNotifOpen(true)}
+                className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer shrink-0"
+                aria-label="Open notifications"
+              >
+                <Bell className="w-4 h-4" strokeWidth={1.75} />
+                {unreadNotifs > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#C2412D] rounded-full" />
+                )}
+              </button>
+            )}
+
+            {/* Supplier User Menu */}
+            {isAuthenticated && role === 'supplier' && (
+              <div className="relative" ref={userMenuRef}>
                 <button
+                  type="button"
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  aria-expanded={isUserMenuOpen}
+                  aria-haspopup="menu"
                   title={supplier.legalName || 'Supplier'}
-                  className="flex items-center gap-2.5 pl-2 pr-1.5 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer text-left"
+                  className="min-h-[40px] flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer text-left shrink-0"
                 >
-                  <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] text-[#1F5F99] flex items-center justify-center font-semibold text-[13px] shrink-0">
+                  <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] dark:bg-[#162C3E] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center font-semibold text-[13px] shrink-0">
                     {supplier.legalName ? (
                       supplier.legalName.trim().substring(0, 2).toUpperCase()
                     ) : (
@@ -257,67 +257,67 @@ export const Header: React.FC = () => {
                     )}
                   </div>
                   <div className="hidden sm:block leading-tight">
-                    <span data-bind="supplier.name" className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
+                    <span
+                      data-bind="supplier.name"
+                      className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[160px] truncate"
+                    >
                       {supplier.legalName || 'Supplier'}
                     </span>
-                    <span className="text-[13px] text-[#6B7A87] block">
-                      {supplier.legalName ? (
-                        supplier.directors && supplier.directors.length > 0 && supplier.directors.some(d => d.role && d.role.trim().length > 0)
-                          ? Array.from(new Set(supplier.directors.map(d => d.role))).filter(Boolean).join(', ')
-                          : supplier.isDemoAccount
-                          ? 'Demo account'
-                          : !supplier.emailVerified
-                          ? 'Unverified account'
-                          : 'Profile'
-                      ) : (
-                        'Profile'
-                      )}
+                    <span className="text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] block whitespace-nowrap">
+                      {!supplier.emailVerified
+                        ? 'Verification pending'
+                        : 'Supplier account'}
                     </span>
                   </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-[#6B7A87]" strokeWidth={1.5} />
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[#6B7A87] transition-transform duration-150 shrink-0 ${
+                      isUserMenuOpen ? 'rotate-180' : ''
+                    }`}
+                    strokeWidth={1.75}
+                  />
                 </button>
 
                 {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-2 z-50 text-[13px] space-y-1">
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] p-1.5 z-50 text-[13px] space-y-1 shadow-sm"
+                  >
                     <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
                       <div className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
                         {supplier.legalName || 'Supplier'}
                       </div>
-                      <div className="text-[13px] text-[#6B7A87]">
-                        {supplier.cipaNumber ? `CIPA: ${supplier.cipaNumber}` : 'Account active'}
+                      <div className="text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] truncate">
+                        {supplier.cipaNumber ? `CIPA ${supplier.cipaNumber}` : 'Account active'}
+                        {!supplier.emailVerified ? ' · Email unverified' : ''}
                       </div>
-                      {!supplier.isDemoAccount && !supplier.emailVerified && (
-                        <div className="mt-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[11px] font-medium inline-block">
-                          Email unverified
-                        </div>
-                      )}
-                      {supplier.isDemoAccount && (
-                        <div className="mt-1 px-1.5 py-0.5 rounded bg-[#FEF3C7] dark:bg-[#78350F]/30 text-[#92400E] dark:text-[#FCD34D] text-[11px] font-medium inline-block">
-                          Demo mode
-                        </div>
-                      )}
                     </div>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => {
                         setActiveNav('profile');
                         setIsUserMenuOpen(false);
                       }}
-                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white transition-colors"
+                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                     >
                       Company profile
                     </button>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => {
                         setActiveNav('vault');
                         setIsUserMenuOpen(false);
                       }}
-                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white transition-colors"
+                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                     >
                       Document vault
                     </button>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={handleSignOut}
-                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-[#C2412D] dark:text-rose-400 transition-colors font-medium flex items-center justify-between cursor-pointer"
                     >
                       <span>Sign out</span>
                       <LogOut className="w-3.5 h-3.5" />
@@ -327,61 +327,38 @@ export const Header: React.FC = () => {
               </div>
             )}
 
-            {/* Buyer User Menu */}
-            {role === 'buyer' && (
-              <div className="relative">
+            {/* Buyer or Admin Return-to-Console Action (when viewing public/auth routes) */}
+            {isAuthenticated && (role === 'buyer' || role === 'admin') && (
+              <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  title="Gaborone Regional Council"
-                  className="flex items-center gap-2.5 pl-2 pr-1.5 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer text-left"
+                  type="button"
+                  onClick={() => setActiveNav(role === 'admin' ? 'admin-dashboard' : 'buyer-dashboard')}
+                  className="px-3.5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[14px] font-medium rounded-[6px] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] text-[#1F5F99] flex items-center justify-center font-semibold text-[13px] shrink-0">
-                    GR
-                  </div>
-                  <div className="hidden sm:block leading-tight">
-                    <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block max-w-[150px] truncate">
-                      Gaborone Council
-                    </span>
-                    <span className="text-[13px] text-[#6B7A87] block">
-                      Procurement body
-                    </span>
-                  </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-[#6B7A87]" strokeWidth={1.5} />
+                  {role === 'admin' ? 'Admin console' : 'Buyer console'}
                 </button>
-
-                {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-2 z-50 text-[13px] space-y-1">
-                    <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-                      <div className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                        Gaborone Regional Council
-                      </div>
-                      <div className="text-[13px] text-[#6B7A87]">
-                        Supply Chain Unit
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-rose-50 text-[#C2412D] transition-colors font-medium flex items-center justify-between"
-                    >
-                      <span>Sign out</span>
-                      <LogOut className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="px-3 py-2 text-[14px] font-medium text-[#C2412D] dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-[6px] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Sign out
+                </button>
               </div>
             )}
 
             {/* Mobile Menu Button */}
-            {navItems.length > 0 && (
+            {(navItems.length > 0 || !isAuthenticated || role === 'public') && (
               <button
+                type="button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden p-2 text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] hover:bg-[#F7FAFD] cursor-pointer"
-                aria-label="Toggle navigation menu"
+                className="lg:hidden min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] cursor-pointer shrink-0"
+                aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
               >
                 {isMobileMenuOpen ? (
-                  <X className="w-5 h-5" strokeWidth={1.5} />
+                  <X className="w-5 h-5" strokeWidth={1.75} />
                 ) : (
-                  <Menu className="w-5 h-5" strokeWidth={1.5} />
+                  <Menu className="w-5 h-5" strokeWidth={1.75} />
                 )}
               </button>
             )}
@@ -389,30 +366,57 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Mobile Navigation Drawer */}
-        {isMobileMenuOpen && navItems.length > 0 && (
+        {isMobileMenuOpen && (
           <div className="lg:hidden bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] px-4 py-4 space-y-2">
             {navItems.map((item) => {
-              const isActive = activeNav === item.id;
-              const isLocked = (item.id === 'my-applications' || item.id === 'sharing') && role === 'supplier' && !isProfileComplete;
+              const isActive =
+                activeNav === item.id ||
+                (item.id === 'sharing' && activeNav === 'consent') ||
+                (item.id === 'dashboard' && activeNav === 'supplier-dashboard');
+              const isLocked =
+                (item.id === 'my-applications' || item.id === 'sharing') &&
+                role === 'supplier' &&
+                !isProfileComplete;
               return (
                 <button
                   key={item.id}
+                  type="button"
                   onClick={() => handleNavClick(item.id)}
-                  className={`w-full text-left px-3 py-2.5 rounded-[6px] text-[15px] font-medium transition-colors flex items-center justify-between ${
+                  className={`w-full text-left px-3 py-2.5 rounded-[6px] text-[15px] font-medium transition-colors flex items-center justify-between cursor-pointer ${
                     isActive
-                      ? 'bg-[#EAF2FA] text-[#1F5F99] font-semibold'
-                      : 'text-[#43525F] hover:bg-[#F7FAFD]'
+                      ? 'bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] font-semibold'
+                      : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#132635]'
                   }`}
                 >
                   <span>{item.label}</span>
                   {isLocked && (
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 flex items-center gap-1">
-                      <Lock className="w-3 h-3" /> Locked ({supplierCompleteness.score}%)
+                    <span className="text-[12px] font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{supplierCompleteness.score}%</span>
                     </span>
                   )}
                 </button>
               );
             })}
+
+            {(!isAuthenticated || role === 'public') && (
+              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col gap-2 sm:hidden">
+                <button
+                  type="button"
+                  onClick={() => openAuth('supplier', 'signin')}
+                  className="w-full px-3.5 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAuth('supplier', 'signup')}
+                  className="w-full px-3.5 py-2.5 bg-[#1F5F99] text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
+                >
+                  Register company
+                </button>
+              </div>
+            )}
           </div>
         )}
       </header>

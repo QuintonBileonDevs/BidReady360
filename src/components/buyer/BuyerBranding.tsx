@@ -1,11 +1,27 @@
-import React, { useState } from 'react';
-import { Palette, CheckCircle2, Upload, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle2 } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 
 export const BuyerBranding: React.FC = () => {
-  const [orgName, setOrgName] = useState('Gaborone Regional Council');
+  const { profileSummary, registeredBuyerOrgName } = useApp();
+  const resolvedOrgName = profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization';
+  const [orgName, setOrgName] = useState(resolvedOrgName);
   const [subtext, setSubtext] = useState('Procurement & Asset Disposal Board');
   const [primaryColor, setPrimaryColor] = useState('#1F5F99');
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (profileSummary?.supplierOrOrgName || registeredBuyerOrgName) {
+      setOrgName(profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization');
+    }
+  }, [profileSummary?.supplierOrOrgName, registeredBuyerOrgName]);
+
+  const initials = orgName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || '')
+    .join('') || 'PO';
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,8 +104,11 @@ export const BuyerBranding: React.FC = () => {
 
           <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[6px] bg-[#1F5F99] text-white flex items-center justify-center font-bold text-[14px]">
-                GR
+              <div
+                className="w-10 h-10 rounded-[6px] text-white flex items-center justify-center font-bold text-[14px]"
+                style={{ backgroundColor: primaryColor }}
+              >
+                {initials}
               </div>
               <div>
                 <h4 className="font-semibold text-[15px] text-[#10212E] dark:text-white">

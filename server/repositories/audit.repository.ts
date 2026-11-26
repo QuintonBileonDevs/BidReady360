@@ -57,6 +57,12 @@ export class AuditRepository {
     const payloadToHash = `${prevHash}|${timestamp}|${dto.actorName}|${dto.actorRole}|${dto.action}|${dto.entityType}|${dto.entityId || ''}|${dto.details}`;
     const rowHash = crypto.createHash('sha256').update(payloadToHash).digest('hex');
 
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const safeEntityId = dto.entityId && UUID_RE.test(dto.entityId) ? dto.entityId : null;
+    const safeActorUserId = dto.actorUserId && UUID_RE.test(dto.actorUserId) ? dto.actorUserId : null;
+    const safeOrgId = dto.organizationId && UUID_RE.test(dto.organizationId) ? dto.organizationId : null;
+    const safeSupplierId = dto.supplierId && UUID_RE.test(dto.supplierId) ? dto.supplierId : null;
+
     // 3. Insert into append-only audit_log
     const res = await query<AuditEventRecord>(
       `INSERT INTO audit_log (
@@ -75,15 +81,15 @@ export class AuditRepository {
         details, prev_hash AS "prevHash", row_hash AS "rowHash"`,
       [
         dto.actorType || 'user',
-        dto.actorUserId || null,
+        safeActorUserId,
         dto.actorName,
         dto.actorRole,
-        dto.organizationId || null,
-        dto.supplierId || null,
+        safeOrgId,
+        safeSupplierId,
         dto.organizationName || null,
         dto.action,
         dto.entityType,
-        dto.entityId || null,
+        safeEntityId,
         dto.ipAddress || null,
         dto.userAgent || null,
         dto.beforeJson ? JSON.stringify(dto.beforeJson) : null,
@@ -97,7 +103,17 @@ export class AuditRepository {
     return res.rows[0];
   }
 
-  async listEvents(filters: { organizationId?: string; supplierId?: string; entityType?: string; limit?: number }): Promise<AuditEventRecord[]> {
+  async listEvents(filters: {
+    organizationId?: string;
+    supplierId?: string;
+    entityType?: string;
+    actor?: string;
+    action?: string;
+    search?: string;
+    fromDate?: string;
+    toDate?: string;
+    limit?: number;
+  }): Promise<AuditEventRecord[]> {
     const conditions: string[] = [];
     const params: any[] = [];
 
@@ -111,13 +127,38 @@ export class AuditRepository {
       conditions.push(`supplier_id = $${params.length}`);
     }
 
-    if (filters.entityType) {
+    if (filters.entityType && filters.entityType !== 'ALL') {
       params.push(filters.entityType);
-      conditions.push(`entity_type = $${params.length}`);
+      conditions.push(`LOWER(entity_type) = LOWER($${params.length})`);
+    }
+
+    if (filters.actor) {
+      params.push(`%${filters.actor.trim()}%`);
+      conditions.push(`(actor_name ILIKE $${params.length} OR actor_role ILIKE $${params.length} OR EXISTS (SELECT 1 FROM users u WHERE u.id = audit_log.actor_user_id AND u.email::text ILIKE $${params.length}))`);
+    }
+
+    if (filters.action && filters.action !== 'ALL') {
+      params.push(`%${filters.action.trim()}%`);
+      conditions.push(`action ILIKE $${params.length}`);
+    }
+
+    if (filters.search) {
+      params.push(`%${filters.search.trim()}%`);
+      conditions.push(`(actor_name ILIKE $${params.length} OR action ILIKE $${params.length} OR entity_type ILIKE $${params.length} OR details ILIKE $${params.length})`);
+    }
+
+    if (filters.fromDate) {
+      params.push(filters.fromDate);
+      conditions.push(`occurred_at >= $${params.length}::timestamptz`);
+    }
+
+    if (filters.toDate) {
+      params.push(filters.toDate);
+      conditions.push(`occurred_at <= ($${params.length}::date + INTERVAL '1 day' - INTERVAL '1 second')`);
     }
 
     const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const limit = filters.limit || 100;
+    const limit = Math.min(Math.max(Number(filters.limit) || 100, 1), 500);
     params.push(limit);
 
     const res = await query<AuditEventRecord>(

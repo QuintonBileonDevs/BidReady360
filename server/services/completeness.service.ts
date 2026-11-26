@@ -179,53 +179,133 @@ export function computeSupplierCompleteness(
 
   // Helper for checking document types by real code
   const checkDocByCode = (codes: string[], label: string, key: string): CompletenessItem => {
-    const match = (documents || []).find((d) => {
+    const matchingTypeDocs = (documents || []).filter((d) => {
       const code = (d.documentTypeCode || d.doc_type_code || d.code || '').toUpperCase();
-      const codeMatches = codes.some((c) => c.toUpperCase() === code);
-      if (!codeMatches) return false;
+      return codes.some((c) => c.toUpperCase() === code);
+    });
 
-      // Status check
+    const now = new Date();
+    const todayUtcStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+    const isExpiryPast = (expiry: any): boolean => {
+      if (!expiry) return false;
+      const expDate = new Date(expiry);
+      if (isNaN(expDate.getTime())) return false;
+      const expUtcStart = Date.UTC(expDate.getUTCFullYear(), expDate.getUTCMonth(), expDate.getUTCDate());
+      return expUtcStart < todayUtcStart;
+    };
+
+    const validVerifiedMatch = matchingTypeDocs.find((d) => {
       const docStatus = (d.status || '').toLowerCase();
       if (docStatus === 'expired' || docStatus === 'rejected' || docStatus === 'deleted') return false;
 
-      // Expiry check
+      const verStatus = (d.verificationStatus || d.verification_status || '').toUpperCase();
+      if (verStatus !== 'VERIFIED' && verStatus !== 'APPROVED') return false;
+
+      const expiryState = (d.expiryState || d.expiry_state || '').toUpperCase();
+      if (expiryState === 'EXPIRED') return false;
+
       const expiry = d.expiryDate || d.expiry_date || d.valid_until;
-      if (expiry) {
-        const expDate = new Date(expiry);
-        if (!isNaN(expDate.getTime()) && expDate.getTime() < Date.now()) {
-          return false;
-        }
-      }
+      if (isExpiryPast(expiry)) return false;
 
       return true;
     });
 
-    if (!match) {
+    if (validVerifiedMatch) {
+      return {
+        key,
+        label,
+        category: 'Documents',
+        complete: true,
+        unverified: false,
+        reason: 'Verified',
+        value: validVerifiedMatch.fileName || validVerifiedMatch.file_name || validVerifiedMatch.title || 'Verified',
+      };
+    }
+
+    const pendingDoc = matchingTypeDocs.find((d) => {
+      const docStatus = (d.status || '').toLowerCase();
+      if (docStatus === 'expired' || docStatus === 'rejected' || docStatus === 'deleted') return false;
+      const verStatus = (d.verificationStatus || d.verification_status || '').toUpperCase();
+      if (verStatus === 'REJECTED' || verStatus === 'EXPIRED' || verStatus === 'UNVERIFIABLE') return false;
+      const expiryState = (d.expiryState || d.expiry_state || '').toUpperCase();
+      if (expiryState === 'EXPIRED') return false;
+      const expiry = d.expiryDate || d.expiry_date || d.valid_until;
+      if (isExpiryPast(expiry)) return false;
+      return verStatus === 'PENDING_VERIFICATION' || verStatus === 'PENDING' || docStatus === 'active';
+    });
+
+    if (pendingDoc) {
       return {
         key,
         label,
         category: 'Documents',
         complete: false,
-        reason: `${label} has not been uploaded.`,
+        unverified: true,
+        reason: `${label} is uploaded and awaiting administrator verification.`,
+        value: pendingDoc.fileName || pendingDoc.file_name || pendingDoc.title || 'Pending verification',
       };
     }
 
-    const verStatus = (match.verificationStatus || match.verification_status || '').toUpperCase();
-    const isUnverified = verStatus === 'PENDING_VERIFICATION' || verStatus === 'PENDING' || !verStatus;
+    const rejectedDoc = matchingTypeDocs.find((d) => {
+      const verStatus = (d.verificationStatus || d.verification_status || '').toUpperCase();
+      const docStatus = (d.status || '').toLowerCase();
+      return verStatus === 'REJECTED' || docStatus === 'rejected';
+    });
+    if (rejectedDoc) {
+      const rejNote = rejectedDoc.rejectionReason || rejectedDoc.rejection_reason || rejectedDoc.verificationNotes || rejectedDoc.verification_notes;
+      return {
+        key,
+        label,
+        category: 'Documents',
+        complete: false,
+        reason: rejNote
+          ? `${label} was rejected: ${rejNote}. Please upload a replacement.`
+          : `${label} was rejected by an administrator. Please upload a replacement.`,
+      };
+    }
+
+    const expiredDoc = matchingTypeDocs.find((d) => {
+      const verStatus = (d.verificationStatus || d.verification_status || '').toUpperCase();
+      const expiryState = (d.expiryState || d.expiry_state || '').toUpperCase();
+      const expiry = d.expiryDate || d.expiry_date || d.valid_until;
+      return verStatus === 'EXPIRED' || expiryState === 'EXPIRED' || isExpiryPast(expiry);
+    });
+    if (expiredDoc) {
+      return {
+        key,
+        label,
+        category: 'Documents',
+        complete: false,
+        reason: `${label} has expired. Please upload a renewed document.`,
+      };
+    }
+
+    const unverifiableDoc = matchingTypeDocs.find((d) => {
+      const verStatus = (d.verificationStatus || d.verification_status || '').toUpperCase();
+      return verStatus === 'UNVERIFIABLE';
+    });
+    if (unverifiableDoc) {
+      return {
+        key,
+        label,
+        category: 'Documents',
+        complete: false,
+        reason: `${label} could not be verified. Please upload a clearer replacement.`,
+      };
+    }
 
     return {
       key,
       label,
       category: 'Documents',
-      complete: true,
-      unverified: isUnverified,
-      reason: isUnverified ? 'Uploaded (Pending verification)' : 'Verified',
-      value: match.fileName || match.file_name || match.title || 'Uploaded',
+      complete: false,
+      reason: `${label} has not been uploaded.`,
     };
   };
 
   // 12. CIPA Certificate
-  items.push(checkDocByCode(['COMPANY_REGISTRATION', 'CIPA'], 'CIPA Certificate of Incorporation', 'cipaDoc'));
+  items.push(checkDocByCode(['COMPANY_REGISTRATION', 'CIPA_CERT', 'CIPA'], 'CIPA Certificate of Incorporation', 'cipaDoc'));
 
   // 13. Tax Clearance Certificate
   items.push(checkDocByCode(['TAX_CLEARANCE', 'BURS_TAX'], 'BURS Tax Clearance Certificate', 'taxDoc'));
@@ -277,8 +357,8 @@ export class CompletenessService {
         ),
         query(
           `SELECT sd.id, dt.code AS doc_type_code, dt.code, dt.name, sd.title,
-                  sdv.file_name, sdv.verification_status, sdv.expiry_date,
-                  sd.status
+                  sdv.file_name, sdv.verification_status, sdv.verification_notes, sdv.rejection_reason,
+                  sdv.expiry_date, sd.status
            FROM supplier_documents sd
            JOIN document_types dt ON dt.id = sd.document_type_id
            LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id

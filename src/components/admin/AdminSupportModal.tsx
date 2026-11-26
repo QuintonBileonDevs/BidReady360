@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ShieldAlert, AlertCircle, Lock, ArrowRight, X } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { ShieldAlert, X } from 'lucide-react';
+import { adminApi } from '../../services/api';
 
 interface AdminSupportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  targetEntityId?: string | null;
   targetEntityName: string;
   targetType: 'Supplier' | 'Organization' | 'Document' | 'Audit Dossier';
   onGrantAccess: (reason: string) => void;
@@ -13,25 +14,27 @@ interface AdminSupportModalProps {
 export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({
   isOpen,
   onClose,
+  targetEntityId,
   targetEntityName,
   targetType,
   onGrantAccess,
 }) => {
-  const { addAuditEvent } = useApp();
   const [ticketRef, setTicketRef] = useState('');
   const [justification, setJustification] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     if (!ticketRef.trim()) {
       setError('Please provide a support ticket or formal statutory reference.');
       return;
     }
-    if (!justification.trim() || justification.length < 10) {
+    if (!justification.trim() || justification.trim().length < 10) {
       setError('Please provide a detailed justification reason (min 10 characters).');
       return;
     }
@@ -40,27 +43,33 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({
       return;
     }
 
-    const fullReason = `${ticketRef.trim()} - ${justification.trim()}`;
-    addAuditEvent({
-      action: 'Administrative Support Access Granted',
-      actorName: 'System Administrator (Lesedi Mokgweetsi)',
-      actorRole: 'Super Admin',
-      organizationName: 'BidReady360 Platform Administration',
-      entityType: targetType === 'Supplier' ? 'Supplier' : 'Organization',
-      entityId: targetEntityName,
-      details: `Temporary read-only support session initiated for ${targetEntityName}. Justification: ${fullReason}`,
-      ipAddress: '168.167.12.89',
-    });
-
-    onGrantAccess(fullReason);
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await adminApi.startSupportSession({
+        targetType,
+        targetId: targetEntityId || null,
+        targetName: targetEntityName,
+        ticketRef: ticketRef.trim(),
+        justification: justification.trim(),
+      });
+      const fullReason = `${ticketRef.trim()} - ${justification.trim()}`;
+      setTicketRef('');
+      setJustification('');
+      setAcknowledged(false);
+      onGrantAccess(fullReason);
+      onClose();
+    } catch (err: any) {
+      setError(err?.message || 'Unable to authorize support session.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-none z-10 space-y-5">
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 z-10 space-y-5">
         <div className="flex items-start justify-between gap-3 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#C2412D]">
@@ -74,17 +83,16 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white p-1 rounded-[6px]"
+            className="text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white p-1 rounded-[6px] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Statutory Warning Box */}
         <div className="p-4 rounded-[8px] bg-[#FFFBEB] dark:bg-[#92400E]/20 border border-[#FDE68A] dark:border-[#92400E]/40 text-[14px] text-[#92400E] dark:text-[#FCD34D] space-y-1.5">
-          <span className="font-semibold block">Privacy & audit safeguard</span>
+          <span className="font-semibold block">Privacy &amp; audit safeguard</span>
           <p className="leading-relaxed text-[13px]">
-            To protect tender confidentiality, administrative access to private entity workspaces is restricted. This action is permanently logged to the immutable statutory audit trail.
+            To protect tender confidentiality, administrative access to private entity workspaces is restricted. This action is permanently recorded in the PostgreSQL statutory audit log.
           </p>
         </div>
 
@@ -139,15 +147,16 @@ export const AdminSupportModal: React.FC<AdminSupportModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E]"
+              className="px-4 py-2 text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[14px] font-medium rounded-[6px] transition-colors"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[14px] font-medium rounded-[6px] transition-colors cursor-pointer disabled:opacity-50"
             >
-              Authorize & start logged session
+              {isSubmitting ? 'Authorizing...' : 'Authorize & start logged session'}
             </button>
           </div>
         </form>

@@ -178,7 +178,7 @@ export const BuyerAuditLog: React.FC = () => {
                   </td>
 
                   <td className="py-3 px-4 font-mono text-slate-400 text-[11px]">
-                    {ev.ipAddress || '168.167.4.10'}
+                    {ev.ipAddress || '—'}
                   </td>
                 </tr>
               ))}

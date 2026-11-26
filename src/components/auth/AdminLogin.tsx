@@ -44,19 +44,14 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
 
     try {
       const res = await authApi.login(email.trim().toLowerCase(), password);
-      if (!res.user?.isPlatformAdmin && email.trim().toLowerCase() !== 'admin@bidready360.co.bw') {
+      if (!res.user?.isPlatformAdmin) {
         setError('Access restricted: this account lacks platform administrator privileges.');
         return;
       }
 
       loginSuccess(
         {
-          user: res.user || {
-            id: 'admin-1',
-            email: email.trim().toLowerCase(),
-            fullName: 'Platform Administrator',
-            isPlatformAdmin: true,
-          },
+          user: res.user,
           token: res.token,
           activeTenant: {
             tenantType: 'organization',
@@ -65,8 +60,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
             roleName: 'Platform Super Admin',
           },
           profileSummary: (res as any).profileSummary || {
-            userId: 'admin-1',
-            displayName: 'Platform Administrator',
+            userId: res.user.id,
+            displayName: res.user.fullName || res.user.email,
             role: 'Platform Super Admin',
             supplierOrOrgName: 'National Platform Administration',
             tenantType: 'platform',
@@ -77,6 +72,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
         'admin'
       );
     } catch (err: any) {
+      if (err?.status === 423 || err?.status === 429 || err?.code === 'ACCOUNT_LOCKED' || err?.code === 'RATE_LIMIT_EXCEEDED') {
+        onNavigate('account-locked');
+        return;
+      }
       setError(err.message || 'Email or password is incorrect.');
     } finally {
       setIsLoading(false);
@@ -87,36 +86,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
     setEmail('admin@bidready360.co.bw');
     setPassword('Password123!');
     setError('');
-  };
-
-  const handleInstantDemo = () => {
-    loginSuccess(
-      {
-        user: {
-          id: 'admin-demo-1',
-          email: 'admin@bidready360.co.bw',
-          fullName: 'Kabo Motlhabane',
-          isPlatformAdmin: true,
-        },
-        activeTenant: {
-          tenantType: 'organization',
-          tenantId: 'platform',
-          tenantName: 'National Platform Administration',
-          roleName: 'Platform Super Admin',
-        },
-        token: 'demo-admin-token',
-        profileSummary: {
-          userId: 'admin-demo-1',
-          displayName: 'Kabo Motlhabane',
-          role: 'Platform Super Admin',
-          supplierOrOrgName: 'National Platform Administration',
-          tenantType: 'platform',
-          tenantId: 'platform',
-          verificationStatus: 'verified',
-        },
-      },
-      'admin'
-    );
   };
 
   return (
@@ -175,16 +144,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
                 onClick={handleFillDemo}
               >
                 Fill Form
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleInstantDemo}
-                className="text-[#1F5F99] dark:text-[#6FAEE0] hover:text-[#184b7a]"
-                leftIcon={<Sparkles className="w-3 h-3 text-[#E8A33D]" />}
-              >
-                Quick Demo
               </Button>
             </div>
           </div>

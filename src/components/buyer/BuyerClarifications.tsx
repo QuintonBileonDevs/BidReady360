@@ -1,28 +1,102 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { MessageSquare, Clock, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { buyerApi } from '../../services/api';
+import { Send, CheckCircle2, AlertCircle } from 'lucide-react';
+
+interface BuyerClarificationRow {
+  id: string;
+  callId: string;
+  callNumber?: string;
+  callTitle?: string;
+  supplierName: string;
+  question: string;
+  answer?: string;
+  answeredBy?: string;
+  submittedAt: string;
+  answeredAt?: string;
+  status: 'Pending' | 'Answered';
+  isPublished?: boolean;
+}
 
 export const BuyerClarifications: React.FC = () => {
-  const { clarifications, calls, publishClarificationAnswer, buyerSubRole } = useApp();
+  const { clarifications: contextClarifications, calls, publishClarificationAnswer, buyerSubRole, profileSummary, currentUser } = useApp();
+
+  const [clarifications, setClarifications] = useState<BuyerClarificationRow[]>(() =>
+    contextClarifications.map((c) => ({
+      id: c.id,
+      callId: c.callId,
+      supplierName: c.supplierName,
+      question: c.question,
+      answer: c.answer,
+      answeredBy: c.answeredBy,
+      submittedAt: c.submittedAt,
+      answeredAt: c.answeredAt,
+      status: c.status,
+      isPublished: c.isPublished,
+    }))
+  );
   const [selectedClarId, setSelectedClarId] = useState<string | null>(clarifications[0]?.id || null);
   const [answerText, setAnswerText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [successNotice, setSuccessNotice] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const loadClarifications = useCallback(async () => {
+    try {
+      const rows = await buyerApi.listClarifications();
+      if (Array.isArray(rows)) {
+        const mapped: BuyerClarificationRow[] = rows.map((cl: any) => ({
+          id: cl.id,
+          callId: cl.callId,
+          callNumber: cl.callNumber,
+          callTitle: cl.callTitle,
+          supplierName: cl.supplierName || 'Prospective Bidder',
+          question: cl.question,
+          answer: cl.answer || undefined,
+          answeredBy: cl.responderTitle || undefined,
+          submittedAt: cl.askedAt ? new Date(cl.askedAt).toLocaleString() : '',
+          answeredAt: cl.answeredAt ? new Date(cl.answeredAt).toLocaleString() : undefined,
+          status: cl.status === 'Answered' ? 'Answered' : 'Pending',
+          isPublished: Boolean(cl.isPublished),
+        }));
+        setClarifications(mapped);
+        setSelectedClarId((prev) => (prev && mapped.some((m) => m.id === prev) ? prev : mapped[0]?.id || null));
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadClarifications();
+  }, [loadClarifications]);
 
   const selectedClar = clarifications.find((c) => c.id === selectedClarId) || clarifications[0];
 
-  const getCallNumber = (callId: string) => {
-    const found = calls.find((c) => c.id === callId);
-    return found?.callNumber || 'GRC/ENG/2026/04';
+  const getCallNumber = (item: BuyerClarificationRow) => {
+    if (item.callNumber) return item.callNumber;
+    const found = calls.find((c) => c.id === item.callId);
+    return found?.callNumber || 'Tender Call';
   };
 
-  const handleAnswerSubmit = (e: React.FormEvent) => {
+  const handleAnswerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClar || !answerText.trim()) return;
+    if (!selectedClar || !answerText.trim() || isSubmitting) return;
 
-    publishClarificationAnswer(selectedClar.id, answerText.trim(), 'Kgosi Tau (Procurement Lead)');
-    setAnswerText('');
-    setSuccessNotice(true);
-    setTimeout(() => setSuccessNotice(false), 4000);
+    setIsSubmitting(true);
+    setErrorMsg(null);
+    const responder = currentUser?.fullName || profileSummary?.displayName || 'Procurement Officer';
+
+    try {
+      await buyerApi.answerClarification(selectedClar.id, answerText.trim(), responder);
+      publishClarificationAnswer(selectedClar.id, answerText.trim(), responder);
+      setAnswerText('');
+      setSuccessNotice(true);
+      await loadClarifications();
+      setTimeout(() => setSuccessNotice(false), 4000);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to publish clarification response.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const hasAnswerPermission = buyerSubRole === 'Org admin' || buyerSubRole === 'Procurement officer';
@@ -35,7 +109,7 @@ export const BuyerClarifications: React.FC = () => {
             Tender clarifications desk
           </h1>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Review bidder questions, publish formal addenda answers, and uphold strict statutory transparency.
+            Review private bidder inquiries and publish official responses to all prospective bidders.
           </p>
         </div>
       </div>
@@ -47,6 +121,13 @@ export const BuyerClarifications: React.FC = () => {
         </div>
       )}
 
+      {errorMsg && (
+        <div className="p-4 bg-[#FEF2F2] border border-[#FCA5A5] rounded-[12px] text-[#8E2A1B] text-[14px] flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-[#C2412D]" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left List */}
         <div className="lg:col-span-5 bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] divide-y divide-[#D5E0EA] dark:divide-[#1E364A] overflow-hidden">
@@ -54,42 +135,48 @@ export const BuyerClarifications: React.FC = () => {
             Clarification questions ({clarifications.length})
           </div>
 
-          {clarifications.map((item) => {
-            const isSelected = selectedClar?.id === item.id;
-            const isAnswered = item.status === 'Answered';
-            return (
-              <div
-                key={item.id}
-                onClick={() => setSelectedClarId(item.id)}
-                className={`p-4 transition-colors cursor-pointer space-y-1 ${
-                  isSelected
-                    ? 'bg-[#EAF2FA] dark:bg-[#162C3E] border-l-4 border-l-[#1F5F99]'
-                    : 'hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                    {getCallNumber(item.callId)}
-                  </span>
-                  <span
-                    className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
-                      isAnswered
-                        ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                        : 'bg-[#FFFBEB] text-[#92400E]'
-                    }`}
-                  >
-                    {isAnswered ? 'Answered' : 'Pending response'}
+          {clarifications.length === 0 ? (
+            <div className="p-8 text-center text-[13px] text-[#6B7A87]">
+              No clarification inquiries submitted for your organization's calls yet.
+            </div>
+          ) : (
+            clarifications.map((item) => {
+              const isSelected = selectedClar?.id === item.id;
+              const isAnswered = item.status === 'Answered';
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedClarId(item.id)}
+                  className={`p-4 transition-colors cursor-pointer space-y-1 ${
+                    isSelected
+                      ? 'bg-[#EAF2FA] dark:bg-[#162C3E] border-l-4 border-l-[#1F5F99]'
+                      : 'hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-[14px] text-[#10212E] dark:text-white">
+                      {getCallNumber(item)}
+                    </span>
+                    <span
+                      className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
+                        isAnswered
+                          ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+                          : 'bg-[#FFFBEB] text-[#92400E]'
+                      }`}
+                    >
+                      {isAnswered ? 'Answered' : 'Pending response'}
+                    </span>
+                  </div>
+                  <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] line-clamp-2">
+                    {item.question}
+                  </p>
+                  <span className="text-[12px] text-[#6B7A87] block">
+                    Asked {item.submittedAt}
                   </span>
                 </div>
-                <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] line-clamp-2">
-                  {item.question}
-                </p>
-                <span className="text-[12px] text-[#6B7A87] block">
-                  Asked {item.submittedAt}
-                </span>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
 
         {/* Right Detail & Reply */}
@@ -98,7 +185,7 @@ export const BuyerClarifications: React.FC = () => {
             <>
               <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
                 <span className="text-[12px] text-[#1F5F99] font-medium">
-                  Question for {getCallNumber(selectedClar.callId)}
+                  Question for {getCallNumber(selectedClar)}
                 </span>
                 <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                   Bidder inquiry details
@@ -124,7 +211,7 @@ export const BuyerClarifications: React.FC = () => {
                     {selectedClar.answer}
                   </p>
                   <span className="text-[12px] text-[#6B7A87] block pt-1">
-                    Answered by: {selectedClar.answeredBy}
+                    Answered by: {selectedClar.answeredBy || 'Procurement Officer'}
                   </span>
                 </div>
               ) : (
@@ -136,7 +223,7 @@ export const BuyerClarifications: React.FC = () => {
                       </label>
                       <textarea
                         rows={4}
-                        placeholder="Draft the formal technical clarification. This response will be published as an addendum to all bidders..."
+                        placeholder="Draft the formal technical clarification. Publishing this response makes it visible on the public tender bulletin..."
                         value={answerText}
                         onChange={(e) => setAnswerText(e.target.value)}
                         className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px]"
@@ -146,10 +233,11 @@ export const BuyerClarifications: React.FC = () => {
 
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium flex items-center gap-2"
+                      disabled={isSubmitting}
+                      className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white rounded-[6px] text-[14px] font-medium flex items-center gap-2"
                     >
                       <Send className="w-4 h-4" />
-                      <span>Publish addendum answer</span>
+                      <span>{isSubmitting ? 'Publishing...' : 'Publish addendum answer'}</span>
                     </button>
                   </form>
                 ) : (

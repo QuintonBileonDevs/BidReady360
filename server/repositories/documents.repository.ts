@@ -1,6 +1,96 @@
 import crypto from 'crypto';
 import { query, tx } from '../db/client';
-import { generateCertificatePdf } from '../utils/pdfGenerator';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const SAFE_INLINE_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'text/plain',
+  'text/csv',
+]);
+
+export interface StoredDocumentFile {
+  content: Buffer;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
+  sha256: string | null;
+  versionId: string;
+  documentId: string;
+}
+
+/**
+ * Determine a safe, accurate MIME type for stored bytes using magic bytes first,
+ * then an allowlist of safe document MIME types. Never returns active web types
+ * such as text/html or image/svg+xml.
+ */
+export function detectSafeMimeType(
+  buffer: Buffer,
+  storedMime?: string | null,
+  fileName?: string | null
+): string {
+  if (buffer && buffer.length >= 4) {
+    // PDF: %PDF within first 1024 bytes
+    const head = buffer.subarray(0, Math.min(1024, buffer.length));
+    if (head.includes(Buffer.from('%PDF'))) {
+      return 'application/pdf';
+    }
+    // PNG: 89 50 4E 47
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+      return 'image/png';
+    }
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return 'image/jpeg';
+    }
+    // GIF: GIF87a / GIF89a
+    if (buffer.length >= 6 && (head.subarray(0, 6).toString('ascii') === 'GIF87a' || head.subarray(0, 6).toString('ascii') === 'GIF89a')) {
+      return 'image/gif';
+    }
+    // WebP: RIFF....WEBP
+    if (buffer.length >= 12 && head.subarray(0, 4).toString('ascii') === 'RIFF' && head.subarray(8, 12).toString('ascii') === 'WEBP') {
+      return 'image/webp';
+    }
+    // ZIP container -> DOCX
+    if (buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
+      const ext = (fileName || '').split('.').pop()?.toLowerCase();
+      if (ext === 'docx' || (storedMime || '').toLowerCase().includes('wordprocessingml')) {
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      }
+    }
+    // Legacy OLE2 DOC
+    if (buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0) {
+      return 'application/msword';
+    }
+  }
+
+  const normalizedStored = String(storedMime || '').split(';')[0].trim().toLowerCase();
+  if (normalizedStored === 'image/jpg') {
+    return 'image/jpeg';
+  }
+  if (SAFE_INLINE_MIME_TYPES.has(normalizedStored)) {
+    return normalizedStored;
+  }
+
+  const ext = (fileName || '').split('.').pop()?.toLowerCase();
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === 'doc') return 'application/msword';
+  if (ext === 'txt') return 'text/plain';
+  if (ext === 'csv') return 'text/csv';
+
+  return 'application/octet-stream';
+}
 
 export interface SupplierDocumentView {
   documentId: string;
@@ -26,9 +116,11 @@ export interface SupplierDocumentView {
   verifiedVia: string | null;
   verifiedAt: string | null;
   verificationNotes: string | null;
+  rejectionReason: string | null;
   uploadedAt: string | null;
   daysToExpiry: number | null;
   expiryState: string | null;
+  hasFile?: boolean;
   certifiedCopy?: boolean;
 }
 
@@ -62,7 +154,12 @@ export class DocumentsRepository {
               v.sha256, v.document_number AS "documentNumber", v.issue_date AS "issueDate",
               v.expiry_date AS "expiryDate", v.verification_status AS "verificationStatus",
               v.verified_via AS "verifiedVia", v.verified_at AS "verifiedAt",
-              v.verification_notes AS "verificationNotes", v.uploaded_at AS "uploadedAt",
+              v.verification_notes AS "verificationNotes", v.rejection_reason AS "rejectionReason",
+              v.uploaded_at AS "uploadedAt",
+              EXISTS (
+                SELECT 1 FROM document_files f
+                WHERE f.document_version_id = v.id AND octet_length(f.content) > 0
+              ) AS "hasFile",
               CASE WHEN v.expiry_date IS NOT NULL THEN (v.expiry_date - CURRENT_DATE) ELSE NULL END AS "daysToExpiry",
               CASE
                 WHEN v.expiry_date IS NULL THEN 'NO_EXPIRY'
@@ -86,9 +183,10 @@ export class DocumentsRepository {
    * Validates hash integrity after saving.
    */
   async uploadVersion(dto: UploadDocumentVersionDTO): Promise<SupplierDocumentView> {
-    // 1. Server computes canonical SHA-256
+    // 1. Server computes canonical SHA-256 and safe MIME type from actual bytes
     const sha256 = crypto.createHash('sha256').update(dto.fileBuffer).digest('hex');
     const fileSizeBytes = dto.fileBuffer.length;
+    const resolvedMimeType = detectSafeMimeType(dto.fileBuffer, dto.mimeType, dto.fileName);
     const storageKey = `vault/${dto.supplierId}/${Date.now()}-${dto.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
     // 2. Resolve document type (by code, name, or fallback)
@@ -134,10 +232,10 @@ export class DocumentsRepository {
         nextVersionNo = Number(maxVerRes.rows[0]?.max_version || 0) + 1;
       } else {
         const newDocRes = await client.query<{ id: string }>(
-          `INSERT INTO supplier_documents (supplier_id, document_type_id, title, status)
-           VALUES ($1, $2, $3, 'active')
+          `INSERT INTO supplier_documents (supplier_id, document_type_id, title, file_size_bytes, status)
+           VALUES ($1, $2, $3, $4, 'active')
            RETURNING id`,
-          [dto.supplierId, docType.id, dto.title || docType.name]
+          [dto.supplierId, docType.id, dto.title || docType.name, fileSizeBytes]
         );
         docId = newDocRes.rows[0].id;
       }
@@ -156,7 +254,7 @@ export class DocumentsRepository {
           nextVersionNo,
           storageKey,
           dto.fileName,
-          dto.mimeType,
+          resolvedMimeType,
           fileSizeBytes,
           sha256,
           dto.documentNumber || null,
@@ -167,11 +265,11 @@ export class DocumentsRepository {
       );
       const versionId = newVersionRes.rows[0].id;
 
-      // 5. Save bytes in document_files in the SAME transaction
+      // 5. Save real bytes in document_files in the SAME transaction
       await client.query(
         `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [versionId, dto.fileBuffer, dto.mimeType, dto.fileName, fileSizeBytes, sha256]
+        [versionId, dto.fileBuffer, resolvedMimeType, dto.fileName, fileSizeBytes, sha256]
       );
 
       // 6. Read back file and compare its hash with the stored one (integrity check)
@@ -189,10 +287,12 @@ export class DocumentsRepository {
         throw new Error(`File integrity check failed: stored hash (${storedSha}) does not match computed hash (${sha256}).`);
       }
 
-      // 7. Update container current_version_id
+      // 7. Update container current_version_id & latest file size
       await client.query(
-        `UPDATE supplier_documents SET current_version_id = $1, updated_at = NOW() WHERE id = $2`,
-        [versionId, docId]
+        `UPDATE supplier_documents
+         SET current_version_id = $1, file_size_bytes = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [versionId, fileSizeBytes, docId]
       );
 
       return {
@@ -209,7 +309,7 @@ export class DocumentsRepository {
         versionNo: nextVersionNo,
         storageKey,
         fileName: dto.fileName,
-        mimeType: dto.mimeType,
+        mimeType: resolvedMimeType,
         fileSizeBytes: String(fileSizeBytes),
         sha256,
         documentNumber: dto.documentNumber || null,
@@ -219,102 +319,189 @@ export class DocumentsRepository {
         verifiedVia: null,
         verifiedAt: null,
         verificationNotes: 'File uploaded and verified against canonical SHA-256 checksum rules.',
+        rejectionReason: null,
         uploadedAt: new Date().toISOString(),
         daysToExpiry: dto.expiryDate ? Math.ceil((new Date(dto.expiryDate).getTime() - Date.now()) / 86400000) : null,
         expiryState: dto.expiryDate ? 'VALID' : 'NO_EXPIRY',
+        hasFile: true,
         certifiedCopy: dto.certifiedCopy,
       };
     });
   }
 
   /**
-   * Fetch file bytes by document version, document ID, or document code, ensuring ownership.
+   * Fetch actual uploaded file bytes by document version ID or document ID,
+   * strictly scoped to the owning supplier and prioritizing the exact requested
+   * version or the document's current active version.
+   * Never fabricates placeholder PDFs when real bytes do not exist.
    */
-  async getFileByVersionOrDocId(id: string, supplierId: string): Promise<{ content: Buffer; mimeType: string; fileName: string } | null> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-    const isSupplierUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(supplierId);
-
-    // 1. Direct query on document_files if ID is UUID
-    if (isUuid) {
-      const res = await query<{ content: Buffer; mimeType: string; fileName: string }>(
-        `SELECT f.content, f.mime_type AS "mimeType", f.file_name AS "fileName"
-         FROM document_files f
-         JOIN supplier_document_versions v ON v.id = f.document_version_id
-         JOIN supplier_documents d ON d.id = v.document_id
-         WHERE (v.id = $1 OR d.id = $1 OR f.id = $1)
-           ${isSupplierUuid ? 'AND d.supplier_id = $2' : ''}
-         LIMIT 1`,
-        isSupplierUuid ? [id, supplierId] : [id]
-      );
-      if (res.rows.length) return res.rows[0];
+  async getFileByVersionOrDocId(id: string, supplierId: string): Promise<StoredDocumentFile | null> {
+    if (!UUID_REGEX.test(id) || !UUID_REGEX.test(supplierId)) {
+      return null;
     }
 
-    // 2. Lookup document record to see if version exists or needs PDF auto-generation
-    const docQuery = isUuid
-      ? `SELECT d.id AS doc_id, d.title, d.supplier_id, v.id AS version_id, v.file_name, v.mime_type,
-                v.document_number, v.issue_date, v.expiry_date, v.sha256, dt.name AS doc_type_name,
-                dt.issuing_authority, s.legal_name
-         FROM supplier_documents d
-         JOIN document_types dt ON dt.id = d.document_type_id
-         LEFT JOIN supplier_document_versions v ON v.id = d.current_version_id
-         LEFT JOIN suppliers s ON s.id = d.supplier_id
-         WHERE (d.id = $1 OR v.id = $1)
-           ${isSupplierUuid ? 'AND d.supplier_id = $2' : ''}
-         LIMIT 1`
-      : `SELECT d.id AS doc_id, d.title, d.supplier_id, v.id AS version_id, v.file_name, v.mime_type,
-                v.document_number, v.issue_date, v.expiry_date, v.sha256, dt.name AS doc_type_name,
-                dt.issuing_authority, s.legal_name
-         FROM supplier_documents d
-         JOIN document_types dt ON dt.id = d.document_type_id
-         LEFT JOIN supplier_document_versions v ON v.id = d.current_version_id
-         LEFT JOIN suppliers s ON s.id = d.supplier_id
-         WHERE (d.title ILIKE '%' || $1 || '%' OR dt.code ILIKE $1 OR dt.name ILIKE '%' || $1 || '%')
-           ${isSupplierUuid ? 'AND d.supplier_id = $2' : ''}
-         LIMIT 1`;
+    const res = await query<{
+      content: Buffer;
+      mimeType: string;
+      fileName: string;
+      sizeBytes: string;
+      sha256: string | null;
+      versionId: string;
+      documentId: string;
+    }>(
+      `SELECT f.content,
+              COALESCE(f.mime_type, v.mime_type) AS "mimeType",
+              COALESCE(f.file_name, v.file_name) AS "fileName",
+              f.size_bytes AS "sizeBytes",
+              COALESCE(f.sha256, v.sha256) AS sha256,
+              v.id AS "versionId",
+              d.id AS "documentId"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE d.supplier_id = $2
+         AND d.status != 'deleted'
+         AND (v.id = $1 OR d.id = $1 OR f.id = $1)
+       ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
+       LIMIT 1`,
+      [id, supplierId]
+    );
 
-    const docRes = await query<any>(docQuery, isSupplierUuid ? [id, supplierId] : [id]);
-    if (docRes.rows.length > 0) {
-      const row = docRes.rows[0];
-      if (row.version_id) {
-        const existingFile = await query<{ content: Buffer; mimeType: string; fileName: string }>(
-          `SELECT content, mime_type AS "mimeType", file_name AS "fileName"
-           FROM document_files WHERE document_version_id = $1 LIMIT 1`,
-          [row.version_id]
-        );
-        if (existingFile.rows.length > 0) return existingFile.rows[0];
-      }
-
-      // Generate certified certificate PDF and save to document_files
-      const pdfBuffer = generateCertificatePdf({
-        title: row.title || row.doc_type_name || 'Official Certificate',
-        documentNumber: row.document_number || 'CERT-2026-VAL',
-        supplierName: row.legal_name || 'Registered Commercial Supplier',
-        issueDate: row.issue_date ? new Date(row.issue_date).toISOString().split('T')[0] : '2026-01-15',
-        expiryDate: row.expiry_date ? new Date(row.expiry_date).toISOString().split('T')[0] : '2027-01-15',
-        authorityName: row.issuing_authority || 'Republic of Botswana Regulatory Authority',
-        sha256: row.sha256,
-      });
-
-      const fileName = row.file_name || `${(row.title || 'Certificate').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
-      const mimeType = 'application/pdf';
-      const sha256 = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
-
-      if (row.version_id) {
-        await query(
-          `INSERT INTO document_files (document_version_id, content, mime_type, file_name, size_bytes, sha256)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [row.version_id, pdfBuffer, mimeType, fileName, pdfBuffer.length, sha256]
-        ).catch(() => {});
-      }
-
-      return {
-        content: pdfBuffer,
-        mimeType,
-        fileName,
-      };
+    if (!res.rows.length || !res.rows[0].content || res.rows[0].content.length === 0) {
+      return null;
     }
 
-    return null;
+    const row = res.rows[0];
+    const buf = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+    return {
+      content: buf,
+      mimeType: detectSafeMimeType(buf, row.mimeType, row.fileName),
+      fileName: row.fileName || 'document',
+      sizeBytes: buf.length,
+      sha256: row.sha256 ? row.sha256.trim() : null,
+      versionId: row.versionId,
+      documentId: row.documentId,
+    };
+  }
+
+  /**
+   * Fetch actual uploaded file bytes for platform administrators during verification.
+   * Accepts either a versionId or a documentId (defaulting to current_version_id).
+   */
+  async getFileForAdmin(versionOrDocId: string): Promise<StoredDocumentFile | null> {
+    if (!UUID_REGEX.test(versionOrDocId)) {
+      return null;
+    }
+
+    const res = await query<{
+      content: Buffer;
+      mimeType: string;
+      fileName: string;
+      sizeBytes: string;
+      sha256: string | null;
+      versionId: string;
+      documentId: string;
+    }>(
+      `SELECT f.content,
+              COALESCE(f.mime_type, v.mime_type) AS "mimeType",
+              COALESCE(f.file_name, v.file_name) AS "fileName",
+              f.size_bytes AS "sizeBytes",
+              COALESCE(f.sha256, v.sha256) AS sha256,
+              v.id AS "versionId",
+              d.id AS "documentId"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE v.id = $1 OR d.id = $1 OR f.id = $1
+       ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
+       LIMIT 1`,
+      [versionOrDocId]
+    );
+
+    if (!res.rows.length || !res.rows[0].content || res.rows[0].content.length === 0) {
+      return null;
+    }
+
+    const row = res.rows[0];
+    const buf = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+    return {
+      content: buf,
+      mimeType: detectSafeMimeType(buf, row.mimeType, row.fileName),
+      fileName: row.fileName || 'document',
+      sizeBytes: buf.length,
+      sha256: row.sha256 ? row.sha256.trim() : null,
+      versionId: row.versionId,
+      documentId: row.documentId,
+    };
+  }
+
+  /**
+   * Fetch actual uploaded file bytes for an authorized procuring organization (buyer).
+   * Enforces that the supplier either submitted an application to one of this organization's calls
+   * or holds an active data-sharing consent grant with this organization.
+   */
+  async getFileForBuyer(versionOrDocId: string, organizationId: string): Promise<StoredDocumentFile | null> {
+    if (!UUID_REGEX.test(versionOrDocId) || !UUID_REGEX.test(organizationId)) {
+      return null;
+    }
+
+    const res = await query<{
+      content: Buffer;
+      mimeType: string;
+      fileName: string;
+      sizeBytes: string;
+      sha256: string | null;
+      versionId: string;
+      documentId: string;
+    }>(
+      `SELECT f.content,
+              COALESCE(f.mime_type, v.mime_type) AS "mimeType",
+              COALESCE(f.file_name, v.file_name) AS "fileName",
+              f.size_bytes AS "sizeBytes",
+              COALESCE(f.sha256, v.sha256) AS sha256,
+              v.id AS "versionId",
+              d.id AS "documentId"
+       FROM document_files f
+       JOIN supplier_document_versions v ON v.id = f.document_version_id
+       JOIN supplier_documents d ON d.id = v.document_id
+       WHERE d.status != 'deleted'
+         AND (v.id = $1 OR d.id = $1 OR f.id = $1)
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM applications a
+             JOIN calls c ON c.id = a.call_id
+             WHERE a.supplier_id = d.supplier_id
+               AND c.organization_id = $2
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM consent_grants cg
+             WHERE cg.supplier_id = d.supplier_id
+               AND cg.organization_id = $2
+               AND cg.status = 'active'
+           )
+         )
+       ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
+       LIMIT 1`,
+      [versionOrDocId, organizationId]
+    );
+
+    if (!res.rows.length || !res.rows[0].content || res.rows[0].content.length === 0) {
+      return null;
+    }
+
+    const row = res.rows[0];
+    const buf = Buffer.isBuffer(row.content) ? row.content : Buffer.from(row.content);
+    return {
+      content: buf,
+      mimeType: detectSafeMimeType(buf, row.mimeType, row.fileName),
+      fileName: row.fileName || 'document',
+      sizeBytes: buf.length,
+      sha256: row.sha256 ? row.sha256.trim() : null,
+      versionId: row.versionId,
+      documentId: row.documentId,
+    };
   }
 
   /**

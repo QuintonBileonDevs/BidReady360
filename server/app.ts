@@ -7,6 +7,7 @@ import {
 import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { authenticate, csrfProtection } from './middleware/auth.middleware';
+import { generalApiRateLimiter, authEndpointRateLimiter } from './middleware/rateLimit.middleware';
 import { guardStatus, DbGuardError, query } from './db/client';
 import { referenceRouter } from './routes/reference.routes';
 import { authRouter } from './routes/auth.routes';
@@ -100,6 +101,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+app.use('/api', generalApiRateLimiter);
+app.use(['/reference', '/auth', '/supplier', '/calls', '/buyer', '/audit', '/bootstrap', '/debug', '/admin'], generalApiRateLimiter);
 app.use(csrfProtection);
 app.use(authenticate);
 
@@ -176,7 +179,7 @@ app.get(['/api/health', '/health'], async (_req: Request, res: Response) => {
 
 // API routes with '/api' prefix
 app.use('/api/reference', referenceRouter);
-app.use('/api/auth', authRouter);
+app.use('/api/auth', authEndpointRateLimiter, authRouter);
 app.use('/api/supplier', supplierRouter);
 app.use('/api/calls', callsRouter);
 app.use('/api/buyer', buyerRouter);
@@ -187,7 +190,7 @@ app.use('/api/admin', adminRouter);
 
 // Same routes without the prefix, in case a rewrite strips '/api'
 app.use('/reference', referenceRouter);
-app.use('/auth', authRouter);
+app.use('/auth', authEndpointRateLimiter, authRouter);
 app.use('/supplier', supplierRouter);
 app.use('/calls', callsRouter);
 app.use('/buyer', buyerRouter);

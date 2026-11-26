@@ -98,11 +98,10 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
   };
 
   const getDaysRemaining = (deadlineStr: string) => {
-    const now = new Date('2026-10-05T00:00:00');
+    const now = new Date();
     const deadline = new Date(deadlineStr);
     const diffTime = deadline.getTime() - now.getTime();
-    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return days;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   return (

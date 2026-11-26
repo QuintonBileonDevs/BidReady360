@@ -17,6 +17,7 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+import { DocumentVaultPreview } from '../common/DocumentVaultPreview';
 
 type QueueEntry =
   | { kind: 'person'; id: string; person: AdminQueuePerson }
@@ -76,19 +77,25 @@ export const AdminVerification: React.FC = () => {
     title: string;
     fileName: string;
     mimeType: string;
+    blob: Blob;
     objectUrl: string;
   } | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [activePreviewVersionId, setActivePreviewVersionId] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
+  const previewRequestIdRef = useRef<number>(0);
 
   const revokePreview = useCallback(() => {
+    previewRequestIdRef.current += 1;
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
     }
     setPreviewDoc(null);
     setPreviewError(null);
+    setActivePreviewVersionId(null);
+    setIsLoadingPreview(false);
   }, []);
 
   useEffect(() => {
@@ -110,8 +117,8 @@ export const AdminVerification: React.FC = () => {
       setDocuments(loadedDocs);
       setSelectedId((prev) => {
         if (prev) return prev;
-        if (loadedPeople.length > 0) return `person:${loadedPeople[0].id}`;
         if (loadedDocs.length > 0) return `doc:${loadedDocs[0].versionId}`;
+        if (loadedPeople.length > 0) return `person:${loadedPeople[0].id}`;
         return null;
       });
     } catch (err: any) {
@@ -136,30 +143,72 @@ export const AdminVerification: React.FC = () => {
 
   const selectedEntry = entries.find((e) => e.id === selectedId) || entries[0] || null;
 
-  const handleSelectEntry = (entry: QueueEntry) => {
-    setSelectedId(entry.id);
-    revokePreview();
-  };
-
-  const handleOpenPreview = async (versionId: string, title: string) => {
-    revokePreview();
-    setIsLoadingPreview(true);
+  const handleOpenPreview = useCallback(async (versionId: string, title: string) => {
+    const reqId = ++previewRequestIdRef.current;
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setPreviewDoc(null);
     setPreviewError(null);
+    setActivePreviewVersionId(versionId);
+    setIsLoadingPreview(true);
     try {
       const result = await adminApi.fetchDocumentBlob(versionId);
+      if (previewRequestIdRef.current !== reqId) {
+        URL.revokeObjectURL(result.objectUrl);
+        return;
+      }
       previewUrlRef.current = result.objectUrl;
       setPreviewDoc({
         versionId,
         title,
         fileName: result.fileName,
         mimeType: result.mimeType,
+        blob: result.blob,
         objectUrl: result.objectUrl,
       });
     } catch (err: any) {
+      if (previewRequestIdRef.current !== reqId) return;
       setPreviewError(err?.message || 'Could not load document file.');
     } finally {
-      setIsLoadingPreview(false);
+      if (previewRequestIdRef.current === reqId) {
+        setIsLoadingPreview(false);
+      }
     }
+  }, []);
+
+  // Automatically load the actual document preview whenever a queue item is selected
+  useEffect(() => {
+    if (!selectedEntry) {
+      revokePreview();
+      return;
+    }
+
+    if (selectedEntry.kind === 'document') {
+      const doc = selectedEntry.document;
+      handleOpenPreview(doc.versionId, doc.documentTypeName);
+      return;
+    }
+
+    const docs = selectedEntry.person.supportingDocuments || [];
+    const preferred =
+      docs.find(
+        (d) =>
+          d.hasFile !== false &&
+          (String(d.documentTypeCode || '').toUpperCase() === 'DIRECTOR_ID' ||
+            /director|shareholder|omang|identity/i.test(d.documentTypeName || d.title || ''))
+      ) || docs.find((d) => d.hasFile !== false);
+
+    if (preferred) {
+      handleOpenPreview(preferred.versionId, preferred.documentTypeName);
+    } else {
+      revokePreview();
+    }
+  }, [selectedEntry?.id, handleOpenPreview, revokePreview]);
+
+  const handleSelectEntry = (entry: QueueEntry) => {
+    setSelectedId(entry.id);
   };
 
   const showSuccess = (msg: string) => {
@@ -456,9 +505,24 @@ export const AdminVerification: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-[12px] text-[#6B7A87] block">Identity document</span>
-                      <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
-                        {person.identityType || 'OMANG'} {person.idLast4 ? `ending ${person.idLast4}` : '(Not provided)'}
-                      </span>
+                      <div className="flex items-center flex-wrap gap-2">
+                        <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
+                          {person.identityType || 'OMANG'} {person.idLast4 ? `ending ${person.idLast4}` : '(Not provided)'}
+                        </span>
+                        {person.omangValid === true && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-[4px] bg-[#ECFDF5] text-[#2F8F5B] font-medium">
+                            Omang valid
+                          </span>
+                        )}
+                        {person.omangValid === false && (
+                          <span
+                            className="text-[11px] px-2 py-0.5 rounded-[4px] bg-[#FEF2F2] text-[#C2412D] font-medium"
+                            title={person.omangMessage || 'Invalid Omang format'}
+                          >
+                            {person.omangMessage || 'Omang check failed'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <span className="text-[12px] text-[#6B7A87] block">Gender</span>
@@ -506,29 +570,41 @@ export const AdminVerification: React.FC = () => {
                       </div>
                     ) : (
                       <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden">
-                        {person.supportingDocuments.map((doc) => (
-                          <div
-                            key={doc.versionId}
-                            className="p-3 flex items-center justify-between gap-3 bg-white dark:bg-[#10212E] text-[13px]"
-                          >
-                            <div className="min-w-0">
-                              <span className="font-semibold text-[#10212E] dark:text-white block truncate">
-                                {doc.documentTypeName}
-                              </span>
-                              <span className="text-[12px] text-[#6B7A87] block truncate">
-                                {doc.fileName} · Uploaded {formatDate(doc.uploadedAt)}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenPreview(doc.versionId, doc.documentTypeName)}
-                              className="px-2.5 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] dark:hover:bg-[#162C3E] text-[#1F5F99] dark:text-[#38BDF8] rounded-[6px] text-[12px] font-medium inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                        {person.supportingDocuments.map((doc) => {
+                          const isActiveDoc = activePreviewVersionId === doc.versionId;
+                          return (
+                            <div
+                              key={doc.versionId}
+                              className={`p-3 flex items-center justify-between gap-3 text-[13px] ${
+                                isActiveDoc
+                                  ? 'bg-[#EAF2FA]/60 dark:bg-[#162C3E]'
+                                  : 'bg-white dark:bg-[#10212E]'
+                              }`}
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>Inspect file</span>
-                            </button>
-                          </div>
-                        ))}
+                              <div className="min-w-0">
+                                <span className="font-semibold text-[#10212E] dark:text-white block truncate">
+                                  {doc.documentTypeName}
+                                </span>
+                                <span className="text-[12px] text-[#6B7A87] block truncate">
+                                  {doc.fileName} · Uploaded {formatDate(doc.uploadedAt)}
+                                  {doc.hasFile === false ? ' · File bytes missing' : ''}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPreview(doc.versionId, doc.documentTypeName)}
+                                className={`px-2.5 py-1.5 border rounded-[6px] text-[12px] font-medium inline-flex items-center gap-1 shrink-0 cursor-pointer ${
+                                  isActiveDoc
+                                    ? 'bg-[#1F5F99] border-[#1F5F99] text-white'
+                                    : 'border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] dark:hover:bg-[#162C3E] text-[#1F5F99] dark:text-[#38BDF8]'
+                                }`}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>{isActiveDoc ? 'Viewing' : 'Preview file'}</span>
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -544,45 +620,26 @@ export const AdminVerification: React.FC = () => {
                           type="button"
                           onClick={revokePreview}
                           className="text-[#6B7A87] hover:text-[#10212E] cursor-pointer"
+                          title="Close preview"
                         >
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                      {isLoadingPreview ? (
-                        <div className="p-8 flex items-center justify-center gap-2 text-[13px] text-[#6B7A87]">
-                          <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
-                          <span>Decrypting and loading uploaded file...</span>
-                        </div>
-                      ) : previewError ? (
-                        <div className="p-4 text-[13px] text-[#C2412D]">{previewError}</div>
-                      ) : previewDoc ? (
-                        previewDoc.mimeType.startsWith('image/') ? (
-                          <div className="p-4 bg-slate-50 dark:bg-[#0D1B26] flex justify-center">
-                            <img
-                              src={previewDoc.objectUrl}
-                              alt={previewDoc.fileName}
-                              className="max-h-[420px] object-contain rounded"
-                            />
-                          </div>
-                        ) : previewDoc.mimeType === 'application/pdf' ? (
-                          <iframe
-                            src={previewDoc.objectUrl}
-                            title={previewDoc.fileName}
-                            className="w-full h-[420px] bg-white"
-                          />
-                        ) : (
-                          <div className="p-6 text-center space-y-2 text-[13px] text-[#6B7A87]">
-                            <p>Inline preview is not available for this file type ({previewDoc.mimeType}).</p>
-                            <a
-                              href={previewDoc.objectUrl}
-                              download={previewDoc.fileName}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1F5F99] text-white rounded-[6px] font-medium"
-                            >
-                              Download {previewDoc.fileName}
-                            </a>
-                          </div>
-                        )
-                      ) : null}
+                      <DocumentVaultPreview
+                        blob={previewDoc?.blob || null}
+                        objectUrl={previewDoc?.objectUrl || null}
+                        fileName={previewDoc?.fileName || 'document'}
+                        mimeType={previewDoc?.mimeType || ''}
+                        title={previewDoc?.title}
+                        isLoading={isLoadingPreview}
+                        error={previewError}
+                        onRetry={
+                          activePreviewVersionId
+                            ? () => handleOpenPreview(activePreviewVersionId, previewDoc?.title || 'Document')
+                            : undefined
+                        }
+                        maxHeightClass="h-[460px]"
+                      />
                     </div>
                   )}
 
@@ -658,81 +715,40 @@ export const AdminVerification: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Document Preview Trigger & Viewer */}
+                  {/* Document Preview Viewer (auto-loaded with actual uploaded file contents) */}
                   <div className="space-y-3">
-                    <div className="p-5 border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileCheck2 className="w-7 h-7 text-[#1F5F99] shrink-0" />
-                        <div className="min-w-0">
-                          <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block truncate">
-                            {document.fileName}
-                          </span>
-                          <span className="text-[12px] text-[#6B7A87]">
-                            Version {document.versionNo} · {document.mimeType}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenPreview(document.versionId, document.documentTypeName)}
-                        className="px-3 py-1.5 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#EAF2FA] text-[#1F5F99] dark:text-[#38BDF8] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
-                      >
-                        <Eye className="w-4 h-4" />
-                        <span>Inspect uploaded file</span>
-                      </button>
-                    </div>
-
-                    {(isLoadingPreview || previewError || previewDoc) && (
-                      <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden">
-                        <div className="px-4 py-2.5 bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                    <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden">
+                      <div className="px-4 py-2.5 bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between gap-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileCheck2 className="w-4 h-4 text-[#1F5F99] shrink-0" />
                           <span className="text-[13px] font-semibold text-[#10212E] dark:text-white truncate">
-                            {previewDoc ? previewDoc.fileName : 'Loading preview...'}
+                            {previewDoc ? previewDoc.fileName : document.fileName}
                           </span>
-                          <button
-                            type="button"
-                            onClick={revokePreview}
-                            className="text-[#6B7A87] hover:text-[#10212E] cursor-pointer"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                          <span className="text-[11px] text-[#6B7A87] shrink-0">
+                            v{document.versionNo}
+                          </span>
                         </div>
-                        {isLoadingPreview ? (
-                          <div className="p-8 flex items-center justify-center gap-2 text-[13px] text-[#6B7A87]">
-                            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
-                            <span>Loading uploaded document...</span>
-                          </div>
-                        ) : previewError ? (
-                          <div className="p-4 text-[13px] text-[#C2412D]">{previewError}</div>
-                        ) : previewDoc ? (
-                          previewDoc.mimeType.startsWith('image/') ? (
-                            <div className="p-4 bg-slate-50 dark:bg-[#0D1B26] flex justify-center">
-                              <img
-                                src={previewDoc.objectUrl}
-                                alt={previewDoc.fileName}
-                                className="max-h-[420px] object-contain rounded"
-                              />
-                            </div>
-                          ) : previewDoc.mimeType === 'application/pdf' ? (
-                            <iframe
-                              src={previewDoc.objectUrl}
-                              title={previewDoc.fileName}
-                              className="w-full h-[420px] bg-white"
-                            />
-                          ) : (
-                            <div className="p-6 text-center space-y-2 text-[13px] text-[#6B7A87]">
-                              <p>Inline preview is not available for {previewDoc.mimeType}.</p>
-                              <a
-                                href={previewDoc.objectUrl}
-                                download={previewDoc.fileName}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1F5F99] text-white rounded-[6px] font-medium"
-                              >
-                                Download {previewDoc.fileName}
-                              </a>
-                            </div>
-                          )
-                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenPreview(document.versionId, document.documentTypeName)}
+                          className="px-2.5 py-1 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#EAF2FA] text-[#1F5F99] dark:text-[#38BDF8] rounded-[5px] text-[12px] font-medium inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isLoadingPreview ? 'animate-spin' : ''}`} />
+                          <span>Reload</span>
+                        </button>
                       </div>
-                    )}
+                      <DocumentVaultPreview
+                        blob={previewDoc?.blob || null}
+                        objectUrl={previewDoc?.objectUrl || null}
+                        fileName={previewDoc?.fileName || document.fileName}
+                        mimeType={previewDoc?.mimeType || document.mimeType}
+                        title={document.documentTypeName}
+                        isLoading={isLoadingPreview}
+                        error={previewError}
+                        onRetry={() => handleOpenPreview(document.versionId, document.documentTypeName)}
+                        maxHeightClass="h-[480px]"
+                      />
+                    </div>
                   </div>
 
                   {/* Verification Decision Action Buttons */}

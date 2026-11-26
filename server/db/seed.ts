@@ -1,10 +1,76 @@
 import { query } from './client';
 import { clearReferenceCache } from '../repositories/reference.repository';
 
+/**
+ * Ensures baseline system roles have their PostgreSQL role_permissions rows populated.
+ * Safe and idempotent to run on server startup.
+ */
+export async function ensureSystemRolePermissions(): Promise<void> {
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.scope = 'organization'
+    WHERE r.scope = 'organization' AND r.name IN ('Org Admin', 'Buyer Admin')
+    ON CONFLICT DO NOTHING
+  `);
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+      'calls.create', 'calls.publish', 'calls.manage',
+      'applications.view', 'applications.review',
+      'suppliers.view', 'bids.view', 'bids.open',
+      'evaluation.assign', 'evaluation.consolidate',
+      'awards.recommend', 'contracts.manage', 'performance.review',
+      'reports.view', 'audit.view'
+    )
+    WHERE r.scope = 'organization' AND r.name = 'Procurement Officer'
+    ON CONFLICT DO NOTHING
+  `);
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+      'applications.view', 'bids.view', 'evaluation.score'
+    )
+    WHERE r.scope = 'organization' AND r.name = 'Evaluator'
+    ON CONFLICT DO NOTHING
+  `);
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+      'applications.view', 'applications.approve', 'suppliers.view',
+      'bids.view', 'awards.approve', 'reports.view', 'audit.view'
+    )
+    WHERE r.scope = 'organization' AND r.name = 'Approver'
+    ON CONFLICT DO NOTHING
+  `);
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+      'applications.view', 'suppliers.view', 'bids.view', 'reports.view', 'audit.view'
+    )
+    WHERE r.scope = 'organization' AND r.name = 'Auditor'
+    ON CONFLICT DO NOTHING
+  `);
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.scope = 'supplier'
+    WHERE r.scope = 'supplier' AND r.name = 'Supplier Admin'
+    ON CONFLICT DO NOTHING
+  `);
+  await query(`
+    INSERT INTO role_permissions (role_id, permission_id)
+    SELECT r.id, p.id FROM roles r JOIN permissions p ON p.code IN (
+      'supplier.profile.edit', 'supplier.documents.manage', 'supplier.apply', 'supplier.bid.submit'
+    )
+    WHERE r.scope = 'supplier' AND r.name = 'Supplier Staff'
+    ON CONFLICT DO NOTHING
+  `);
+}
+
 export async function seedDatabase() {
   console.log('[DB SEED] Seeding initial database records...');
 
   try {
+    await ensureSystemRolePermissions();
     // 0. Ensure system admin user exists
     let systemUserId = '';
     const existingUser = await query("SELECT id FROM users WHERE email = 'admin@bidready360.bw' LIMIT 1");

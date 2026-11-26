@@ -3,6 +3,31 @@
  * Production TypeScript definitions for Botswana Public Procurement Platform.
  */
 
+export interface PastProject {
+  id: string;
+  client: string;
+  title: string;
+  valueBWP: number;
+  startDate: string;
+  endDate: string;
+  referenceContact: {
+    name: string;
+    role: string;
+    email: string;
+    phone: string;
+  };
+  status: 'Completed' | 'Ongoing';
+}
+
+export interface SupplierTeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: 'Supplier admin' | 'Supplier staff';
+  lastActive: string;
+  status: 'Active' | 'Invited';
+}
+
 export interface Director {
   id: string;
   fullName: string;
@@ -45,6 +70,10 @@ export interface SupplierDocument {
   status: 'Verified' | 'Pending' | 'Expiring soon' | 'Expired' | 'Rejected' | 'Cannot verify';
   statusMessage?: string;
   rejectionReason?: string;
+  verificationStatus?: string | null;
+  verificationNotes?: string | null;
+  documentTypeCode?: string;
+  versionId?: string | null;
   verifiedAt?: string;
   verifiedBy?: string;
   downloadUrl: string;
@@ -56,6 +85,8 @@ export interface SupplierDocument {
   certificationDate?: string;
   sha256?: string;
   versionNo?: number;
+  mimeType?: string;
+  hasFile?: boolean;
 }
 
 export interface Supplier {
@@ -100,17 +131,26 @@ export interface Supplier {
   hasPpra?: boolean;
   hasTradingLicence?: boolean;
   tradingLicenceReason?: string;
-  isDemoAccount?: boolean;
   citizenOwnershipSet?: boolean;
   categories?: string[];
-  pastProjects?: any[];
-  teamMembers?: any[];
+  pastProjects?: PastProject[];
+  teamMembers?: SupplierTeamMember[];
+  pendingInvitations?: any[];
   detailsSaved?: boolean;
   emailVerified?: boolean;
   companyType?: string;
   description?: string;
   vatRegistered?: boolean;
   biddingPublicTenders?: boolean;
+  accountStatus?: string;
+  verificationStatus?: string;
+  activeDebarment?: {
+    id: string;
+    reason: string;
+    startsOn: string;
+    endsOn: string | null;
+    organizationId: string | null;
+  } | null;
 }
 
 export interface Organization {
@@ -182,6 +222,7 @@ export interface Call {
   closingDate: string;
   closingTimeCAT: string;
   status: 'Open' | 'Closed' | 'Under evaluation' | 'Awarded' | 'Draft';
+  visibility?: 'open' | 'approved_suppliers' | 'category_restricted' | 'invite_only' | string;
   requiredDocumentTypes: string[];
   formTemplateId?: string;
   lineItems?: PriceLineItem[];

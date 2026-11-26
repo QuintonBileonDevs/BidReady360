@@ -196,6 +196,8 @@ export class AuthService {
       isPlatformAdmin: boolean | null;
       mfaEnabled: boolean | null;
       mfaSecretEncrypted: Buffer | null;
+      failedLoginAttempts: number | null;
+      lockedUntil: string | null;
       org_memberships: any;
       sup_memberships: any;
     }>(
@@ -210,7 +212,8 @@ export class AuthService {
       ),
       user_data AS (
         SELECT id, email, password_hash, full_name, phone, status,
-               email_verified_at, is_platform_admin, mfa_enabled, mfa_secret_encrypted
+               email_verified_at, is_platform_admin, mfa_enabled, mfa_secret_encrypted,
+               failed_login_attempts, locked_until
         FROM users
         WHERE LOWER(email::text) = LOWER($1) AND deleted_at IS NULL
         LIMIT 1
@@ -221,6 +224,8 @@ export class AuthService {
           o.id AS tenant_id,
           o.name AS tenant_name,
           o.status AS org_status,
+          o.verification_status AS org_verification_status,
+          o.rejection_reason AS org_rejection_reason,
           r.id AS role_id,
           r.name AS role_name,
           om.is_owner,
@@ -239,7 +244,9 @@ export class AuthService {
             'name', o.name,
             'slug', o.slug,
             'status', o.status,
+            'organizationStatus', o.status,
             'verificationStatus', o.verification_status,
+            'rejectionReason', o.rejection_reason,
             'organizationType', o.organization_type
           ) AS org_profile
         FROM organization_members om
@@ -253,6 +260,7 @@ export class AuthService {
           s.id AS tenant_id,
           s.legal_name AS tenant_name,
           s.status AS sup_status,
+          s.verification_status AS sup_verification_status,
           r.id AS role_id,
           r.name AS role_name,
           sm.is_owner,
@@ -274,6 +282,7 @@ export class AuthService {
             'email', s.email,
             'primaryPhone', s.primary_phone,
             'status', s.status,
+            'supplierStatus', s.status,
             'verificationStatus', s.verification_status,
             'complianceStatus', s.compliance_status,
             'profileCompleteness', s.profile_completeness
@@ -290,11 +299,16 @@ export class AuthService {
         u.phone, u.status, u.email_verified_at AS "emailVerifiedAt",
         u.is_platform_admin AS "isPlatformAdmin", u.mfa_enabled AS "mfaEnabled",
         u.mfa_secret_encrypted AS "mfaSecretEncrypted",
+        u.failed_login_attempts AS "failedLoginAttempts",
+        u.locked_until AS "lockedUntil",
         COALESCE(
           (SELECT json_agg(json_build_object(
             'tenantType', m.tenant_type,
             'tenantId', m.tenant_id,
             'tenantName', m.tenant_name,
+            'organizationStatus', m.org_status,
+            'verificationStatus', m.org_verification_status,
+            'rejectionReason', m.org_rejection_reason,
             'roleId', m.role_id,
             'roleName', m.role_name,
             'isOwner', m.is_owner,
@@ -311,6 +325,8 @@ export class AuthService {
             'tenantType', m.tenant_type,
             'tenantId', m.tenant_id,
             'tenantName', m.tenant_name,
+            'supplierStatus', m.sup_status,
+            'verificationStatus', m.sup_verification_status,
             'roleId', m.role_id,
             'roleName', m.role_name,
             'isOwner', m.is_owner,
@@ -333,7 +349,18 @@ export class AuthService {
     const emailFails = parseInt(String(row?.email_fails || '0'), 10);
     const ipFails = parseInt(String(row?.ip_fails || '0'), 10);
 
-    // 2. Enforce brute-force lockout
+    // 2. Enforce persisted account lockout on users table
+    if (row?.id && row.lockedUntil && new Date(row.lockedUntil) > new Date()) {
+      const err: any = new Error(
+        'Your account is temporarily locked due to multiple failed sign-in attempts. Please wait for the lockout period to expire or contact an administrator to unlock it.'
+      );
+      err.status = 423;
+      err.code = 'ACCOUNT_LOCKED';
+      err.lockedUntil = row.lockedUntil;
+      throw err;
+    }
+
+    // 2b. Enforce brute-force lockout from recent login_attempts
     if (emailFails >= 5 || ipFails >= 20) {
       runBackgroundTask(
         auditRepository.logEvent({
@@ -356,20 +383,18 @@ export class AuthService {
     // 3. Unknown user or user without password hash -> timing equalization dummy hash, then reject
     if (!row || !row.id || !row.passwordHash || !row.passwordHash.trim()) {
       await verifyPassword(passwordPlain, DUMMY_HASH);
+      await this.recordLoginAttempt(cleanEmail, cleanIp, false).catch(() => {});
       runBackgroundTask(
-        Promise.all([
-          this.recordLoginAttempt(cleanEmail, cleanIp, false),
-          auditRepository.logEvent({
-            actorType: 'user',
-            actorName: cleanEmail,
-            actorRole: 'Anonymous',
-            action: 'login.failure',
-            entityType: 'session',
-            ipAddress: cleanIp,
-            userAgent,
-            details: 'Failed login attempt: unknown email or user with no password hash.',
-          }),
-        ])
+        auditRepository.logEvent({
+          actorType: 'user',
+          actorName: cleanEmail,
+          actorRole: 'Anonymous',
+          action: 'login.failure',
+          entityType: 'session',
+          ipAddress: cleanIp,
+          userAgent,
+          details: 'Failed login attempt: unknown email or user with no password hash.',
+        })
       );
 
       const err: any = new Error('Email or password is incorrect.');
@@ -384,22 +409,36 @@ export class AuthService {
     const passwordVerifyMs = performance.now() - tPass0;
 
     if (!isMatch) {
+      const [failResult] = await Promise.all([
+        usersRepository.recordLoginFailure(row.id).catch(() => ({ failedAttempts: 1, lockedUntil: null })),
+        this.recordLoginAttempt(cleanEmail, cleanIp, false).catch(() => {}),
+      ]);
+
       runBackgroundTask(
-        Promise.all([
-          this.recordLoginAttempt(cleanEmail, cleanIp, false),
-          auditRepository.logEvent({
-            actorType: 'user',
-            actorUserId: row.id,
-            actorName: row.fullName || cleanEmail,
-            actorRole: row.isPlatformAdmin ? 'Super Admin' : 'User',
-            action: 'login.failure',
-            entityType: 'session',
-            ipAddress: cleanIp,
-            userAgent,
-            details: 'Failed login attempt: incorrect password.',
-          }),
-        ])
+        auditRepository.logEvent({
+          actorType: 'user',
+          actorUserId: row.id,
+          actorName: row.fullName || cleanEmail,
+          actorRole: row.isPlatformAdmin ? 'Super Admin' : 'User',
+          action: failResult.lockedUntil ? 'account.locked' : 'login.failure',
+          entityType: 'session',
+          ipAddress: cleanIp,
+          userAgent,
+          details: failResult.lockedUntil
+            ? `Account locked after ${failResult.failedAttempts} consecutive failed sign-in attempts.`
+            : `Failed login attempt (${failResult.failedAttempts}/5): incorrect password.`,
+        })
       );
+
+      if (failResult.lockedUntil) {
+        const err: any = new Error(
+          'Your account has been temporarily locked after 5 failed sign-in attempts. Please wait 15 minutes or contact an administrator to unlock it.'
+        );
+        err.status = 423;
+        err.code = 'ACCOUNT_LOCKED';
+        err.lockedUntil = failResult.lockedUntil;
+        throw err;
+      }
 
       const err: any = new Error('Email or password is incorrect.');
       err.status = 401;
@@ -852,14 +891,17 @@ export class AuthService {
     );
     const orgId = orgRes.rows[0].id;
 
-    // 4. Link user as Buyer Admin in organization_members
+    // 4. Link user as Org Admin in organization_members
     const roleRes = await query<{ id: string }>(
-      `SELECT id FROM roles WHERE scope = 'organization' AND name = 'Buyer Admin' LIMIT 1`
+      `SELECT id FROM roles
+       WHERE scope = 'organization' AND name IN ('Org Admin', 'Buyer Admin')
+       ORDER BY CASE WHEN name = 'Org Admin' THEN 0 ELSE 1 END
+       LIMIT 1`
     );
     const roleId = roleRes.rows[0]?.id;
     if (roleId) {
       await query(
-        `INSERT INTO organization_members (organization_id, user_id, role_id, is_primary_contact, status, joined_at)
+        `INSERT INTO organization_members (organization_id, user_id, role_id, is_owner, status, joined_at)
          VALUES ($1, $2, $3, TRUE, 'active', NOW())
          ON CONFLICT (organization_id, user_id) DO NOTHING`,
         [orgId, userId, roleId]
@@ -1462,6 +1504,259 @@ export class AuthService {
     }
 
     await usersRepository.enableMfa(userId);
+  }
+
+  /**
+   * Look up a pending organization or supplier invitation by raw token.
+   */
+  async getInvitationByToken(token: string): Promise<{
+    id: string;
+    email: string;
+    tenantType: 'organization' | 'supplier';
+    tenantName: string;
+    roleName: string;
+    invitedByName: string;
+    department: string | null;
+    jobTitle: string | null;
+    expiresAt: string;
+  }> {
+    if (!token || !token.trim()) {
+      const err: any = new Error('Invitation token is required.');
+      err.status = 400;
+      throw err;
+    }
+
+    const tokenHash = hashToken(token);
+    const res = await query<{
+      id: string;
+      email: string;
+      organization_id: string | null;
+      supplier_id: string | null;
+      org_name: string | null;
+      sup_name: string | null;
+      role_name: string;
+      invited_by_name: string | null;
+      department: string | null;
+      job_title: string | null;
+      expires_at: Date;
+      accepted_at: Date | null;
+      revoked_at: Date | null;
+    }>(
+      `SELECT i.id, i.email::text AS email, i.organization_id, i.supplier_id,
+              o.name AS org_name, s.legal_name AS sup_name, r.name AS role_name,
+              u.full_name AS invited_by_name, i.department, i.job_title,
+              i.expires_at, i.accepted_at, i.revoked_at
+       FROM invitations i
+       JOIN roles r ON r.id = i.role_id
+       LEFT JOIN organizations o ON o.id = i.organization_id
+       LEFT JOIN suppliers s ON s.id = i.supplier_id
+       LEFT JOIN users u ON u.id = i.invited_by_user_id
+       WHERE i.token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const row = res.rows[0];
+    if (!row || row.revoked_at !== null || row.accepted_at !== null || new Date(row.expires_at) < new Date()) {
+      const err: any = new Error('This invitation link is invalid, revoked, or has expired.');
+      err.status = 404;
+      err.code = 'INVALID_INVITATION';
+      throw err;
+    }
+
+    return {
+      id: row.id,
+      email: row.email,
+      tenantType: row.organization_id ? 'organization' : 'supplier',
+      tenantName: row.org_name || row.sup_name || 'BidReady360 Workspace',
+      roleName: row.role_name,
+      invitedByName: row.invited_by_name || 'Workspace Administrator',
+      department: row.department,
+      jobTitle: row.job_title,
+      expiresAt: new Date(row.expires_at).toISOString(),
+    };
+  }
+
+  /**
+   * Accept an organization or supplier invitation, activate account & membership, and create a session.
+   */
+  async acceptInvitation(dto: {
+    token: string;
+    password: string;
+    fullName?: string;
+    ip?: string;
+    userAgent?: string;
+  }): Promise<AuthResponse> {
+    if (!dto.token || !dto.token.trim()) {
+      const err: any = new Error('Invitation token is required.');
+      err.status = 400;
+      throw err;
+    }
+
+    const tokenHash = hashToken(dto.token);
+    const cleanIp = sanitizeIp(dto.ip);
+
+    const invRes = await query<{
+      id: string;
+      email: string;
+      organization_id: string | null;
+      supplier_id: string | null;
+      role_id: string;
+      department: string | null;
+      job_title: string | null;
+      invited_by_user_id: string;
+      expires_at: Date;
+      accepted_at: Date | null;
+      revoked_at: Date | null;
+    }>(
+      `SELECT id, email::text AS email, organization_id, supplier_id, role_id,
+              department, job_title, invited_by_user_id, expires_at, accepted_at, revoked_at
+       FROM invitations
+       WHERE token_hash = $1
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    const inv = invRes.rows[0];
+    if (!inv || inv.revoked_at !== null || inv.accepted_at !== null || new Date(inv.expires_at) < new Date()) {
+      const err: any = new Error('This invitation link is invalid, revoked, or has expired.');
+      err.status = 400;
+      err.code = 'INVALID_INVITATION';
+      throw err;
+    }
+
+    const cleanEmail = inv.email.trim().toLowerCase();
+    const existing = await usersRepository.findByEmail(cleanEmail);
+    let userId: string;
+    let userFullName = dto.fullName?.trim() || cleanEmail.split('@')[0];
+
+    if (!existing) {
+      const passCheck = validatePassword(dto.password, cleanEmail);
+      if (!passCheck.isValid) {
+        const err: any = new Error(passCheck.error || 'Password does not meet security requirements.');
+        err.status = 400;
+        err.code = 'WEAK_PASSWORD';
+        throw err;
+      }
+      const passwordHash = await hashPassword(dto.password);
+      const userRes = await query<{ id: string; full_name: string }>(
+        `INSERT INTO users (email, password_hash, full_name, status, email_verified_at)
+         VALUES ($1, $2, $3, 'active', NOW())
+         RETURNING id, full_name`,
+        [cleanEmail, passwordHash, userFullName]
+      );
+      userId = userRes.rows[0].id;
+      userFullName = userRes.rows[0].full_name;
+    } else {
+      userId = existing.id;
+      userFullName = existing.fullName || userFullName;
+      if (existing.status === 'active') {
+        if (!existing.passwordHash) {
+          const err: any = new Error('An account already exists for this email without password login enabled.');
+          err.status = 401;
+          err.code = 'INVALID_CREDENTIALS';
+          throw err;
+        }
+        const match = await verifyPassword(dto.password, existing.passwordHash);
+        if (!match) {
+          const err: any = new Error('An account already exists for this email. Enter your existing password to accept this invitation.');
+          err.status = 401;
+          err.code = 'INVALID_CREDENTIALS';
+          throw err;
+        }
+      } else {
+        const passCheck = validatePassword(dto.password, cleanEmail);
+        if (!passCheck.isValid) {
+          const err: any = new Error(passCheck.error || 'Password does not meet security requirements.');
+          err.status = 400;
+          err.code = 'WEAK_PASSWORD';
+          throw err;
+        }
+        const passwordHash = await hashPassword(dto.password);
+        await query(
+          `UPDATE users
+           SET password_hash = $1, full_name = COALESCE($2, full_name), status = 'active',
+               email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW()
+           WHERE id = $3`,
+          [passwordHash, dto.fullName?.trim() || null, userId]
+        );
+      }
+    }
+
+    if (inv.organization_id) {
+      await query(
+        `INSERT INTO organization_members (
+           organization_id, user_id, role_id, is_owner, status, department, job_title,
+           mfa_enforced, invited_by_user_id, invited_at, joined_at
+         ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, FALSE, $6, NOW(), NOW())
+         ON CONFLICT (organization_id, user_id) DO UPDATE
+         SET role_id = EXCLUDED.role_id,
+             status = 'active',
+             joined_at = COALESCE(organization_members.joined_at, NOW()),
+             updated_at = NOW()`,
+        [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.invited_by_user_id]
+      );
+    } else if (inv.supplier_id) {
+      await query(
+        `INSERT INTO supplier_members (
+           supplier_id, user_id, role_id, is_owner, status, job_title,
+           invited_by_user_id, invited_at, joined_at
+         ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, NOW(), NOW())
+         ON CONFLICT (supplier_id, user_id) DO UPDATE
+         SET role_id = EXCLUDED.role_id,
+             status = 'active',
+             joined_at = COALESCE(supplier_members.joined_at, NOW()),
+             updated_at = NOW()`,
+        [inv.supplier_id, userId, inv.role_id, inv.job_title, inv.invited_by_user_id]
+      );
+    }
+
+    await query(`UPDATE invitations SET accepted_at = NOW() WHERE id = $1`, [inv.id]);
+
+    const memberships = await usersRepository.getUserMemberships(userId);
+    const targetTenantId = inv.organization_id || inv.supplier_id;
+    const activeTenant = memberships.find((m) => m.tenantId === targetTenantId) || memberships[0];
+    const tenantType = activeTenant?.tenantType || (inv.organization_id ? 'organization' : 'supplier');
+    const tenantId = activeTenant?.tenantId || targetTenantId;
+    const profileSummary = (activeTenant as any)?.profile || null;
+
+    const rawToken = generateRandomToken(32);
+    const sessionTokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await query(
+      `INSERT INTO sessions (user_id, token_hash, tenant_type, tenant_id, ip, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, sessionTokenHash, tenantType, tenantId, cleanIp || null, dto.userAgent || null, expiresAt]
+    );
+
+    await auditRepository.logEvent({
+      actorType: 'user',
+      actorUserId: userId,
+      actorName: userFullName,
+      actorRole: activeTenant?.roleName || 'Member',
+      organizationId: inv.organization_id || undefined,
+      supplierId: inv.supplier_id || undefined,
+      action: 'invitation.accepted',
+      entityType: 'invitation',
+      entityId: inv.id,
+      ipAddress: cleanIp,
+      userAgent: dto.userAgent,
+      details: `Invitation accepted for ${cleanEmail}.`,
+    }).catch(() => {});
+
+    return {
+      token: rawToken,
+      user: {
+        id: userId,
+        email: cleanEmail,
+        fullName: userFullName,
+        isPlatformAdmin: false,
+        memberships,
+      },
+      activeTenant,
+      profileSummary,
+    };
   }
 }
 

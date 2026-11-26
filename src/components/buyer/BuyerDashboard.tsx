@@ -1,23 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { buyerApi } from '../../services/api';
+import { Call, Application } from '../../types';
 import { BuyerCallsByStageChart, BuyerSpendByCategoryChart } from './BuyerCharts';
 import {
-  FileText,
-  Clock,
-  Lock,
-  CheckCircle2,
-  AlertTriangle,
   ArrowRight,
-  Send,
   Plus,
-  ChevronRight,
-  ShieldCheck,
-  Building2,
-  Users,
-  Eye,
-  Check,
-  Bell,
-  Sparkles,
 } from 'lucide-react';
 
 interface BuyerDashboardProps {
@@ -29,36 +17,224 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   onNavigate,
   onSelectCall,
 }) => {
-  const { calls, applications, buyerSubRole, auditEvents, clarifications } = useApp();
-  const [notifiedSupplierIds, setNotifiedSupplierIds] = useState<string[]>([]);
+  const {
+    calls: contextCalls,
+    applications: contextApps,
+    buyerSubRole,
+    auditEvents,
+    clarifications: contextClarifications,
+    profileSummary,
+    registeredBuyerOrgName,
+  } = useApp();
 
-  const handleNotify = (supId: string) => {
-    setNotifiedSupplierIds((prev) => [...prev, supId]);
-  };
+  const [orgCalls, setOrgCalls] = useState<Call[]>([]);
+  const [orgApps, setOrgApps] = useState<Application[]>([]);
+  const [orgClarifications, setOrgClarifications] = useState<any[]>([]);
+  const [orgAwards, setOrgAwards] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      buyerApi.listCalls(),
+      buyerApi.listApplications(),
+      buyerApi.listClarifications(),
+      buyerApi.listAwards(),
+    ]).then(([callsRes, appsRes, clarRes, awardsRes]) => {
+      if (!active) return;
+      if (callsRes.status === 'fulfilled' && Array.isArray(callsRes.value)) {
+        const mappedCalls: Call[] = callsRes.value.map((c: any) => {
+          const closesAt = c.closesAt || c.closingDate;
+          const daysRemaining = closesAt
+            ? Math.ceil((new Date(closesAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            : 0;
+          const rawStatus = String(c.status || 'open').toLowerCase();
+          const status: Call['status'] =
+            rawStatus === 'draft'
+              ? 'Draft'
+              : rawStatus === 'closed'
+              ? 'Closed'
+              : rawStatus === 'under evaluation' || rawStatus === 'under_evaluation'
+              ? 'Under evaluation'
+              : rawStatus === 'awarded'
+              ? 'Awarded'
+              : 'Open';
+          return {
+            id: c.id,
+            callNumber: c.callNumber || c.referenceNo || '',
+            title: c.title || '',
+            type: c.type || c.callType || 'RFP',
+            organizationId: c.organizationId || '',
+            organizationName: c.organizationName || registeredBuyerOrgName || 'Procuring Organization',
+            category: c.category || 'General Procurement',
+            subcategories: Array.isArray(c.subcategories) ? c.subcategories : [],
+            location: c.location || 'Botswana',
+            openingDate: c.opensAt ? String(c.opensAt).slice(0, 10) : '',
+            clarificationDeadline: c.clarificationDeadline ? String(c.clarificationDeadline).slice(0, 10) : '',
+            closingDate: closesAt ? String(closesAt).slice(0, 10) : '',
+            closingTimeCAT: c.closingTimeCAT || '16:30 CAT',
+            daysRemaining,
+            estimatedBudgetBWP: c.estimatedValue || c.estimatedBudgetBWP || undefined,
+            isSealed: Boolean(c.isSealed),
+            status,
+            visibility: c.visibility || 'open',
+            summary: c.description || c.summary || '',
+            requiredDocumentTypes: c.requiredDocumentTypes || [],
+            documentsCount: c.documentsCount || 0,
+            applicationsCount: Number(c.bidsCount ?? c.applicationsCount ?? 0),
+            addenda: Array.isArray(c.addenda) ? c.addenda : [],
+          };
+        });
+        setOrgCalls(mappedCalls);
+      }
+      if (appsRes.status === 'fulfilled' && Array.isArray(appsRes.value)) {
+        const mappedApps: Application[] = appsRes.value.map((r: any) => ({
+          id: r.id,
+          callId: r.callId,
+          callNumber: r.callNumber || '',
+          callTitle: r.callTitle || '',
+          callType: r.callType || 'RFP',
+          supplierId: r.supplierId,
+          supplierName: r.supplierLegalName || r.supplierName || 'Supplier',
+          organizationId: r.organizationId,
+          organizationName: r.organizationName || '',
+          status: r.status || 'Submitted',
+          receiptNumber: r.receiptNumber || undefined,
+          submittedAt: r.submittedAt
+            ? new Date(r.submittedAt).toISOString().slice(0, 10)
+            : '',
+          sharedDocumentIds: [],
+          responses: [],
+          timeline: [],
+        }));
+        setOrgApps(mappedApps);
+      }
+      if (clarRes.status === 'fulfilled' && Array.isArray(clarRes.value)) {
+        setOrgClarifications(clarRes.value);
+      }
+      if (awardsRes.status === 'fulfilled' && Array.isArray(awardsRes.value)) {
+        setOrgAwards(awardsRes.value);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [registeredBuyerOrgName]);
+
+  const calls = orgCalls.length > 0 ? orgCalls : contextCalls;
+  const applications = orgApps.length > 0 ? orgApps : contextApps;
+  const clarifications = orgClarifications.length > 0 ? orgClarifications : contextClarifications;
+  const orgDisplayName =
+    profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization';
+
+  const pendingApps = useMemo(
+    () => applications.filter((a) => a.status === 'Submitted' || a.status === 'Under review'),
+    [applications]
+  );
+  const openCalls = useMemo(
+    () => calls.filter((c) => c.status === 'Open'),
+    [calls]
+  );
+  const closingSoonCalls = useMemo(
+    () => openCalls.filter((c) => c.daysRemaining >= 0 && c.daysRemaining <= 3),
+    [openCalls]
+  );
+  const closedCalls = useMemo(
+    () => calls.filter((c) => c.status === 'Closed'),
+    [calls]
+  );
+  const evalCalls = useMemo(
+    () => calls.filter((c) => c.status === 'Under evaluation'),
+    [calls]
+  );
+  const pendingAwards = useMemo(
+    () => orgAwards.filter((a) => String(a.status || '').toLowerCase() === 'pending_approval'),
+    [orgAwards]
+  );
+  const unansweredClarifications = useMemo(
+    () => clarifications.filter((c: any) => !c.answer && String(c.status || '').toLowerCase() !== 'answered'),
+    [clarifications]
+  );
+  const approvedSuppliersCount = useMemo(
+    () => new Set(applications.filter((a) => a.status === 'Approved').map((a) => a.supplierId)).size,
+    [applications]
+  );
+  const totalAwardedBWP = useMemo(
+    () =>
+      orgAwards
+        .filter((a) => String(a.status || '').toLowerCase() === 'approved')
+        .reduce((sum, a) => sum + Number(a.awardedAmount || a.awardValue || 0), 0),
+    [orgAwards]
+  );
 
   const needsAttentionItems = [
-    { id: 'att-1', count: 3, label: 'Applications to review', sublabel: 'Oldest waiting 4 days', target: 'applications', border: 'border-l-[#1F5F99]' },
-    { id: 'att-2', count: 1, label: 'Calls closing within 3 days', sublabel: 'Streetlighting tender', target: 'calls', border: 'border-l-[#E8A33D]' },
-    { id: 'att-3', count: 1, label: 'Bids awaiting opening', sublabel: 'Municipal culverts RFP', target: 'bids-opening', border: 'border-l-[#C2412D]' },
-    { id: 'att-4', count: 2, label: 'Evaluations outstanding', sublabel: '2 evaluator scores pending', target: 'evaluation', border: 'border-l-[#E8A33D]' },
-    { id: 'att-5', count: 1, label: 'Awards awaiting approval', sublabel: 'High-mast lighting award', target: 'awards', border: 'border-l-[#1F5F99]' },
-    { id: 'att-6', count: 5, label: 'Supplier documents expiring', sublabel: 'Tax & insurance policies', target: 'roster', border: 'border-l-[#E8A33D]' },
-    { id: 'att-7', count: 4, label: 'Unanswered clarifications', sublabel: 'Response due in 24h', target: 'clarifications', border: 'border-l-[#C2412D]' },
+    {
+      id: 'att-1',
+      count: pendingApps.length,
+      label: 'Applications to review',
+      sublabel: pendingApps.length > 0 ? `${pendingApps.length} awaiting screening` : 'Queue clear',
+      target: 'applications',
+      border: 'border-l-[#1F5F99]',
+    },
+    {
+      id: 'att-2',
+      count: closingSoonCalls.length,
+      label: 'Calls closing within 3 days',
+      sublabel: closingSoonCalls[0]?.title || 'No urgent deadlines',
+      target: 'calls',
+      border: 'border-l-[#E8A33D]',
+    },
+    {
+      id: 'att-3',
+      count: closedCalls.length,
+      label: 'Bids awaiting opening',
+      sublabel: closedCalls[0]?.title || 'No closed tenders',
+      target: 'bids-opening',
+      border: 'border-l-[#C2412D]',
+    },
+    {
+      id: 'att-4',
+      count: evalCalls.length,
+      label: 'Calls in evaluation',
+      sublabel: evalCalls.length > 0 ? 'Scoring in progress' : 'None active',
+      target: 'evaluation',
+      border: 'border-l-[#E8A33D]',
+    },
+    {
+      id: 'att-5',
+      count: pendingAwards.length,
+      label: 'Awards awaiting approval',
+      sublabel: pendingAwards.length > 0 ? 'Pending approver sign-off' : 'None pending',
+      target: 'awards',
+      border: 'border-l-[#1F5F99]',
+    },
+    {
+      id: 'att-6',
+      count: unansweredClarifications.length,
+      label: 'Unanswered clarifications',
+      sublabel: unansweredClarifications.length > 0 ? 'Requires official reply' : 'All answered',
+      target: 'clarifications',
+      border: 'border-l-[#C2412D]',
+    },
   ];
+
+  const avgBidsPerCall =
+    calls.length > 0
+      ? (calls.reduce((s, c) => s + (c.applicationsCount || 0), 0) / calls.length).toFixed(1)
+      : '0.0';
 
   const keyFigures = [
-    { label: 'Active calls', value: '4', change: '+1 vs last month' },
-    { label: 'Applications this month', value: '47', change: '+18% vs last month' },
-    { label: 'Average decision time', value: '6 days', change: 'Target: 10 days' },
-    { label: 'Approved suppliers', value: '24', change: '+3 vs last month' },
-    { label: 'Awarded this year', value: 'BWP 14.4M', change: '+BWP 2.8M vs last month' },
-    { label: 'Average bids per tender', value: '5.2', change: '+0.6 vs last month' },
-  ];
-
-  const expiringSupplierDocs = [
-    { id: 'exp-1', supplier: 'Kopano Building Supplies', docName: 'Workers compensation policy', expiry: '17 Oct 2026' },
-    { id: 'exp-2', supplier: 'Tsodilo Civil Engineering', docName: 'BURS Tax Clearance PIN', expiry: '22 Oct 2026' },
-    { id: 'exp-3', supplier: 'Kalahari Electrical & Plant', docName: 'Bank confirmation letter', expiry: '31 Oct 2026' },
+    { label: 'Active calls', value: String(openCalls.length), change: `${calls.length} total calls` },
+    { label: 'Applications received', value: String(applications.length), change: `${pendingApps.length} pending review` },
+    { label: 'Unanswered clarifications', value: String(unansweredClarifications.length), change: 'Published on reply' },
+    { label: 'Approved suppliers', value: String(approvedSuppliersCount), change: 'Roster admitted' },
+    {
+      label: 'Awarded value',
+      value: totalAwardedBWP >= 1_000_000
+        ? `BWP ${(totalAwardedBWP / 1_000_000).toFixed(2)}M`
+        : `BWP ${totalAwardedBWP.toLocaleString()}`,
+      change: `${orgAwards.filter((a) => String(a.status || '').toLowerCase() === 'approved').length} approved awards`,
+    },
+    { label: 'Average bids per tender', value: avgBidsPerCall, change: 'Across organization calls' },
   ];
 
   return (
@@ -70,7 +246,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             Dashboard
           </h1>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Gaborone Regional Council · Signed in as <strong>{buyerSubRole}</strong>
+            {orgDisplayName} · Signed in as <strong>{buyerSubRole}</strong>
           </p>
         </div>
 
@@ -99,7 +275,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           Needs attention
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
           {needsAttentionItems.map((item) => (
             <div
               key={item.id}
@@ -115,7 +291,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 <div className="text-[13px] font-medium text-[#10212E] dark:text-white leading-snug">
                   {item.label}
                 </div>
-                <div className="text-[12px] text-[#6B7A87] leading-tight">
+                <div className="text-[12px] text-[#6B7A87] leading-tight line-clamp-1">
                   {item.sublabel}
                 </div>
               </div>
@@ -160,14 +336,14 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
             Calls by stage
           </h3>
-          <BuyerCallsByStageChart />
+          <BuyerCallsByStageChart calls={calls} />
         </div>
 
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
           <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
-            Spend awarded by category
+            Value by category
           </h3>
-          <BuyerSpendByCategoryChart />
+          <BuyerSpendByCategoryChart calls={calls} awards={orgAwards} />
         </div>
       </div>
 
@@ -202,66 +378,74 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
-                {calls.slice(0, 4).map((c) => {
-                  const budgetText = c.estimatedBudgetBWP
-                    ? `BWP ${c.estimatedBudgetBWP.toLocaleString()}`
-                    : 'Not applicable';
+                {calls.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-6 text-center text-[13px] text-[#6B7A87]">
+                      No procurement calls published yet for {orgDisplayName}.
+                    </td>
+                  </tr>
+                ) : (
+                  calls.slice(0, 4).map((c) => {
+                    const budgetText = c.estimatedBudgetBWP
+                      ? `BWP ${c.estimatedBudgetBWP.toLocaleString()}`
+                      : 'Not disclosed';
 
-                  return (
-                    <tr key={c.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
-                      <td className="p-4 font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
-                        {c.callNumber}
-                      </td>
-                      <td className="p-4 font-medium max-w-xs line-clamp-1">{c.title}</td>
-                      <td className="p-4">
-                        <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
-                          {c.type}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right font-semibold tabular-nums text-[#10212E] dark:text-white">
-                        {budgetText}
-                      </td>
-                      <td className="p-4 text-center tabular-nums font-semibold">
-                        {c.applicationsCount}
-                      </td>
-                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2]">
-                        {c.closingDate} ({c.daysRemaining} days left)
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
-                            c.status === 'Open'
-                              ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                              : c.status === 'Under evaluation'
-                              ? 'bg-[#EAF2FA] text-[#1F5F99]'
-                              : 'bg-[#FFFBEB] text-[#92400E]'
-                          }`}
-                        >
-                          {c.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onSelectCall(c.id);
-                            onNavigate('calls');
-                          }}
-                          className="px-3 py-1.5 border border-[#D5E0EA] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white text-[13px] font-medium rounded-[4px] cursor-pointer"
-                        >
-                          Manage
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={c.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
+                        <td className="p-4 font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
+                          {c.callNumber}
+                        </td>
+                        <td className="p-4 font-medium max-w-xs line-clamp-1">{c.title}</td>
+                        <td className="p-4">
+                          <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                            {c.type}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right font-semibold tabular-nums text-[#10212E] dark:text-white">
+                          {budgetText}
+                        </td>
+                        <td className="p-4 text-center tabular-nums font-semibold">
+                          {c.applicationsCount}
+                        </td>
+                        <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2]">
+                          {c.closingDate} ({c.daysRemaining >= 0 ? `${c.daysRemaining} days left` : 'Closed'})
+                        </td>
+                        <td className="p-4">
+                          <span
+                            className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
+                              c.status === 'Open'
+                                ? 'bg-[#ECFDF5] text-[#2F8F5B]'
+                                : c.status === 'Under evaluation'
+                                ? 'bg-[#EAF2FA] text-[#1F5F99]'
+                                : 'bg-[#FFFBEB] text-[#92400E]'
+                            }`}
+                          >
+                            {c.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectCall(c.id);
+                              onNavigate('calls');
+                            }}
+                            className="px-3 py-1.5 border border-[#D5E0EA] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white text-[13px] font-medium rounded-[4px] cursor-pointer"
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      {/* 6. Two Panels Side-by-Side: Applications to Review & Expiring Docs */}
+      {/* 6. Applications Awaiting Review & Governance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         {/* Panel 1: Applications to review */}
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
@@ -271,31 +455,37 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 Applications awaiting review
               </h3>
               <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
-                3 pending
+                {pendingApps.length} pending
               </span>
             </div>
 
-            <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              {applications.slice(0, 3).map((app) => (
-                <div key={app.id} className="py-3 flex items-center justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
-                      {app.supplierName}
-                    </span>
-                    <span className="text-[12px] text-[#6B7A87]">
-                      {app.callNumber} · Submitted {app.submittedAt} (Waiting 4 days)
-                    </span>
+            {pendingApps.length === 0 ? (
+              <p className="text-[13px] text-[#6B7A87] py-4">
+                No supplier applications awaiting review right now.
+              </p>
+            ) : (
+              <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+                {pendingApps.slice(0, 3).map((app) => (
+                  <div key={app.id} className="py-3 flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
+                        {app.supplierName}
+                      </span>
+                      <span className="text-[12px] text-[#6B7A87]">
+                        {app.callNumber} · Submitted {app.submittedAt || 'Recently'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('applications')}
+                      className="px-3 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[13px] font-medium rounded-[4px] shrink-0"
+                    >
+                      Review
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('applications')}
-                    className="px-3 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[13px] font-medium rounded-[4px] shrink-0"
-                  >
-                    Review
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-4">
@@ -309,47 +499,47 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           </div>
         </div>
 
-        {/* Panel 2: Supplier documents expiring */}
+        {/* Panel 2: Governance Safeguards & Clarification Queue */}
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
-                Supplier documents expiring
+                Governance safeguards
               </h3>
-              <span className="bg-[#FFFBEB] text-[#92400E] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
-                5 expiring soon
-              </span>
+              <button
+                type="button"
+                onClick={() => onNavigate('clarifications')}
+                className="text-[13px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:underline"
+              >
+                Clarifications ({unansweredClarifications.length})
+              </button>
             </div>
 
-            <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              {expiringSupplierDocs.map((doc) => {
-                const isNotified = notifiedSupplierIds.includes(doc.id);
-                return (
-                  <div key={doc.id} className="py-3 flex items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
-                        {doc.supplier}
-                      </span>
-                      <span className="text-[12px] text-[#6B7A87]">
-                        {doc.docName} · Expires {doc.expiry}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleNotify(doc.id)}
-                      disabled={isNotified}
-                      className={`px-3 py-1.5 text-[13px] font-medium rounded-[4px] shrink-0 transition-colors ${
-                        isNotified
-                          ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                          : 'border border-[#D5E0EA] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white'
-                      }`}
-                    >
-                      {isNotified ? 'Notified ✓' : 'Notify'}
-                    </button>
-                  </div>
-                );
-              })}
+            <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] space-y-3 text-[14px]">
+              <div className="flex items-center justify-between">
+                <span className="text-[#43525F] dark:text-[#B2C3D2]">Unanswered clarifications</span>
+                <span
+                  className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
+                    unansweredClarifications.length > 0
+                      ? 'bg-[#FEF2F2] text-[#C2412D]'
+                      : 'bg-[#ECFDF5] text-[#2F8F5B]'
+                  }`}
+                >
+                  {unansweredClarifications.length} awaiting reply
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#43525F] dark:text-[#B2C3D2]">Awards pending approval</span>
+                <span className="bg-[#FFFBEB] text-[#92400E] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                  {pendingAwards.length} pending
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#43525F] dark:text-[#B2C3D2]">Cryptographic sealed envelopes</span>
+                <span className="bg-[#ECFDF5] text-[#2F8F5B] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                  SHA-256 Sealed
+                </span>
+              </div>
             </div>
           </div>
 
@@ -365,15 +555,15 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         </div>
       </div>
 
-      {/* 7. Fairness and Audit Panel */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
+      {/* 7. Audit Events Summary */}
+      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               Procurement fairness & audit trail
             </h2>
             <p className="text-[13px] text-[#6B7A87]">
-              Real-time governance alerts, clarification deadlines, and chronological audit entries.
+              Chronological audit entries recorded for {orgDisplayName}.
             </p>
           </div>
           <button
@@ -385,69 +575,26 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Left: Fairness safeguards */}
-          <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] space-y-3 text-[14px]">
-            <span className="font-semibold text-[#10212E] dark:text-white block">
-              Governance safeguards
-            </span>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[#43525F] dark:text-[#B2C3D2]">Unanswered clarifications near deadline</span>
-                <span className="bg-[#FEF2F2] text-[#C2412D] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">4 due today</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#43525F] dark:text-[#B2C3D2]">Conflict-of-interest declarations</span>
-                <span className="bg-[#FFFBEB] text-[#92400E] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">1 pending signature</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[#43525F] dark:text-[#B2C3D2]">Cryptographic sealed envelopes</span>
-                <span className="bg-[#ECFDF5] text-[#2F8F5B] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">100% SHA-256 Locked</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Recent Audit Events */}
-          <div className="space-y-2 text-[13px]">
-            <span className="font-semibold text-[#10212E] dark:text-white block text-[14px]">
-              Latest audit events
-            </span>
-            <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              {auditEvents.slice(0, 4).map((evt) => (
-                <div key={evt.id} className="py-2 flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="font-medium text-[#10212E] dark:text-white block line-clamp-1">
-                      {evt.action}: {evt.details}
-                    </span>
-                    <span className="text-[12px] text-[#6B7A87]">
-                      {evt.actorName} · {evt.timestamp}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 8. Plan Usage */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
-            Plan usage & subscription allowance
-          </h3>
-          <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-            <strong>14 of 25</strong> annual procurement calls published · <strong>6 of 10</strong> evaluator seats assigned
+        {auditEvents.length === 0 ? (
+          <p className="text-[13px] text-[#6B7A87] py-2">
+            No recent audit events loaded in this session.
           </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onNavigate('billing')}
-          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] rounded-[6px] text-[14px] font-medium whitespace-nowrap cursor-pointer"
-        >
-          Manage subscription & billing →
-        </button>
+        ) : (
+          <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[13px]">
+            {auditEvents.slice(0, 4).map((evt) => (
+              <div key={evt.id} className="py-2 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="font-medium text-[#10212E] dark:text-white block line-clamp-1">
+                    {evt.action}: {evt.details}
+                  </span>
+                  <span className="text-[12px] text-[#6B7A87]">
+                    {evt.actorName} · {evt.timestamp}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

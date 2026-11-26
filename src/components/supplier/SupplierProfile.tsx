@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useReadiness } from '../../context/ReadinessContext';
 import { supplierApi, referenceApi, CategoryTreeNode } from '../../services/api';
 import { DirectorsPanel } from './DirectorsPanel';
-import { Director } from '../../types';
+import { Director, PastProject, SupplierTeamMember } from '../../types';
 import {
   calculateSupplierCompleteness,
   OnboardingChecklistItem,
@@ -48,22 +48,6 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-interface PastProject {
-  id: string;
-  client: string;
-  title: string;
-  valueBWP: number;
-  startDate: string;
-  endDate: string;
-  referenceContact: {
-    name: string;
-    role: string;
-    email: string;
-    phone: string;
-  };
-  status: 'Completed' | 'Ongoing';
-}
-
 interface PreferenceClaim {
   id: string;
   title: string;
@@ -72,15 +56,6 @@ interface PreferenceClaim {
   evidenceFile?: string;
   status: 'Claimed' | 'Verified' | 'Rejected' | 'Expired';
   verifiedDate?: string;
-}
-
-interface SupplierTeamMember {
-  id: string;
-  name: string;
-  email: string;
-  role: 'Supplier admin' | 'Supplier staff';
-  lastActive: string;
-  status: 'Active' | 'Invited';
 }
 
 interface CategoryNode {
@@ -107,7 +82,6 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     updateSupplierProfile,
     addAuditEvent,
     setActiveNav,
-    resetDemoData,
   } = useApp();
 
   // Active section state
@@ -351,12 +325,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
   );
   const [isProjectDrawerOpen, setIsProjectDrawerOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<PastProject | null>(null);
+  const [isSavingProject, setIsSavingProject] = useState(false);
   const [projectForm, setProjectForm] = useState<Omit<PastProject, 'id'>>({
     client: '',
     title: '',
-    valueBWP: 1000000,
-    startDate: 'Jan 2025',
-    endDate: 'Completed',
+    valueBWP: 0,
+    startDate: '',
+    endDate: '',
     referenceContact: {
       name: '',
       role: '',
@@ -386,12 +361,59 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
   );
   const [pendingInvites, setPendingInvites] = useState<
     { id: string; email: string; role: string; sentDate: string }[]
-  >([]);
+  >(() =>
+    (supplier.pendingInvitations || []).map((inv) => ({
+      id: inv.id,
+      email: inv.email,
+      role: inv.role,
+      sentDate: inv.sentAt ? new Date(inv.sentAt).toLocaleDateString() : 'Pending',
+    }))
+  );
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'Supplier admin' | 'Supplier staff'>(
     'Supplier staff'
   );
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (activeSection === 'projects') {
+      supplierApi.listProjects()
+        .then((rows) => {
+          if (mounted && Array.isArray(rows)) {
+            setProjectsList(rows);
+          }
+        })
+        .catch(() => {});
+    } else if (activeSection === 'team') {
+      supplierApi.listTeam()
+        .then((res) => {
+          if (!mounted || !res) return;
+          if (Array.isArray((res as any).teamMembers)) {
+            setTeamMembers((res as any).teamMembers);
+          } else if (Array.isArray(res.members)) {
+            setTeamMembers(res.members);
+          }
+          const rawInvites = (res as any).pendingInvitations || res.invitations;
+          if (Array.isArray(rawInvites)) {
+            setPendingInvites(
+              rawInvites.map((inv: any) => ({
+                id: inv.id,
+                email: inv.email,
+                role: inv.role,
+                sentDate: inv.sentAt ? new Date(inv.sentAt).toLocaleDateString() : 'Pending',
+              }))
+            );
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [activeSection]);
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -502,6 +524,16 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
     if (supplier.teamMembers?.length) {
       setTeamMembers(supplier.teamMembers);
+    }
+    if (Array.isArray(supplier.pendingInvitations)) {
+      setPendingInvites(
+        supplier.pendingInvitations.map((inv) => ({
+          id: inv.id,
+          email: inv.email,
+          role: inv.role,
+          sentDate: inv.sentAt ? new Date(inv.sentAt).toLocaleDateString() : 'Pending',
+        }))
+      );
     }
   }, [supplier, isEditingDetails]);
 
@@ -635,15 +667,15 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
   // Reveal masked ID handler
   const handleRevealId = (directorId: string, directorName: string) => {
     setRevealedIds((prev) => ({ ...prev, [directorId]: true }));
+    const actor = supplier.directors?.[0]?.fullName || supplier.legalName || 'Supplier Account';
     addAuditEvent({
       action: 'National Identity Number Unmasked',
-      actorName: 'Supplier Admin',
+      actorName: actor,
       actorRole: 'Supplier',
       organizationName: supplier.legalName,
       entityType: 'Supplier',
       entityId: directorId,
       details: `Revealed statutory identification number for director ${directorName}. Action recorded in audit ledger.`,
-      ipAddress: '168.167.23.41',
     });
     showToast(`Identity number revealed for ${directorName}. Action logged in audit ledger.`);
   };
@@ -696,30 +728,50 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
   // Note: Directors and beneficial owners are authoritatively managed by <DirectorsPanel />
 
-  // Save Project
-  const handleSaveProject = (e: React.FormEvent) => {
+  // Save Project (persisted to supplier_projects in PostgreSQL)
+  const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectForm.client || !projectForm.title) return;
+    if (!projectForm.client || !projectForm.title || isSavingProject) return;
 
-    let updatedProjects: PastProject[];
-    if (editingProject) {
-      updatedProjects = projectsList.map((p) =>
-        p.id === editingProject.id ? { ...projectForm, id: p.id } : p
-      );
-      showToast(`Updated project: ${projectForm.title}`);
-    } else {
-      const newProj: PastProject = {
-        ...projectForm,
-        id: `proj-${Date.now()}`,
+    setIsSavingProject(true);
+    try {
+      const payload = {
+        clientName: projectForm.client.trim(),
+        projectTitle: projectForm.title.trim(),
+        contractValue: Number(projectForm.valueBWP) || 0,
+        startDate: projectForm.startDate || null,
+        endDate: projectForm.status === 'Ongoing' ? null : (projectForm.endDate || null),
+        status: projectForm.status,
+        referenceContact: projectForm.referenceContact,
       };
-      updatedProjects = [newProj, ...projectsList];
-      showToast(`Added past project: ${projectForm.title}`);
+      if (editingProject && !editingProject.id.startsWith('proj-')) {
+        await supplierApi.updateProject(editingProject.id, payload);
+        showToast(`Updated project: ${projectForm.title}`);
+      } else {
+        await supplierApi.addProject(payload);
+        showToast(`Saved project: ${projectForm.title}`);
+      }
+      const refreshed = await supplierApi.listProjects();
+      setProjectsList(refreshed);
+      setIsProjectDrawerOpen(false);
+      setEditingProject(null);
+    } catch (err: any) {
+      showToast(err?.message || 'Unable to save project to database. Please try again.');
+    } finally {
+      setIsSavingProject(false);
     }
+  };
 
-    setProjectsList(updatedProjects);
-    updateSupplierProfile({ pastProjects: updatedProjects });
-    setIsProjectDrawerOpen(false);
-    setEditingProject(null);
+  // Delete Project
+  const handleDeleteProject = async (proj: PastProject) => {
+    try {
+      await supplierApi.deleteProject(proj.id);
+      const refreshed = await supplierApi.listProjects();
+      setProjectsList(refreshed);
+      showToast(`Removed project: ${proj.title}`);
+    } catch (err: any) {
+      showToast(err?.message || 'Unable to delete project.');
+    }
   };
 
   // Open Edit Project
@@ -729,31 +781,36 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       client: proj.client,
       title: proj.title,
       valueBWP: proj.valueBWP,
-      startDate: proj.startDate,
-      endDate: proj.endDate,
+      startDate: proj.startDate || '',
+      endDate: proj.endDate || '',
       referenceContact: proj.referenceContact,
       status: proj.status,
     });
     setIsProjectDrawerOpen(true);
   };
 
-  // Toggle Category
-  const handleToggleCategory = (catName: string) => {
-    let next: string[];
-    if (selectedCategories.includes(catName)) {
-      next = selectedCategories.filter((c) => c !== catName);
-    } else {
-      next = [...selectedCategories, catName];
-    }
+  // Toggle Category (persisted to suppliers.secondary_categories in PostgreSQL)
+  const handleToggleCategory = async (catName: string) => {
+    const prev = selectedCategories;
+    const next = prev.includes(catName)
+      ? prev.filter((c) => c !== catName)
+      : [...prev, catName];
     setSelectedCategories(next);
-    updateSupplierProfile({
-      categories: next,
-      category: next[0] || '',
-    });
+    try {
+      await updateSupplierProfile({
+        categories: next,
+        secondaryCategories: next,
+        secondary_categories: next,
+        category: next[0] || '',
+      } as any);
+    } catch {
+      setSelectedCategories(prev);
+      showToast('Failed to save category selection to database.');
+    }
   };
 
-  // Invite Team Member (Any valid email format allowed, no domain restriction)
-  const handleSendInvite = (e: React.FormEvent) => {
+  // Invite Team Member (persisted to invitations table in PostgreSQL)
+  const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = inviteEmail.trim().toLowerCase();
     if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
@@ -761,30 +818,46 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       return;
     }
 
-    setPendingInvites([
-      ...pendingInvites,
-      {
-        id: `inv-${Date.now()}`,
+    setIsSendingInvite(true);
+    try {
+      const created = await supplierApi.inviteTeamMember({
         email: cleanEmail,
         role: inviteRole,
-        sentDate: 'Just now',
-      },
-    ]);
+      });
 
-    addAuditEvent({
-      action: 'Team Member Invited',
-      actorName: 'Supplier Admin',
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      entityType: 'Supplier',
-      entityId: supplier.id,
-      details: `Sent invitation to ${inviteEmail} as ${inviteRole}.`,
-      ipAddress: '168.167.23.41',
-    });
+      setPendingInvites((prev) => [
+        {
+          id: created.id,
+          email: created.email || cleanEmail,
+          role: created.role || inviteRole,
+          sentDate: created.sentAt ? new Date(created.sentAt).toLocaleDateString() : 'Just now',
+        },
+        ...prev.filter((i) => i.email.toLowerCase() !== cleanEmail),
+      ]);
 
-    setIsInviteModalOpen(false);
-    setInviteEmail('');
-    showToast(`Invitation sent to ${inviteEmail}.`);
+      if (created.inviteToken) {
+        setLastInviteLink(`${window.location.origin}/?inviteToken=${encodeURIComponent(created.inviteToken)}`);
+      }
+
+      const actor = supplier.directors?.[0]?.fullName || supplier.legalName || 'Supplier Account';
+      addAuditEvent({
+        action: 'Team Member Invited',
+        actorName: actor,
+        actorRole: 'Supplier',
+        organizationName: supplier.legalName,
+        entityType: 'Supplier',
+        entityId: supplier.id,
+        details: `Sent invitation to ${cleanEmail} as ${created.role || inviteRole}.`,
+      });
+
+      setIsInviteModalOpen(false);
+      setInviteEmail('');
+      showToast(`Invitation created for ${cleanEmail}.`);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to create team invitation.');
+    } finally {
+      setIsSendingInvite(false);
+    }
   };
 
   // Filtered Checklist Items
@@ -2267,9 +2340,9 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     setProjectForm({
                       client: '',
                       title: '',
-                      valueBWP: 500000,
-                      startDate: 'Jan 2025',
-                      endDate: 'Dec 2025',
+                      valueBWP: 0,
+                      startDate: '',
+                      endDate: '',
                       referenceContact: { name: '', role: '', email: '', phone: '' },
                       status: 'Completed',
                     });
@@ -2336,7 +2409,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             BWP {proj.valueBWP.toLocaleString()}
                           </span>
                           <span className="text-[13px] text-[#6B7A87] block">
-                            {proj.startDate} – {proj.endDate}
+                            {proj.startDate || 'N/A'} – {proj.endDate || 'Ongoing'}
                           </span>
                         </div>
                       </div>
@@ -2350,13 +2423,22 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           <span>{proj.referenceContact?.phone || 'Phone'}</span>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditProject(proj)}
-                          className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium cursor-pointer self-start sm:self-auto"
-                        >
-                          Edit project
-                        </button>
+                        <div className="flex items-center gap-3 self-start sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditProject(proj)}
+                            className="text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] hover:underline font-medium cursor-pointer"
+                          >
+                            Edit project
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProject(proj)}
+                            className="text-[14px] text-[#C2412D] hover:underline font-medium cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -2852,6 +2934,15 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     Pending invitations ({pendingInvites.length})
                   </span>
 
+                  {lastInviteLink && (
+                    <div className="p-3 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/60 border border-[#BFDBFE] dark:border-[#25455D] text-[13px] text-[#10212E] dark:text-white space-y-1">
+                      <span className="font-semibold block">Shareable invitation link:</span>
+                      <code className="block break-all text-[12px] text-[#1F5F99] dark:text-[#6FAEE0]">
+                        {lastInviteLink}
+                      </code>
+                    </div>
+                  )}
+
                   <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
                     {pendingInvites.map((inv) => (
                       <div
@@ -2870,9 +2961,14 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              setPendingInvites(pendingInvites.filter((i) => i.id !== inv.id));
-                              showToast(`Cancelled invitation for ${inv.email}`);
+                            onClick={async () => {
+                              try {
+                                await supplierApi.revokeInvitation(inv.id);
+                                setPendingInvites((prev) => prev.filter((i) => i.id !== inv.id));
+                                showToast(`Revoked invitation for ${inv.email}.`);
+                              } catch (err: any) {
+                                showToast(err?.message || 'Unable to revoke invitation.');
+                              }
                             }}
                             className="text-[14px] text-[#C2412D] hover:underline cursor-pointer"
                           >

@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export const BuyerFormBuilder: React.FC = () => {
-  const { formTemplates, createFormTemplate, updateFormTemplate } = useApp();
+  const { formTemplates, createFormTemplate, updateFormTemplate, profileSummary } = useApp();
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(formTemplates[0]?.id || '');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -93,7 +93,7 @@ export const BuyerFormBuilder: React.FC = () => {
 
   const handleCreateNewTemplate = () => {
     const newId = createFormTemplate({
-      organizationId: 'org-grc',
+      organizationId: profileSummary?.tenantId || '',
       title: 'New Procurement Questionnaire',
       version: 'v1.0',
       description: 'Custom tender questions configured by procurement unit.',

@@ -32,8 +32,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-// Strictly Demo Data for Hero Product Preview (Safe from client confidential data)
-const DEMO_PASSPORT_DOCS = [
+// Strictly Illustrative Data for Hero Product Preview (Safe from client confidential data)
+const ILLUSTRATIVE_PASSPORT_PREVIEW = [
   {
     id: 'doc-cipa',
     title: 'CIPA Certificate of Incorporation',
@@ -358,7 +358,7 @@ export const PublicAbout: React.FC = () => {
                             <span className="motion-reduce:animate-none animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                           </span>
-                          DEMO VERIFIED
+                          ILLUSTRATIVE PREVIEW
                         </span>
                       </div>
                     </div>
@@ -482,7 +482,7 @@ export const PublicAbout: React.FC = () => {
                           </div>
 
                           <div className="space-y-2">
-                            {DEMO_PASSPORT_DOCS.slice(0, 4).map((doc) => (
+                            {ILLUSTRATIVE_PASSPORT_PREVIEW.slice(0, 4).map((doc) => (
                               <div
                                 key={doc.id}
                                 onClick={() => setSelectedDemoDoc(doc)}
@@ -535,7 +535,7 @@ export const PublicAbout: React.FC = () => {
                             <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-[#10212E] dark:text-white text-xs">
-                                  Gaborone Regional Council (GRC)
+                                  Municipal Council Authority (Sample)
                                 </span>
                                 <span className="px-2 py-0.5 rounded bg-[#DCFCE7] text-[#166534] text-xs font-semibold border border-[#86EFAC] flex items-center gap-1">
                                   <span className="w-1.5 h-1.5 rounded-full bg-[#166534]" />

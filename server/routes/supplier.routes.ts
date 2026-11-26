@@ -44,8 +44,16 @@ function validateFileBuffer(buffer: Buffer, originalName?: string): { isValid: b
     return { isValid: true, mimeType: 'image/jpeg' };
   }
 
+  // GIF: GIF87a / GIF89a
+  if (buffer.length >= 6) {
+    const gifHeader = buffer.subarray(0, 6).toString('ascii');
+    if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
+      return { isValid: true, mimeType: 'image/gif' };
+    }
+  }
+
   // WebP: RIFF ... WEBP
-  if (buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP') {
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
     return { isValid: true, mimeType: 'image/webp' };
   }
 
@@ -65,11 +73,14 @@ function validateFileBuffer(buffer: Buffer, originalName?: string): { isValid: b
     if (ext === 'pdf') return { isValid: true, mimeType: 'application/pdf' };
     if (ext === 'png') return { isValid: true, mimeType: 'image/png' };
     if (ext === 'jpg' || ext === 'jpeg') return { isValid: true, mimeType: 'image/jpeg' };
+    if (ext === 'webp') return { isValid: true, mimeType: 'image/webp' };
+    if (ext === 'gif') return { isValid: true, mimeType: 'image/gif' };
     if (ext === 'docx') return { isValid: true, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
     if (ext === 'doc') return { isValid: true, mimeType: 'application/msword' };
+    if (ext === 'txt') return { isValid: true, mimeType: 'text/plain' };
   }
 
-  return { isValid: false, mimeType: '', error: 'Unsupported or corrupt file type. Only PDF, PNG, JPG, and Word files are accepted.' };
+  return { isValid: false, mimeType: '', error: 'Unsupported or corrupt file type. Only PDF, PNG, JPG, WebP, GIF, Word, and TXT files are accepted.' };
 }
 
 const ai = new GoogleGenAI({
@@ -291,6 +302,78 @@ router.post('/projects', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/supplier/projects/:id
+router.put('/projects/:id', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const updated = await suppliersRepository.updateProject(ctx.tenantId, req.params.id, req.body);
+    if (!updated) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Project not found.' });
+      return;
+    }
+    res.json(updated);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/supplier/projects/:id
+router.delete('/projects/:id', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const deleted = await suppliersRepository.deleteProject(ctx.tenantId, req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Project not found.' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/supplier/team
+router.get('/team', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const team = await suppliersRepository.listTeam(ctx.tenantId);
+    res.json(team);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/supplier/team/invite
+router.post('/team/invite', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { email, role } = req.body;
+    const invite = await suppliersRepository.inviteTeamMember(ctx.tenantId, {
+      email,
+      role,
+      invitedByUserId: ctx.userId,
+    });
+    res.status(201).json(invite);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// DELETE /api/supplier/team/invite/:id
+router.delete('/team/invite/:id', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const revoked = await suppliersRepository.revokeInvitation(ctx.tenantId, req.params.id);
+    if (!revoked) {
+      res.status(404).json({ error: 'NOT_FOUND', message: 'Invitation not found or already closed.' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // GET /api/supplier/disciplines
 router.get('/disciplines', async (req: Request, res: Response) => {
   try {
@@ -389,24 +472,28 @@ router.delete('/documents/:id', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/supplier/documents/:id/file - Fetch file bytes by ID with ownership check
+// GET /api/supplier/documents/:id/file - Fetch actual uploaded file bytes by version or doc ID with ownership check
 router.get('/documents/:id/file', async (req: Request, res: Response) => {
   try {
     const ctx = getSupplierContext(req);
     const fileRecord = await documentsRepository.getFileByVersionOrDocId(req.params.id, ctx.tenantId);
     if (!fileRecord) {
-      res.status(404).json({ error: 'NOT_FOUND', message: 'Document file not found or unauthorized.' });
+      res.status(404).json({
+        error: 'NOT_FOUND',
+        message: 'No uploaded file found for this document. Please upload the document file to preview it.',
+      });
       return;
     }
 
     const isDownload = req.query.download === '1' || req.query.download === 'true' || req.query.attachment === 'true';
     const dispositionType = isDownload ? 'attachment' : 'inline';
-    const safeFileName = (fileRecord.fileName || 'document.pdf').replace(/"/g, '');
+    const safeFileName = (fileRecord.fileName || 'document').replace(/[\r\n"\\]/g, '_');
 
-    res.setHeader('Content-Type', fileRecord.mimeType || 'application/pdf');
-    res.setHeader('Content-Length', fileRecord.content.length);
+    res.setHeader('Content-Type', fileRecord.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Length', String(fileRecord.content.length));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', `${dispositionType}; filename="${safeFileName}"; filename*=UTF-8''${encodeURIComponent(safeFileName)}`);
-    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
     res.send(fileRecord.content);
   } catch (err: any) {
     const safe = translateDbError(err);
@@ -677,6 +764,14 @@ router.post('/applications/submit', async (req: Request, res: Response) => {
 
     res.status(201).json(result);
   } catch (err: any) {
+    if (err?.status === 403 || err?.status === 400 || err?.status === 404) {
+      res.status(err.status).json({
+        error: err.code || 'SUBMISSION_BLOCKED',
+        code: err.code || 'SUBMISSION_BLOCKED',
+        message: err.message || 'Application submission could not be completed.',
+      });
+      return;
+    }
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
   }
@@ -689,7 +784,7 @@ router.post('/bids/seal', async (req: Request, res: Response) => {
     const { callId, financialSchedule } = req.body;
 
     if (!callId || !financialSchedule || !financialSchedule.length) {
-      res.status(400).json({ error: 'INVALID_BID_DATA', message: 'Tender ID and completed financial bill of quantities schedule are required.' });
+      res.status(400).json({ error: 'INVALID_BID_DATA', code: 'INVALID_BID_DATA', message: 'Tender ID and completed financial bill of quantities schedule are required.' });
       return;
     }
 
@@ -706,6 +801,14 @@ router.post('/bids/seal', async (req: Request, res: Response) => {
 
     res.status(201).json(result);
   } catch (err: any) {
+    if (err?.status === 403 || err?.status === 400 || err?.status === 404) {
+      res.status(err.status).json({
+        error: err.code || 'BID_SUBMISSION_BLOCKED',
+        code: err.code || 'BID_SUBMISSION_BLOCKED',
+        message: err.message || 'Bid submission blocked due to supplier compliance status.',
+      });
+      return;
+    }
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
   }

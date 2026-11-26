@@ -102,10 +102,10 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
-            AND (dt.code IN ('COMPANY_REGISTRATION', 'CIPA_CERT') OR dt.name ILIKE '%cipa%' OR dt.name ILIKE '%incorporation%')
+            AND (dt.code IN ('COMPANY_REGISTRATION', 'CIPA_CERT', 'CIPA') OR dt.name ILIKE '%cipa%' OR dt.name ILIKE '%incorporation%')
         ) INTO v_has_cipa;
         IF v_has_cipa THEN v_completed_count := v_completed_count + 1; END IF;
 
@@ -116,8 +116,8 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
             AND (dt.code IN ('TAX_CLEARANCE', 'BURS_TAX') OR dt.name ILIKE '%tax%' OR dt.name ILIKE '%burs%')
         ) INTO v_has_tax;
@@ -130,10 +130,10 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
-            AND (dt.code IN ('DIRECTOR_ID', 'DIRECTORS_ID') OR dt.name ILIKE '%director%' OR dt.name ILIKE '%omang%' OR dt.name ILIKE '%passport%')
+            AND (dt.code IN ('DIRECTOR_ID', 'DIRECTORS_ID', 'OMANG') OR dt.name ILIKE '%director%' OR dt.name ILIKE '%omang%' OR dt.name ILIKE '%passport%')
         ) INTO v_has_director_id;
         IF v_has_director_id THEN v_completed_count := v_completed_count + 1; END IF;
 
@@ -144,8 +144,8 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
             AND (dt.code IN ('BANK_CONFIRMATION', 'BANK_LETTER') OR dt.name ILIKE '%bank confirmation%' OR dt.name ILIKE '%bank letter%')
         ) INTO v_has_bank_letter;
@@ -160,8 +160,8 @@ async function setup() {
             JOIN document_types dt ON dt.id = sd.document_type_id
             LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
             WHERE sd.supplier_id = p_supplier_id
-              AND sd.status <> 'rejected'
-              AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+              AND sd.status = 'active'
+              AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
               AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
               AND (dt.code IN ('BUSINESS_LICENCE', 'TRADING_LICENCE') OR dt.name ILIKE '%trading%' OR dt.name ILIKE '%business licence%')
           ) INTO v_has_trading_licence_doc;
@@ -267,10 +267,10 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
-            AND (dt.code IN ('COMPANY_REGISTRATION', 'CIPA_CERT') OR dt.name ILIKE '%cipa%' OR dt.name ILIKE '%incorporation%')
+            AND (dt.code IN ('COMPANY_REGISTRATION', 'CIPA_CERT', 'CIPA') OR dt.name ILIKE '%cipa%' OR dt.name ILIKE '%incorporation%')
         ) INTO v_has_cipa;
         IF NOT v_has_cipa THEN
           v_missing := array_append(v_missing, 'CIPA Certificate of Incorporation (Verified)');
@@ -283,8 +283,8 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
             AND (dt.code IN ('TAX_CLEARANCE', 'BURS_TAX') OR dt.name ILIKE '%tax%' OR dt.name ILIKE '%burs%')
         ) INTO v_has_tax;
@@ -299,10 +299,10 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
-            AND (dt.code IN ('DIRECTOR_ID', 'DIRECTORS_ID') OR dt.name ILIKE '%director%' OR dt.name ILIKE '%omang%' OR dt.name ILIKE '%passport%')
+            AND (dt.code IN ('DIRECTOR_ID', 'DIRECTORS_ID', 'OMANG') OR dt.name ILIKE '%director%' OR dt.name ILIKE '%omang%' OR dt.name ILIKE '%passport%')
         ) INTO v_has_director_id;
         IF NOT v_has_director_id THEN
           v_missing := array_append(v_missing, 'Directors and shareholders ID (Verified)');
@@ -315,8 +315,8 @@ async function setup() {
           JOIN document_types dt ON dt.id = sd.document_type_id
           LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
           WHERE sd.supplier_id = p_supplier_id
-            AND sd.status <> 'rejected'
-            AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+            AND sd.status = 'active'
+            AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
             AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
             AND (dt.code IN ('BANK_CONFIRMATION', 'BANK_LETTER') OR dt.name ILIKE '%bank confirmation%' OR dt.name ILIKE '%bank letter%')
         ) INTO v_has_bank_letter;
@@ -332,8 +332,8 @@ async function setup() {
             JOIN document_types dt ON dt.id = sd.document_type_id
             LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
             WHERE sd.supplier_id = p_supplier_id
-              AND sd.status <> 'rejected'
-              AND (sdv.verification_status ILIKE 'verified' OR sd.status ILIKE 'verified')
+              AND sd.status = 'active'
+              AND sdv.verification_status IN ('VERIFIED', 'APPROVED')
               AND (sdv.expiry_date IS NULL OR sdv.expiry_date >= CURRENT_DATE)
               AND (dt.code IN ('BUSINESS_LICENCE', 'TRADING_LICENCE') OR dt.name ILIKE '%trading%' OR dt.name ILIKE '%business licence%')
           ) INTO v_has_trading_licence_doc;
@@ -354,8 +354,10 @@ async function setup() {
       DECLARE
         v_new_score INTEGER;
         v_new_missing TEXT[];
+        v_new_compliance TEXT;
         v_cur_score INTEGER;
         v_cur_missing TEXT[];
+        v_cur_compliance TEXT;
       BEGIN
         IF p_supplier_id IS NULL THEN
           RETURN 0;
@@ -363,18 +365,21 @@ async function setup() {
 
         v_new_score := compute_supplier_completeness(p_supplier_id);
         v_new_missing := compute_supplier_missing_items(p_supplier_id);
+        v_new_compliance := CASE WHEN v_new_score >= 80 THEN 'Fully compliant' ELSE 'Action required' END;
 
-        SELECT profile_completeness, missing_items
-        INTO v_cur_score, v_cur_missing
+        SELECT profile_completeness, missing_items, compliance_status
+        INTO v_cur_score, v_cur_missing, v_cur_compliance
         FROM suppliers
         WHERE id = p_supplier_id;
 
         IF v_cur_score IS DISTINCT FROM v_new_score
            OR v_cur_missing IS DISTINCT FROM v_new_missing
+           OR v_cur_compliance IS DISTINCT FROM v_new_compliance
            OR (SELECT profile_completeness_updated_at FROM suppliers WHERE id = p_supplier_id) IS NULL THEN
           UPDATE suppliers
           SET profile_completeness = v_new_score,
               missing_items = v_new_missing,
+              compliance_status = v_new_compliance,
               profile_completeness_updated_at = NOW()
           WHERE id = p_supplier_id;
         END IF;

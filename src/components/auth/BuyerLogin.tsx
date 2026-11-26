@@ -87,20 +87,25 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
       }
 
       const buyerMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'organization');
+      if (!buyerMembership && !res.user?.isPlatformAdmin) {
+        setErrors({ general: 'This account does not belong to a registered procuring organization.' });
+        return;
+      }
+
       loginSuccess(
         {
           user: res.user,
-          activeTenant: buyerMembership || {
-            tenantType: 'organization',
-            tenantId: 'org-grc',
-            tenantName: 'Gaborone Regional Council',
-          },
+          activeTenant: buyerMembership || res.activeTenant,
           token: res.token,
           profileSummary: (res as any).profileSummary,
         },
-        'buyer'
+        res.user?.isPlatformAdmin ? 'admin' : 'buyer'
       );
     } catch (err: any) {
+      if (err?.status === 423 || err?.status === 429 || err?.code === 'ACCOUNT_LOCKED' || err?.code === 'RATE_LIMIT_EXCEEDED') {
+        onNavigate('account-locked');
+        return;
+      }
       setErrors({ general: err.message || 'Invalid email or password.' });
     } finally {
       setIsLoading(false);
@@ -114,18 +119,19 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
     try {
       const res = await authApi.verifyMfa(mfaUserId, code.trim());
       const buyerMembership = res.user?.memberships?.find((m: any) => m.tenantType === 'organization');
+      if (!buyerMembership && !res.user?.isPlatformAdmin) {
+        setErrors({ general: 'This account does not belong to a registered procuring organization.' });
+        return;
+      }
+
       loginSuccess(
         {
           user: res.user,
-          activeTenant: buyerMembership || {
-            tenantType: 'organization',
-            tenantId: 'org-grc',
-            tenantName: 'Gaborone Regional Council',
-          },
+          activeTenant: buyerMembership || res.activeTenant,
           token: res.token,
           profileSummary: (res as any).profileSummary,
         },
-        'buyer'
+        res.user?.isPlatformAdmin ? 'admin' : 'buyer'
       );
     } catch (err: any) {
       setErrors({ general: err.message || 'Invalid or expired verification code.' });
@@ -138,36 +144,6 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
     setEmail('officer@grc.gov.bw');
     setPassword('Password123!');
     setErrors({});
-  };
-
-  const handleInstantDemo = () => {
-    loginSuccess(
-      {
-        user: {
-          id: 'demo-buyer-1',
-          email: 'officer@grc.gov.bw',
-          fullName: 'Neo Morapedi',
-          isPlatformAdmin: false,
-        },
-        activeTenant: {
-          tenantType: 'organization',
-          tenantId: 'org-grc',
-          tenantName: 'Gaborone Regional Council',
-          roleName: 'Procurement Officer',
-        },
-        token: 'demo-buyer-token',
-        profileSummary: {
-          userId: 'demo-buyer-1',
-          displayName: 'Neo Morapedi',
-          role: 'Procurement Officer',
-          supplierOrOrgName: 'Gaborone Regional Council',
-          tenantType: 'organization',
-          tenantId: 'org-grc',
-          verificationStatus: 'verified',
-        },
-      },
-      'buyer'
-    );
   };
 
   return (
@@ -227,16 +203,6 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
                   onClick={handleFillDemo}
                 >
                   Fill Form
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleInstantDemo}
-                  className="text-[#1F5F99] dark:text-[#6FAEE0] hover:text-[#184b7a]"
-                  leftIcon={<Sparkles className="w-3 h-3 text-[#E8A33D]" />}
-                >
-                  Quick Demo
                 </Button>
               </div>
             </div>

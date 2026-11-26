@@ -4,7 +4,41 @@ import { computeSupplierCompleteness, CompletenessResult } from '../services/com
 import { auditRepository } from './audit.repository';
 import { clearReferenceCache } from './reference.repository';
 import { getIdKey, getIdHashKey } from '../config/secrets';
+import { generateRandomToken, hashToken } from '../utils/crypto';
 import { normaliseOmang, validateOmang } from '../../shared/omang';
+
+const MONTHS_MAP: Record<string, string> = {
+  jan: '01', january: '01',
+  feb: '02', february: '02',
+  mar: '03', march: '03',
+  apr: '04', april: '04',
+  may: '05',
+  jun: '06', june: '06',
+  jul: '07', july: '07',
+  aug: '08', august: '08',
+  sep: '09', sept: '09', september: '09',
+  oct: '10', october: '10',
+  nov: '11', november: '11',
+  dec: '12', december: '12',
+};
+
+function parseProjectDate(val?: string | null): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed || /^ongoing$/i.test(trimmed) || /^present$/i.test(trimmed)) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}$/.test(trimmed)) return `${trimmed}-01`;
+  const monthYear = trimmed.match(/^([a-zA-Z]+)\s+(\d{4})$/);
+  if (monthYear) {
+    const mm = MONTHS_MAP[monthYear[1].toLowerCase()];
+    if (mm) return `${monthYear[2]}-${mm}-01`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return null;
+}
 
 export interface SupplierProfile {
   id: string;
@@ -38,6 +72,12 @@ export interface SupplierProfile {
   profileCompleteness: number;
   hasTradingLicence?: boolean | null;
   tradingLicenceReason?: string | null;
+  vatRegistered?: boolean;
+  citizenOwnershipSet?: boolean;
+  biddingPublicTenders?: boolean;
+  secondaryCategories?: string[];
+  ppraSubcodes?: string[];
+  ppraGrade?: string | null;
 }
 
 export interface SupplierPerson {
@@ -461,6 +501,14 @@ export class SuppliersRepository {
               s.edd_valid_until AS "eddValidUntil",
               s.has_trading_licence AS "hasTradingLicence", s.has_trading_licence,
               s.trading_licence_reason AS "tradingLicenceReason", s.trading_licence_reason,
+              s.vat_registered AS "vatRegistered", s.vat_registered,
+              s.citizen_ownership_set AS "citizenOwnershipSet", s.citizen_ownership_set,
+              s.bidding_public_tenders AS "biddingPublicTenders", s.bidding_public_tenders,
+              s.secondary_categories AS "secondaryCategories", s.secondary_categories,
+              s.secondary_categories AS "categories",
+              COALESCE(s.secondary_categories[1], '') AS "category",
+              s.ppra_subcodes AS "ppraSubcodes", s.ppra_subcodes,
+              s.ppra_grade AS "ppraGrade", s.ppra_grade,
               s.status,
               s.verification_status AS "verificationStatus", s.verification_status,
               s.compliance_status AS "complianceStatus", s.compliance_status,
@@ -648,32 +696,11 @@ export class SuppliersRepository {
       fields.push(`edd_certified = $${params.length}`);
     }
 
-    // 24. profile_completeness
-    const profileCompleteness = data.profile_completeness !== undefined ? data.profile_completeness : data.profileCompleteness;
-    if (profileCompleteness !== undefined) {
-      const num = Math.min(100, Math.max(0, Math.round(Number(profileCompleteness) || 0)));
-      params.push(num);
-      fields.push(`profile_completeness = $${params.length}`);
-    }
-
-    // 25. compliance_status
-    const rawComplianceStatus = data.compliance_status !== undefined ? data.compliance_status : data.complianceStatus;
-    if (rawComplianceStatus !== undefined) {
-      params.push(normalizeComplianceStatus(rawComplianceStatus));
-      fields.push(`compliance_status = $${params.length}`);
-    }
-
-    // Optional auxiliary attributes:
+    // 24. edd_certificate_no (server computes profile_completeness, compliance_status, and missing_items)
     if (data.edd_certificate_no !== undefined || data.eddCertificateNo !== undefined) {
       const eddNo = data.edd_certificate_no !== undefined ? data.edd_certificate_no : data.eddCertificateNo;
       params.push(eddNo ? String(eddNo).trim() : null);
       fields.push(`edd_certificate_no = $${params.length}`);
-    }
-
-    if (data.missing_items !== undefined || data.missingItems !== undefined) {
-      const missing = data.missing_items !== undefined ? data.missing_items : data.missingItems;
-      params.push(Array.isArray(missing) ? missing : []);
-      fields.push(`missing_items = $${params.length}`);
     }
 
     // 26. has_trading_licence
@@ -690,6 +717,53 @@ export class SuppliersRepository {
       fields.push(`trading_licence_reason = $${params.length}`);
     }
 
+    // 28. vat_registered
+    const vatRegistered = data.vat_registered !== undefined ? data.vat_registered : data.vatRegistered;
+    if (vatRegistered !== undefined) {
+      params.push(Boolean(vatRegistered));
+      fields.push(`vat_registered = $${params.length}`);
+    }
+
+    // 29. citizen_ownership_set
+    const citizenOwnershipSet = data.citizen_ownership_set !== undefined ? data.citizen_ownership_set : data.citizenOwnershipSet;
+    if (citizenOwnershipSet !== undefined) {
+      params.push(Boolean(citizenOwnershipSet));
+      fields.push(`citizen_ownership_set = $${params.length}`);
+    }
+
+    // 30. bidding_public_tenders
+    const biddingPublicTenders = data.bidding_public_tenders !== undefined ? data.bidding_public_tenders : data.biddingPublicTenders;
+    if (biddingPublicTenders !== undefined) {
+      params.push(Boolean(biddingPublicTenders));
+      fields.push(`bidding_public_tenders = $${params.length}`);
+    }
+
+    // 31. secondary_categories / categories
+    const secondaryCategories =
+      data.secondary_categories !== undefined
+        ? data.secondary_categories
+        : data.secondaryCategories !== undefined
+          ? data.secondaryCategories
+          : data.categories;
+    if (secondaryCategories !== undefined) {
+      params.push(Array.isArray(secondaryCategories) ? secondaryCategories.map((c: any) => String(c).trim()).filter(Boolean) : []);
+      fields.push(`secondary_categories = $${params.length}`);
+    }
+
+    // 32. ppra_subcodes
+    const ppraSubcodes = data.ppra_subcodes !== undefined ? data.ppra_subcodes : data.ppraSubcodes;
+    if (ppraSubcodes !== undefined) {
+      params.push(Array.isArray(ppraSubcodes) ? ppraSubcodes.map((c: any) => String(c)) : []);
+      fields.push(`ppra_subcodes = $${params.length}`);
+    }
+
+    // 33. ppra_grade
+    const ppraGrade = data.ppra_grade !== undefined ? data.ppra_grade : data.ppraGrade;
+    if (ppraGrade !== undefined) {
+      params.push(ppraGrade ? String(ppraGrade).trim().slice(0, 50) : null);
+      fields.push(`ppra_grade = $${params.length}`);
+    }
+
     if (!fields.length) {
       const current = await this.getById(supplierId);
       if (!current) throw new Error('Supplier not found.');
@@ -703,10 +777,7 @@ export class SuppliersRepository {
       params
     );
 
-    const hasExplicitCompleteness = (data.profile_completeness !== undefined || data.profileCompleteness !== undefined);
-    if (!hasExplicitCompleteness) {
-      await this.calculateCompleteness(supplierId);
-    }
+    await this.calculateCompleteness(supplierId);
     const updated = await this.getById(supplierId);
     if (!updated) throw new Error('Supplier not found after update.');
     return updated;
@@ -1239,33 +1310,242 @@ export class SuppliersRepository {
     return result;
   }
 
-  async listProjects(supplierId: string): Promise<SupplierProject[]> {
-    const res = await query<SupplierProject>(
-      `SELECT id, supplier_id AS "supplierId", client_name AS "clientName",
-              project_title AS "projectTitle", description, contract_value AS "contractValue",
+  async listProjects(supplierId: string): Promise<any[]> {
+    const res = await query<any>(
+      `SELECT id, supplier_id AS "supplierId", client_name AS "clientName", client_name AS "client",
+              project_title AS "projectTitle", project_title AS "title", description,
+              contract_value AS "contractValue", contract_value AS "valueBWP",
               currency, start_date AS "startDate", end_date AS "endDate",
-              reference_name AS "referenceName", reference_contact AS "referenceContact",
+              reference_name AS "referenceName", reference_contact AS "referenceContactRaw",
               reference_verified AS "referenceVerified"
        FROM supplier_projects
        WHERE supplier_id = $1
        ORDER BY start_date DESC NULLS LAST, created_at DESC`,
       [supplierId]
     );
-    return res.rows;
+    return res.rows.map((row) => {
+      let refContactObj: { name: string; phone: string; email: string } | undefined;
+      if (row.referenceContactRaw) {
+        try {
+          const parsed = JSON.parse(row.referenceContactRaw);
+          if (parsed && typeof parsed === 'object') {
+            refContactObj = {
+              name: parsed.name || row.referenceName || '',
+              phone: parsed.phone || '',
+              email: parsed.email || '',
+            };
+          }
+        } catch {
+          refContactObj = {
+            name: row.referenceName || '',
+            phone: String(row.referenceContactRaw),
+            email: '',
+          };
+        }
+      } else if (row.referenceName) {
+        refContactObj = { name: row.referenceName, phone: '', email: '' };
+      }
+      return {
+        ...row,
+        valueBWP: row.valueBWP !== null && row.valueBWP !== undefined ? Number(row.valueBWP) : 0,
+        status: row.endDate ? 'Completed' : 'Ongoing',
+        referenceContact: refContactObj || row.referenceContactRaw || null,
+      };
+    });
   }
 
-  async addProject(supplierId: string, project: { clientName: string; projectTitle: string; contractValue?: number; currency?: string; description?: string; referenceName?: string; referenceContact?: string }): Promise<SupplierProject> {
-    const res = await query<SupplierProject>(
-      `INSERT INTO supplier_projects (supplier_id, client_name, project_title, contract_value, currency, description, reference_name, reference_contact)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, supplier_id AS "supplierId", client_name AS "clientName",
-                 project_title AS "projectTitle", description, contract_value AS "contractValue",
-                 currency, start_date AS "startDate", end_date AS "endDate",
-                 reference_name AS "referenceName", reference_contact AS "referenceContact",
-                 reference_verified AS "referenceVerified"`,
-      [supplierId, project.clientName.trim(), project.projectTitle.trim(), project.contractValue || null, project.currency || 'BWP', project.description || null, project.referenceName || null, project.referenceContact || null]
+  private normalizeProjectInput(project: any) {
+    const clientName = String(project.clientName ?? project.client ?? '').trim();
+    const projectTitle = String(project.projectTitle ?? project.title ?? '').trim();
+    if (!clientName || !projectTitle) {
+      throw new Error('Project title and client name are required.');
+    }
+    const rawVal = project.contractValue ?? project.valueBWP;
+    const contractValue = rawVal !== undefined && rawVal !== null && rawVal !== '' ? Number(rawVal) : null;
+    const currency = project.currency ? String(project.currency).trim().slice(0, 3).toUpperCase() : 'BWP';
+    const description = project.description ? String(project.description).trim() : null;
+    const startDate = parseProjectDate(project.startDate);
+    const endDate = String(project.status || '').toLowerCase() === 'ongoing' ? null : parseProjectDate(project.endDate);
+
+    let referenceName = project.referenceName ? String(project.referenceName).trim() : null;
+    let referenceContact: string | null = null;
+    if (project.referenceContact && typeof project.referenceContact === 'object') {
+      referenceName = referenceName || (project.referenceContact.name ? String(project.referenceContact.name).trim() : null);
+      const serialized = JSON.stringify({
+        name: project.referenceContact.name || referenceName || '',
+        phone: project.referenceContact.phone || '',
+        email: project.referenceContact.email || '',
+      });
+      referenceContact = serialized;
+    } else if (project.referenceContact) {
+      referenceContact = String(project.referenceContact).trim();
+    }
+
+    return { clientName, projectTitle, contractValue, currency, description, startDate, endDate, referenceName, referenceContact };
+  }
+
+  async addProject(supplierId: string, project: any): Promise<any> {
+    const p = this.normalizeProjectInput(project);
+    const res = await query<any>(
+      `INSERT INTO supplier_projects (
+         supplier_id, client_name, project_title, contract_value, currency,
+         description, start_date, end_date, reference_name, reference_contact
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [supplierId, p.clientName, p.projectTitle, p.contractValue, p.currency, p.description, p.startDate, p.endDate, p.referenceName, p.referenceContact]
     );
-    return res.rows[0];
+    const createdId = res.rows[0].id;
+    const all = await this.listProjects(supplierId);
+    return all.find((item) => item.id === createdId) || { id: createdId, ...p };
+  }
+
+  async updateProject(supplierId: string, projectId: string, project: any): Promise<any | null> {
+    const p = this.normalizeProjectInput(project);
+    const res = await query<any>(
+      `UPDATE supplier_projects
+       SET client_name = $3,
+           project_title = $4,
+           contract_value = $5,
+           currency = $6,
+           description = $7,
+           start_date = $8,
+           end_date = $9,
+           reference_name = $10,
+           reference_contact = $11,
+           updated_at = NOW()
+       WHERE id = $1 AND supplier_id = $2
+       RETURNING id`,
+      [projectId, supplierId, p.clientName, p.projectTitle, p.contractValue, p.currency, p.description, p.startDate, p.endDate, p.referenceName, p.referenceContact]
+    );
+    if (!res.rows.length) return null;
+    const all = await this.listProjects(supplierId);
+    return all.find((item) => item.id === projectId) || null;
+  }
+
+  async deleteProject(supplierId: string, projectId: string): Promise<boolean> {
+    const res = await query(
+      `DELETE FROM supplier_projects WHERE id = $1 AND supplier_id = $2`,
+      [projectId, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  async listTeam(supplierId: string): Promise<{
+    teamMembers: any[];
+    pendingInvitations: any[];
+  }> {
+    const [membersRes, invitesRes] = await Promise.all([
+      query<any>(
+        `SELECT sm.id, sm.user_id AS "userId", u.full_name AS "name", u.email::text AS email,
+                r.name AS "role", sm.status, sm.is_owner AS "isOwner", sm.joined_at AS "joinedAt"
+         FROM supplier_members sm
+         JOIN users u ON u.id = sm.user_id AND u.deleted_at IS NULL
+         JOIN roles r ON r.id = sm.role_id
+         WHERE sm.supplier_id = $1 AND sm.status != 'removed'
+         ORDER BY sm.is_owner DESC, sm.created_at ASC`,
+        [supplierId]
+      ),
+      query<any>(
+        `SELECT i.id, i.email::text AS email, r.name AS "role",
+                i.created_at AS "sentAt", i.expires_at AS "expiresAt"
+         FROM invitations i
+         JOIN roles r ON r.id = i.role_id
+         WHERE i.supplier_id = $1
+           AND i.accepted_at IS NULL
+           AND i.revoked_at IS NULL
+           AND i.expires_at > NOW()
+         ORDER BY i.created_at DESC`,
+        [supplierId]
+      ),
+    ]);
+
+    return {
+      teamMembers: membersRes.rows.map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        name: m.name || m.email,
+        email: m.email,
+        role: m.role,
+        status: m.status === 'active' ? 'Active' : 'Invited',
+        isOwner: m.isOwner,
+      })),
+      pendingInvitations: invitesRes.rows.map((inv) => ({
+        id: inv.id,
+        email: inv.email,
+        role: inv.role,
+        sentAt: inv.sentAt,
+        expiresAt: inv.expiresAt,
+      })),
+    };
+  }
+
+  async inviteTeamMember(supplierId: string, data: {
+    email: string;
+    role: string;
+    invitedByUserId: string;
+  }): Promise<{ id: string; email: string; role: string; sentAt: string; expiresAt: string; inviteToken: string }> {
+    const cleanEmail = String(data.email || '').trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      throw new Error('A valid email address is required.');
+    }
+
+    const roleName = String(data.role || 'Bid Contributor').trim();
+    const roleRes = await query<{ id: string; name: string }>(
+      `SELECT id, name FROM roles
+       WHERE scope = 'supplier'
+         AND (LOWER(name) = LOWER($1) OR name IN ('Bid Contributor', 'Supplier Admin'))
+       ORDER BY CASE
+         WHEN LOWER(name) = LOWER($1) THEN 0
+         WHEN name = 'Bid Contributor' THEN 1
+         ELSE 2 END
+       LIMIT 1`,
+      [roleName]
+    );
+
+    const roleRow = roleRes.rows[0];
+    if (!roleRow) {
+      throw new Error('Supplier role configuration not found.');
+    }
+
+    const rawToken = generateRandomToken(32);
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    // Revoke previous open invitations for same supplier & email
+    await query(
+      `UPDATE invitations
+       SET revoked_at = NOW()
+       WHERE supplier_id = $1 AND LOWER(email::text) = LOWER($2) AND accepted_at IS NULL AND revoked_at IS NULL`,
+      [supplierId, cleanEmail]
+    );
+
+    const invRes = await query<{ id: string; email: string; created_at: string; expires_at: string }>(
+      `INSERT INTO invitations (supplier_id, email, role_id, token_hash, invited_by_user_id, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, email::text AS email, created_at, expires_at`,
+      [supplierId, cleanEmail, roleRow.id, tokenHash, data.invitedByUserId, expiresAt]
+    );
+
+    const row = invRes.rows[0];
+    return {
+      id: row.id,
+      email: row.email,
+      role: roleRow.name,
+      sentAt: row.created_at,
+      expiresAt: row.expires_at,
+      inviteToken: rawToken,
+    };
+  }
+
+  async revokeInvitation(supplierId: string, invitationId: string): Promise<boolean> {
+    const res = await query(
+      `UPDATE invitations
+       SET revoked_at = NOW()
+       WHERE id = $1 AND supplier_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+      [invitationId, supplierId]
+    );
+    return (res.rowCount || 0) > 0;
   }
 
   async getDisciplines(supplierId: string): Promise<SupplierDisciplineAllocation[]> {

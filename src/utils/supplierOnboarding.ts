@@ -23,13 +23,19 @@ export interface SupplierCompletenessResult {
 
 /**
  * Validates whether a document in the vault fulfills a compliance requirement:
- * Must be present, not expired, and not rejected.
+ * Must be present, verified/approved (not pending, rejected, expired, or unverifiable), and not past its UTC expiry date.
  * Supports both real document type codes and descriptive names.
  */
 function isDocumentValid(
   documents: SupplierDocument[],
   typeKeywordsOrCodes: string[]
 ): boolean {
+  const todayUtcMs = Date.UTC(
+    new Date().getUTCFullYear(),
+    new Date().getUTCMonth(),
+    new Date().getUTCDate()
+  );
+
   return (documents || []).some((doc) => {
     const code = ((doc as any).documentTypeCode || (doc as any).doc_type_code || (doc as any).code || '').toUpperCase();
     const typeLower = (doc.documentType || '').toLowerCase();
@@ -48,25 +54,40 @@ function isDocumentValid(
 
     if (!matches) return false;
 
-    // Must not be expired or rejected
-    const isExpired = doc.status === 'Expired' || (doc as any).status === 'expired';
-    const isRejected = doc.status === 'Rejected' || (doc as any).status === 'rejected';
+    const statusLower = String(doc.status || '').toLowerCase();
+    const verStatusUpper = String((doc as any).verificationStatus || (doc as any).verification_status || '').toUpperCase();
+    const expiryStateUpper = String((doc as any).expiryState || (doc as any).expiry_state || '').toUpperCase();
 
-    // Also check date if expiryDate is set and in the past
-    let dateExpired = false;
+    const isExpired = statusLower === 'expired' || verStatusUpper === 'EXPIRED' || expiryStateUpper === 'EXPIRED';
+    const isRejected = statusLower === 'rejected' || verStatusUpper === 'REJECTED';
+    const isUnverifiable = statusLower === 'cannot verify' || verStatusUpper === 'UNVERIFIABLE';
+    const isVerified =
+      verStatusUpper === 'VERIFIED' ||
+      verStatusUpper === 'APPROVED' ||
+      statusLower === 'verified' ||
+      statusLower === 'expiring soon';
+
+    if (!isVerified || isExpired || isRejected || isUnverifiable) {
+      return false;
+    }
+
+    // Check UTC calendar date boundary if expiryDate is set
     const expVal = doc.expiryDate || (doc as any).expiry_date || (doc as any).valid_until;
     if (expVal) {
-      try {
+      const expStr = String(expVal).slice(0, 10);
+      const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(expStr);
+      if (match) {
+        const expUtcMs = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        if (expUtcMs < todayUtcMs) return false;
+      } else {
         const exp = new Date(expVal);
-        if (!isNaN(exp.getTime()) && exp.getTime() < Date.now()) {
-          dateExpired = true;
+        if (!isNaN(exp.getTime()) && exp.getTime() < todayUtcMs) {
+          return false;
         }
-      } catch {
-        // ignore date parse errors
       }
     }
 
-    return !isExpired && !isRejected && !dateExpired;
+    return true;
   });
 }
 
@@ -74,9 +95,9 @@ function isDocumentValid(
  * Calculates the exact 15-item completeness score for a supplier:
  * - Company (10): legal name, trading name, tax number, physical address, city, district, phone, email, bank details, citizen ownership %.
  * - People (1): at least one director, with ownership totalling 100%.
- * - Documents (4): CIPA certificate, tax clearance, workers compensation & safety, public liability insurance. Each counts only when uploaded and not expired or rejected.
+ * - Documents (4): CIPA certificate, tax clearance, directors' & shareholders' ID, bank confirmation letter (plus trading licence if declared). Each counts only when Verified and valid.
  *
- * Completeness = completed items / 15 * 100, rounded.
+ * Completeness = completed items / total items * 100, rounded.
  */
 export function calculateSupplierCompleteness(
   supplier: Partial<Supplier>,
@@ -135,19 +156,19 @@ export function calculateSupplierCompleteness(
   );
   const hasDirectors100Percent = directors.length > 0 && Math.round(totalOwnership) === 100;
 
-  // 12. CIPA Certificate (uploaded, not expired, not rejected)
-  const hasCipaDoc = isDocumentValid(docs, ['cipa', 'incorporation', 'company registration', 'company_registration']);
+  // 12. CIPA Certificate (uploaded, verified, not expired, not rejected)
+  const hasCipaDoc = isDocumentValid(docs, ['cipa', 'cipa_cert', 'incorporation', 'company registration', 'company_registration']);
 
-  // 13. Tax Clearance (BURS) (uploaded, not expired, not rejected)
+  // 13. Tax Clearance (BURS) (uploaded, verified, not expired, not rejected)
   const hasTaxDoc = isDocumentValid(docs, ['tax clearance', 'tax_clearance', 'burs', 'tax certificate']);
 
-  // 14. Workers Compensation & Safety (uploaded, not expired, not rejected)
+  // 14. Workers Compensation & Safety (uploaded, verified, not expired, not rejected)
   const hasSafetyDoc = isDocumentValid(docs, ['workers compensation', 'workers_compensation', 'safety', 'wca', 'occupational health']);
 
-  // 15. Public Liability Insurance (uploaded, not expired, not rejected)
+  // 15. Public Liability Insurance (uploaded, verified, not expired, not rejected)
   const hasInsuranceDoc = isDocumentValid(docs, ['public liability', 'liability insurance', 'public_liability', 'indemnity insurance']);
 
-  // 16. Directors' and Shareholders' ID (uploaded, not expired, not rejected)
+  // 16. Directors' and Shareholders' ID (uploaded, verified, not expired, not rejected)
   const hasDirectorsIdDoc = isDocumentValid(docs, [
     'directors and shareholders id',
     'director id',
@@ -161,7 +182,7 @@ export function calculateSupplierCompleteness(
     'passport',
   ]);
 
-  // 17. Bank Confirmation Letter (uploaded, not expired, not rejected)
+  // 17. Bank Confirmation Letter (uploaded, verified, not expired, not rejected)
   const hasBankConfirmationDoc = isDocumentValid(docs, [
     'bank confirmation',
     'bank_letter',
@@ -172,7 +193,7 @@ export function calculateSupplierCompleteness(
   ]);
 
   // 18. Trading Licence (conditional - only required if supplier explicitly selected "Yes, I'll upload it")
-  const hasTradingLicenceDoc = isDocumentValid(docs, ['trading licence', 'trading_licence', 'business licence', 'licence']);
+  const hasTradingLicenceDoc = isDocumentValid(docs, ['trading licence', 'trading_licence', 'trading_license', 'business licence', 'licence']);
   const isTradingLicenceRequired = supplier.hasTradingLicence === true;
 
   const baseItems: OnboardingChecklistItem[] = [
@@ -380,14 +401,10 @@ export function calculateSupplierCompleteness(
     });
   }
 
-  // Document and profile completeness is strictly computed in PostgreSQL database.
-  // The frontend reads and binds strictly to the database score (no local percentage math).
   const items = [...baseItems];
   const totalCount = items.length;
   const completedCount = items.filter((i) => i.isComplete).length;
-  const calculatedScore = Math.round((completedCount / Math.max(1, totalCount)) * 100);
-  const storedScore = Math.max(0, Math.min(100, Math.round(Number(supplier.profileCompleteness) || 0)));
-  const score = Math.max(storedScore, calculatedScore);
+  const score = Math.round((completedCount / Math.max(1, totalCount)) * 100);
   const missingItems = items.filter((i) => !i.isComplete);
 
   return {

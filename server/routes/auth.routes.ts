@@ -169,9 +169,20 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.json(result);
   } catch (err: any) {
+    if (err.status === 423) {
+      res.status(423).json({
+        error: 'ACCOUNT_LOCKED',
+        code: 'ACCOUNT_LOCKED',
+        message: err.message || 'Your account is temporarily locked due to failed sign-in attempts.',
+        lockedUntil: err.lockedUntil || null,
+      });
+      return;
+    }
+
     if (err.status === 429) {
       res.status(429).json({
         error: 'RATE_LIMIT_EXCEEDED',
+        code: 'RATE_LIMIT_EXCEEDED',
         message: err.message || 'Too many attempts. Try again in 15 minutes.',
       });
       return;
@@ -180,6 +191,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (err.status === 403 && err.code === 'EMAIL_NOT_VERIFIED') {
       res.status(403).json({
         error: 'EMAIL_NOT_VERIFIED',
+        code: 'EMAIL_NOT_VERIFIED',
         message: 'Verify your email first',
         email: err.email,
       });
@@ -189,6 +201,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (err.status === 403) {
       res.status(403).json({
         error: err.code || 'FORBIDDEN',
+        code: err.code || 'FORBIDDEN',
         message: err.message,
       });
       return;
@@ -196,6 +209,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     res.status(401).json({
       error: 'INVALID_CREDENTIALS',
+      code: 'INVALID_CREDENTIALS',
       message: 'Email or password is incorrect.',
     });
   }
@@ -350,23 +364,86 @@ router.post('/switch-tenant', requireAuth, async (req: Request, res: Response) =
   }
 });
 
-// GET /api/auth/me
-router.get('/me', requireAuth, (req: Request, res: Response) => {
+// GET /api/auth/me and GET /api/auth/session
+const sendSessionResponse = (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+
+  const user = req.user!;
+  const activeTenant = req.activeTenant;
+  const profileSummary = req.profileSummary || null;
+  const displayName = profileSummary?.displayName || user.fullName || user.email;
+  const firstName = String(displayName).trim().split(/\s+/)[0] || displayName;
+
   res.json({
     user: {
-      id: req.user!.id,
-      email: req.user!.email,
-      fullName: req.user!.fullName,
-      phone: req.user!.phone,
-      isPlatformAdmin: req.user!.isPlatformAdmin,
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phone: user.phone,
+      isPlatformAdmin: user.isPlatformAdmin,
     },
-    activeTenant: req.activeTenant,
-    profileSummary: req.profileSummary || null,
+    profile: {
+      displayName,
+      firstName,
+      tenantType: user.isPlatformAdmin ? 'platform' : (activeTenant?.tenantType || 'supplier'),
+      tenantId: activeTenant?.tenantId || (user.isPlatformAdmin ? 'platform' : ''),
+      role: activeTenant?.roleName || (user.isPlatformAdmin ? 'Super Admin' : 'Member'),
+      orgName: activeTenant?.tenantName || (user.isPlatformAdmin ? 'Platform Administration' : displayName),
+      verificationStatus: profileSummary?.verificationStatus || activeTenant?.verificationStatus || 'unverified',
+    },
+    activeTenant,
+    profileSummary,
     permissions: Array.from(req.permissions || []),
   });
+};
+
+router.get('/me', requireAuth, sendSessionResponse);
+router.get('/session', requireAuth, sendSessionResponse);
+
+// GET /api/auth/invitations/:token
+router.get('/invitations/:token', async (req: Request, res: Response) => {
+  try {
+    const invite = await authService.getInvitationByToken(req.params.token);
+    res.json(invite);
+  } catch (err: any) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 404).json(safeError);
+  }
+});
+
+// POST /api/auth/accept-invite
+router.post('/accept-invite', async (req: Request, res: Response) => {
+  try {
+    const { token, password, fullName } = req.body;
+    if (!token || !password) {
+      res.status(400).json({
+        error: 'MISSING_DATA',
+        message: 'Invitation token and password are required.',
+      });
+      return;
+    }
+
+    const ip = extractClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'Web Client';
+    const result = await authService.acceptInvitation({ token, password, fullName, ip, userAgent });
+
+    if (result.token) {
+      res.cookie('session_token', result.token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        secure: process.env.NODE_ENV === 'production',
+      });
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    const safeError = translateDbError(err);
+    res.status(safeError.status || 400).json(safeError);
+  }
 });
 
 // POST /api/auth/logout

@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 /**
  * Server-side high-fidelity standard PDF 1.4 generator.
  * Produces clean, certified PDF documents for official Botswana compliance certificates
@@ -24,12 +26,19 @@ export interface CertificatePdfOptions {
 
 export function generateCertificatePdf(options: CertificatePdfOptions): Buffer {
   const title = options.title || 'Official Statutory Certificate';
-  const docNumber = options.documentNumber || `BW-${Math.floor(100000 + Math.random() * 900000)}`;
+  const docNumber = options.documentNumber || `BW-${crypto.randomInt(100000, 999999)}`;
   const supplier = options.supplierName || 'Registered Commercial Supplier';
-  const issueDate = options.issueDate || '2026-01-15';
-  const expiryDate = options.expiryDate || '2027-01-15';
+  const now = new Date();
+  const oneYearLater = new Date(Date.UTC(now.getUTCFullYear() + 1, now.getUTCMonth(), now.getUTCDate()));
+  const issueDate = options.issueDate || now.toISOString().slice(0, 10);
+  const expiryDate = options.expiryDate || oneYearLater.toISOString().slice(0, 10);
   const authority = options.authorityName || 'Republic of Botswana Regulatory Authority';
-  const sha = options.sha256 || 'c5365b555caf161039803486e3e72f7d3e614a83a74e344d4d20f8e8130d5ae6';
+  const sha =
+    options.sha256 ||
+    crypto
+      .createHash('sha256')
+      .update(`${title}|${docNumber}|${supplier}|${issueDate}|${expiryDate}`)
+      .digest('hex');
 
   const streamLines: string[] = [
     'q',
