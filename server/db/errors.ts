@@ -93,6 +93,14 @@ export function translateDbError(err: any): SafeDbError {
       };
     }
 
+    case '42501': {
+      return {
+        status: 403,
+        message: err.message || 'Operation blocked by immutability or access control rules.',
+        code: 'IMMUTABLE_OR_FORBIDDEN',
+      };
+    }
+
     case 'P0001': {
       // Raised exception from trigger
       return {

@@ -23,6 +23,20 @@ router.get('/logs', requirePermission('audit.view'), async (req: Request, res: R
   }
 });
 
+// GET /api/audit/verify
+router.get('/verify', requirePermission('audit.view'), async (req: Request, res: Response) => {
+  try {
+    const ctx = getTenantContext(req);
+    const verification = await auditRepository.verifyChain({
+      organizationId: ctx.tenantType === 'organization' ? ctx.tenantId : undefined,
+      supplierId: ctx.tenantType === 'supplier' ? ctx.tenantId : undefined,
+    });
+    res.json(verification);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Audit chain verification failed.' });
+  }
+});
+
 // POST /api/audit/export
 router.post('/export', requirePermission('audit.view'), async (req: Request, res: Response) => {
   try {

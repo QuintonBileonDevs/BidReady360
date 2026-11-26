@@ -9,7 +9,7 @@ export async function ensureSystemRolePermissions(): Promise<void> {
   await query(`
     INSERT INTO role_permissions (role_id, permission_id)
     SELECT r.id, p.id FROM roles r JOIN permissions p ON p.scope = 'organization'
-    WHERE r.scope = 'organization' AND r.name IN ('Org Admin', 'Buyer Admin')
+    WHERE r.scope = 'organization' AND r.name IN ('Org Admin', 'Buyer Admin', 'Organization Admin')
     ON CONFLICT DO NOTHING
   `);
   await query(`
@@ -66,11 +66,172 @@ export async function ensureSystemRolePermissions(): Promise<void> {
   `);
 }
 
+/**
+ * Idempotently seeds plain sentence-case in-app notification templates for core procurement events.
+ */
+export async function ensureInAppNotificationTemplates(): Promise<void> {
+  const templates: Array<{ code: string; subject: string; body: string; variables: string[] }> = [
+    {
+      code: 'organization_approved',
+      subject: 'Your organization account is approved',
+      body: '{{organizationName}} has been verified and approved. Open your workspace to publish tender calls and review supplier submissions.',
+      variables: ['organizationName'],
+    },
+    {
+      code: 'organization_rejected',
+      subject: 'Organization verification needs attention',
+      body: '{{organizationName}} was not approved. Reason: {{reason}}. Review your organization details and contact platform support to resubmit.',
+      variables: ['organizationName', 'reason'],
+    },
+    {
+      code: 'document_verified',
+      subject: 'Document verified: {{documentTitle}}',
+      body: 'Your {{documentTitle}} has been verified. Open your document vault to check your bidding readiness.',
+      variables: ['documentTitle'],
+    },
+    {
+      code: 'document_rejected',
+      subject: 'Document needs replacement: {{documentTitle}}',
+      body: 'Your {{documentTitle}} could not be accepted. Reason: {{reason}}. Upload a clear replacement copy in your document vault.',
+      variables: ['documentTitle', 'reason'],
+    },
+    {
+      code: 'document_expiring_soon',
+      subject: '{{documentTitle}} expires on {{expiryDate}}',
+      body: 'Your {{documentTitle}} expires on {{expiryDate}} ({{daysRemaining}} days left). Upload a renewed certificate in your document vault to stay ready to bid.',
+      variables: ['documentTitle', 'expiryDate', 'daysRemaining'],
+    },
+    {
+      code: 'clarification_asked',
+      subject: 'New clarification question on {{callNumber}}',
+      body: '{{supplierName}} asked a clarification question under {{topic}}. Review the question and publish an official response.',
+      variables: ['callNumber', 'supplierName', 'topic'],
+    },
+    {
+      code: 'clarification_answered',
+      subject: 'Clarification answer published for {{callNumber}}',
+      body: 'An official clarification response was published for {{callTitle}}. Open the tender call to read the answer before submitting.',
+      variables: ['callNumber', 'callTitle'],
+    },
+    {
+      code: 'addendum_published',
+      subject: 'Addendum #{{addendumNo}} published for {{callNumber}}',
+      body: '{{addendumTitle}} was issued for {{callTitle}}. Open the tender call to review and acknowledge this addendum.',
+      variables: ['callNumber', 'callTitle', 'addendumNo', 'addendumTitle'],
+    },
+    {
+      code: 'application_submitted',
+      subject: 'New application submitted for {{callNumber}}',
+      body: '{{supplierName}} submitted an application dossier (receipt {{receiptNumber}}). Open the applications queue to review the submission.',
+      variables: ['supplierName', 'callNumber', 'receiptNumber'],
+    },
+    {
+      code: 'application_status_changed',
+      subject: 'Application status updated for {{callNumber}}',
+      body: 'Your application for {{callTitle}} is now {{status}}. {{note}}',
+      variables: ['callNumber', 'callTitle', 'status', 'note'],
+    },
+    {
+      code: 'application_info_responded',
+      subject: 'Additional information submitted for {{callNumber}}',
+      body: '{{actorName}} replied to your information request. Open the applications queue to continue the review.',
+      variables: ['callNumber', 'actorName'],
+    },
+    {
+      code: 'application_withdrawn',
+      subject: 'Application withdrawn for {{callNumber}}',
+      body: '{{supplierName}} withdrew their application for {{callTitle}} before closing. Open the applications queue to view the updated list.',
+      variables: ['supplierName', 'callNumber', 'callTitle'],
+    },
+    {
+      code: 'bid_submitted',
+      subject: 'Sealed bid received for {{callNumber}}',
+      body: '{{supplierName}} submitted a sealed bid (receipt {{receiptNumber}}). Pricing stays locked until the witnessed opening session.',
+      variables: ['supplierName', 'callNumber', 'receiptNumber'],
+    },
+    {
+      code: 'bid_withdrawn',
+      subject: 'Sealed bid withdrawn for {{callNumber}}',
+      body: 'A supplier withdrew sealed bid {{receiptNumber}} before the closing deadline. Open bids opening to view the register.',
+      variables: ['callNumber', 'receiptNumber'],
+    },
+    {
+      code: 'bid_opened',
+      subject: 'Sealed bid opened for {{callNumber}}',
+      body: 'Your bid ({{receiptNumber}}) for {{callTitle}} was unsealed during the witnessed opening session. Check your applications for evaluation updates.',
+      variables: ['callNumber', 'callTitle', 'receiptNumber', 'registerSha256'],
+    },
+    {
+      code: 'award_pending_approval',
+      subject: 'Award recommendation waiting for approval ({{callNumber}})',
+      body: '{{actorName}} recommended a contract award of BWP {{awardValue}}. Open awards to review and record your approval decision.',
+      variables: ['callNumber', 'actorName', 'awardValue'],
+    },
+    {
+      code: 'award_decision',
+      subject: 'Award recommendation {{decision}} for {{callNumber}}',
+      body: '{{actorName}} {{decision}} the contract award recommendation for {{callTitle}}. Open awards to review the recorded decision.',
+      variables: ['callNumber', 'callTitle', 'actorName', 'decision'],
+    },
+    {
+      code: 'award_approved',
+      subject: 'Contract award approved for {{callNumber}}',
+      body: 'Your bid for {{callTitle}} (BWP {{awardValue}}) has been approved for contract award. Open your applications to view the next steps.',
+      variables: ['callNumber', 'callTitle', 'awardValue'],
+    },
+    {
+      code: 'award_issued',
+      subject: 'Contract award approved for {{callNumber}}',
+      body: 'Your bid for {{callTitle}} (BWP {{awardValue}}) has been approved for contract award. Open your applications to view the next steps.',
+      variables: ['callNumber', 'callTitle', 'awardValue'],
+    },
+    {
+      code: 'award_rejected',
+      subject: 'Award recommendation returned for {{callNumber}}',
+      body: 'The award recommendation for {{callTitle}} was returned during approval review. Open awards to inspect the feedback.',
+      variables: ['callNumber', 'callTitle'],
+    },
+    {
+      code: 'call_invitation',
+      subject: 'You are invited to bid on {{callNumber}}',
+      body: '{{organizationName}} invited your company to respond to {{callTitle}}. Open the tender call to review requirements and deadlines.',
+      variables: ['organizationName', 'callNumber', 'callTitle'],
+    },
+    {
+      code: 'team_invitation',
+      subject: 'Workspace invitation to {{tenantName}}',
+      body: '{{inviterName}} invited you to join {{tenantName}} as {{roleName}}. Accept your invitation before {{expiresAt}}.',
+      variables: ['tenantName', 'inviterName', 'roleName', 'expiresAt'],
+    },
+    {
+      code: 'consent_accessed',
+      subject: '{{organizationName}} viewed your shared data',
+      body: '{{actorName}} at {{organizationName}} accessed {{scope}}. Open consent and data sharing to review the access log.',
+      variables: ['organizationName', 'actorName', 'scope'],
+    },
+  ];
+
+  for (const tpl of templates) {
+    await query(
+      `INSERT INTO notification_templates (organization_id, code, channel, locale, subject, body, variables, is_active)
+       VALUES (NULL, $1, 'in_app', 'en', $2, $3, $4::text[], TRUE)
+       ON CONFLICT ((COALESCE(organization_id, '00000000-0000-0000-0000-000000000000'::uuid)), code, channel, locale)
+       DO UPDATE SET
+         subject = EXCLUDED.subject,
+         body = EXCLUDED.body,
+         variables = EXCLUDED.variables,
+         is_active = TRUE`,
+      [tpl.code, tpl.subject, tpl.body, tpl.variables]
+    );
+  }
+}
+
 export async function seedDatabase() {
   console.log('[DB SEED] Seeding initial database records...');
 
   try {
     await ensureSystemRolePermissions();
+    await ensureInAppNotificationTemplates();
     // 0. Ensure system admin user exists
     let systemUserId = '';
     const existingUser = await query("SELECT id FROM users WHERE email = 'admin@bidready360.bw' LIMIT 1");

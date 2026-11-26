@@ -1604,13 +1604,14 @@ export class AuthService {
       role_id: string;
       department: string | null;
       job_title: string | null;
+      approval_limit_bwp: string | null;
       invited_by_user_id: string;
       expires_at: Date;
       accepted_at: Date | null;
       revoked_at: Date | null;
     }>(
       `SELECT id, email::text AS email, organization_id, supplier_id, role_id,
-              department, job_title, invited_by_user_id, expires_at, accepted_at, revoked_at
+              department, job_title, approval_limit_bwp, invited_by_user_id, expires_at, accepted_at, revoked_at
        FROM invitations
        WHERE token_hash = $1
        LIMIT 1`,
@@ -1684,18 +1685,43 @@ export class AuthService {
     }
 
     if (inv.organization_id) {
-      await query(
-        `INSERT INTO organization_members (
-           organization_id, user_id, role_id, is_owner, status, department, job_title,
-           mfa_enforced, invited_by_user_id, invited_at, joined_at
-         ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, FALSE, $6, NOW(), NOW())
-         ON CONFLICT (organization_id, user_id) DO UPDATE
-         SET role_id = EXCLUDED.role_id,
-             status = 'active',
-             joined_at = COALESCE(organization_members.joined_at, NOW()),
-             updated_at = NOW()`,
-        [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.invited_by_user_id]
-      );
+      const hasLimitRes = await query<{ exists: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'approval_limit_bwp'
+         ) AS exists`
+      ).catch(() => ({ rows: [{ exists: false }] }));
+
+      if (hasLimitRes.rows[0]?.exists) {
+        await query(
+          `INSERT INTO organization_members (
+             organization_id, user_id, role_id, is_owner, status, department, job_title,
+             approval_limit_bwp, mfa_enforced, invited_by_user_id, invited_at, joined_at
+           ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, $6, TRUE, $7, NOW(), NOW())
+           ON CONFLICT (organization_id, user_id) DO UPDATE
+           SET role_id = EXCLUDED.role_id,
+               department = COALESCE(EXCLUDED.department, organization_members.department),
+               job_title = COALESCE(EXCLUDED.job_title, organization_members.job_title),
+               approval_limit_bwp = COALESCE(EXCLUDED.approval_limit_bwp, organization_members.approval_limit_bwp),
+               status = 'active',
+               joined_at = COALESCE(organization_members.joined_at, NOW()),
+               updated_at = NOW()`,
+          [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.approval_limit_bwp, inv.invited_by_user_id]
+        );
+      } else {
+        await query(
+          `INSERT INTO organization_members (
+             organization_id, user_id, role_id, is_owner, status, department, job_title,
+             mfa_enforced, invited_by_user_id, invited_at, joined_at
+           ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, TRUE, $6, NOW(), NOW())
+           ON CONFLICT (organization_id, user_id) DO UPDATE
+           SET role_id = EXCLUDED.role_id,
+               status = 'active',
+               joined_at = COALESCE(organization_members.joined_at, NOW()),
+               updated_at = NOW()`,
+          [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.invited_by_user_id]
+        );
+      }
     } else if (inv.supplier_id) {
       await query(
         `INSERT INTO supplier_members (

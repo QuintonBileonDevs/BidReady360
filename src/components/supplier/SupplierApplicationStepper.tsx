@@ -4,7 +4,7 @@ import { Call, FormField, PriceLineItem, ApplicationResponse, SupplierDocument }
 import { StatusChip } from '../common/StatusChip';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
 import { ApplicationsLockedPrompt } from './ApplicationsLockedPrompt';
-import { supplierApi } from '../../services/api';
+import { callsApi, supplierApi } from '../../services/api';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -167,6 +167,14 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
   // Withdraw application dialog
   const [isWithdrawDialogOpen, setIsWithdrawDialogOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  // Live addenda & acknowledgement state
+  const [liveAddenda, setLiveAddenda] = useState<any[]>(selectedCall?.addenda || []);
+  const [acknowledgingAddendumId, setAcknowledgingAddendumId] = useState<string | null>(null);
+  const [addendumAckError, setAddendumAckError] = useState<string | null>(null);
 
   // Autosave indicator
   const [autosaveTime, setAutosaveTime] = useState<string>('Just now');
@@ -175,7 +183,67 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
     if (selectedCall?.lineItems) {
       setLineItemsState(JSON.parse(JSON.stringify(selectedCall.lineItems)));
     }
+    setLiveAddenda(selectedCall?.addenda || []);
   }, [selectedCall]);
+
+  useEffect(() => {
+    if (!selectedCall?.id) return;
+    let active = true;
+    callsApi
+      .getDetail(selectedCall.id)
+      .then((detail) => {
+        if (!active || !detail) return;
+        if (Array.isArray(detail.addenda)) {
+          setLiveAddenda(
+            detail.addenda.map((a: any) => ({
+              id: a.id,
+              number: a.addendumNo,
+              title: a.title,
+              issuedDate: a.publishedAt ? String(a.publishedAt).slice(0, 10) : '',
+              summary: a.body || '',
+              newClosesAt: a.newClosesAt || undefined,
+              acknowledged: Boolean(a.acknowledged),
+              acknowledgementsCount: typeof a.acknowledgementsCount === 'number' ? a.acknowledgementsCount : 0,
+            }))
+          );
+        }
+        if (Array.isArray(detail.requiredDocuments) && detail.requiredDocuments.length > 0) {
+          setSelectedCall((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  requiredDocumentTypes: detail.requiredDocuments.map((d: any) => d.name),
+                  closingDate: detail.closesAt ? String(detail.closesAt).slice(0, 10) : prev.closingDate,
+                }
+              : prev
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [selectedCall?.id]);
+
+  const handleAcknowledgeAddendum = async (addendumId: string) => {
+    if (!selectedCall?.id || acknowledgingAddendumId) return;
+    setAcknowledgingAddendumId(addendumId);
+    setAddendumAckError(null);
+    try {
+      await callsApi.acknowledgeAddendum(selectedCall.id, addendumId);
+      setLiveAddenda((prev) =>
+        prev.map((a) =>
+          a.id === addendumId
+            ? { ...a, acknowledged: true, acknowledgementsCount: (a.acknowledgementsCount || 0) + (a.acknowledged ? 0 : 1) }
+            : a
+        )
+      );
+    } catch (err: any) {
+      setAddendumAckError(err?.message || 'Unable to record addendum acknowledgement.');
+    } finally {
+      setAcknowledgingAddendumId(null);
+    }
+  };
 
   // Handle BOQ Unit Price Changes
   const handleUnitPriceChange = (itemId: string, unitPrice: number) => {
@@ -579,7 +647,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               }
             : undefined,
         initialTimelineNote: `Application submitted by ${supplier.legalName || 'Supplier'}. Receipt ${receiptNum} issued on ledger.`,
-      });
+      }, { skipApiSync: true });
 
       addAuditEvent({
         action: 'Tender Application & Sealed Bid Submitted',
@@ -607,16 +675,22 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
   };
 
   // Withdraw newly submitted application
-  const handleExecuteWithdraw = () => {
-    if (!submittedReceipt) return;
-
-    withdrawApplication(
-      submittedReceipt.appId,
-      'Application withdrawn voluntarily by supplier before evaluation committee review.'
-    );
-
-    setIsWithdrawDialogOpen(false);
-    onFinished(submittedReceipt.appId);
+  const handleExecuteWithdraw = async () => {
+    if (!submittedReceipt || isWithdrawing) return;
+    setWithdrawError(null);
+    setIsWithdrawing(true);
+    try {
+      await withdrawApplication(
+        submittedReceipt.appId,
+        withdrawReason.trim() || 'Application withdrawn voluntarily by supplier before tender closing deadline.'
+      );
+      setIsWithdrawDialogOpen(false);
+      onFinished(submittedReceipt.appId);
+    } catch (err: any) {
+      setWithdrawError(err?.message || 'Failed to withdraw application.');
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   const stepLabels = [
@@ -646,13 +720,32 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
       {/* =========================================================================
           1. HEADER SUMMARISING THE CALL
           ========================================================================= */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+      <div
+        className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 p-6 space-y-4"
+        style={{
+          borderLeftColor:
+            selectedCall.orgBrandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(selectedCall.orgBrandPrimaryColor)
+              ? selectedCall.orgBrandPrimaryColor
+              : '#1F5F99',
+        }}
+      >
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="text-[14px] font-semibold text-[#1F5F99] bg-[#EAF2FA] dark:bg-[#1E364A] dark:text-[#6FAEE0] px-3 py-0.5 rounded-[4px]">
+              <span
+                className="text-[14px] font-semibold text-white px-3 py-0.5 rounded-[4px]"
+                style={{
+                  backgroundColor:
+                    selectedCall.orgBrandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(selectedCall.orgBrandPrimaryColor)
+                      ? selectedCall.orgBrandPrimaryColor
+                      : '#1F5F99',
+                }}
+              >
                 {selectedCall.organizationName}
               </span>
+              {selectedCall.orgBrandSubtext && (
+                <span className="text-[13px] text-[#6B7A87]">{selectedCall.orgBrandSubtext}</span>
+              )}
               <span className="text-[14px] text-[#6B7A87]">· Tender ref: {selectedCall.callNumber}</span>
               <StatusChip status={selectedCall.type} />
             </div>
@@ -660,6 +753,12 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             <h1 className="font-heading font-semibold text-[24px] sm:text-[28px] text-[#10212E] dark:text-white leading-tight">
               {selectedCall.title}
             </h1>
+
+            {selectedCall.orgWelcomeNotice && (
+              <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] px-3 py-2">
+                {selectedCall.orgWelcomeNotice}
+              </p>
+            )}
 
             <div className="flex items-center gap-4 text-[14px] text-[#6B7A87] flex-wrap">
               <span className="inline-flex items-center gap-1.5">
@@ -737,6 +836,48 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               <Upload className="w-4 h-4" />
               <span>Upload trading licence</span>
             </button>
+          </div>
+        )}
+
+        {/* Formal Addenda Notice & Acknowledgement */}
+        {liveAddenda.some((ad) => !ad.acknowledged) && (
+          <div className="p-4 rounded-[12px] bg-[#FFFBEB] dark:bg-[#92400E]/20 border border-[#FDE68A] dark:border-[#92400E]/50 space-y-2.5 text-[14px]">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5" />
+              <div className="space-y-1 flex-1">
+                <span className="font-semibold text-[#92400E] dark:text-[#FCD34D] block">
+                  Published Tender Addenda — Please review and acknowledge
+                </span>
+                {addendumAckError && (
+                  <p className="text-xs text-[#C2412D]">{addendumAckError}</p>
+                )}
+                <div className="space-y-2 pt-1">
+                  {liveAddenda
+                    .filter((ad) => !ad.acknowledged)
+                    .map((ad) => (
+                      <div
+                        key={ad.id}
+                        className="p-2.5 rounded-[8px] bg-white/80 dark:bg-[#10212E]/80 border border-[#FDE68A]/80 dark:border-[#92400E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[13px]"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-[#10212E] dark:text-white">
+                            {ad.title} <span className="font-mono text-[11px] text-[#6B7A87]">({ad.issuedDate})</span>
+                          </div>
+                          <p className="text-[#43525F] dark:text-[#B2C3D2] text-xs">{ad.summary}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={acknowledgingAddendumId === ad.id}
+                          onClick={() => handleAcknowledgeAddendum(ad.id)}
+                          className="px-3.5 py-1.5 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white rounded-[6px] text-xs font-semibold shrink-0 cursor-pointer"
+                        >
+                          {acknowledgingAddendumId === ad.id ? 'Recording...' : 'Acknowledge Addendum'}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1876,6 +2017,25 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 Are you sure you want to withdraw your bid for <strong>{selectedCall.title}</strong>? Once withdrawn, your sealed proposal will be removed from evaluation and the committee will be notified. This action cannot be undone.
               </p>
 
+              <div className="space-y-1">
+                <label className="block font-medium text-[#10212E] dark:text-white text-[13px]">
+                  Reason for withdrawal (optional)
+                </label>
+                <input
+                  type="text"
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  placeholder="e.g. Revised capacity or schedule conflict prior to closing"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[13px]"
+                />
+              </div>
+
+              {withdrawError && (
+                <div className="p-3 rounded-[8px] bg-[#FEF2F2] dark:bg-[#7F1D1D]/20 border border-[#FCA5A5] text-[#8E2A1B] dark:text-red-300 text-[13px]">
+                  {withdrawError}
+                </div>
+              )}
+
               <div className="p-3.5 rounded-[8px] bg-[#FEF2F2] dark:bg-[#7F1D1D]/20 border border-[#FCA5A5] dark:border-[#7F1D1D]/40 text-[#8E2A1B] dark:text-red-300">
                 Notice: Withdrawing frees any tied guarantees, but you must submit a new application before the deadline to be reconsidered.
               </div>
@@ -1884,17 +2044,19 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
               <button
                 type="button"
+                disabled={isWithdrawing}
                 onClick={() => setIsWithdrawDialogOpen(false)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer disabled:opacity-50"
               >
                 Keep application
               </button>
               <button
                 type="button"
+                disabled={isWithdrawing}
                 onClick={handleExecuteWithdraw}
-                className="px-5 py-2 bg-[#C2412D] hover:bg-[#A12B1B] text-white rounded-[6px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-5 py-2 bg-[#C2412D] hover:bg-[#A12B1B] text-white rounded-[6px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
               >
-                <span>Withdraw application</span>
+                <span>{isWithdrawing ? 'Withdrawing...' : 'Withdraw application'}</span>
               </button>
             </div>
           </div>

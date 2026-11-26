@@ -348,6 +348,34 @@ export const callsApi = {
       body: JSON.stringify({ question, topic }),
     });
   },
+
+  async acknowledgeAddendum(callId: string, addendumId: string) {
+    return apiRequest<{ success: boolean; addendumId: string; acknowledged: boolean }>(
+      `/api/calls/${encodeURIComponent(callId)}/addenda/${encodeURIComponent(addendumId)}/acknowledge`,
+      { method: 'POST' }
+    );
+  },
+};
+
+// ---------------------------------------------------------------------
+// Notifications API
+// ---------------------------------------------------------------------
+export const notificationsApi = {
+  async list(limit = 50) {
+    return apiRequest<any[]>(`/api/notifications?limit=${encodeURIComponent(String(limit))}`, { cache: 'no-store' });
+  },
+
+  async getUnreadCount() {
+    return apiRequest<{ unreadCount: number }>('/api/notifications/unread-count', { cache: 'no-store' });
+  },
+
+  async markRead(id: string) {
+    return apiRequest<{ success: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+  },
+
+  async markAllRead() {
+    return apiRequest<{ success: boolean; updatedCount: number }>('/api/notifications/read-all', { method: 'POST' });
+  },
 };
 
 // ---------------------------------------------------------------------
@@ -570,6 +598,53 @@ export const supplierApi = {
     return apiRequest<any[]>('/api/supplier/consent');
   },
 
+  async listConsentAccessLogs(limit = 50) {
+    return apiRequest<
+      {
+        id: string;
+        organizationId: string;
+        organizationName: string;
+        supplierId: string;
+        consentGrantId: string | null;
+        accessedByUserId: string;
+        accessedByName: string;
+        accessedDataScope: string[];
+        ipAddress: string | null;
+        accessedAt: string;
+      }[]
+    >(`/api/supplier/consent/access-logs?limit=${encodeURIComponent(String(limit))}`, { cache: 'no-store' });
+  },
+
+  async grantConsent(payload: {
+    organizationId: string;
+    scopes?: Record<string, boolean>;
+    selectedDocumentIds?: string[];
+    selectedDocumentNames?: string[];
+    expiresAt?: string | null;
+    purpose?: string;
+  }) {
+    return apiRequest<any>('/api/supplier/consent', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateConsentScope(
+    grantId: string,
+    payload: {
+      scopes?: Record<string, boolean>;
+      selectedDocumentIds?: string[];
+      selectedDocumentNames?: string[];
+      expiresAt?: string | null;
+      purpose?: string;
+    }
+  ) {
+    return apiRequest<any>(`/api/supplier/consent/${encodeURIComponent(grantId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async revokeConsent(grantId: string, reason?: string) {
     return apiRequest(`/api/supplier/consent/${grantId}/revoke`, {
       method: 'POST',
@@ -592,6 +667,24 @@ export const supplierApi = {
     });
   },
 
+  async withdrawApplication(applicationId: string, reason?: string) {
+    return apiRequest(`/api/supplier/applications/${encodeURIComponent(applicationId)}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async respondToInfoRequest(applicationId: string, responseMessage: string) {
+    return apiRequest(`/api/supplier/applications/${encodeURIComponent(applicationId)}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ responseMessage }),
+    });
+  },
+
+  async getBid(callId: string) {
+    return apiRequest<any>(`/api/supplier/bids/${encodeURIComponent(callId)}`, { cache: 'no-store' });
+  },
+
   async sealBid(payload: {
     callId: string;
     financialSchedule: { lineNo: number; description: string; quantity: number; unitPrice: number }[];
@@ -600,6 +693,17 @@ export const supplierApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async withdrawBid(callId: string, reason?: string) {
+    return apiRequest(`/api/supplier/bids/${encodeURIComponent(callId)}/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  async listInvitations() {
+    return apiRequest<any[]>('/api/supplier/invitations', { cache: 'no-store' });
   },
 };
 
@@ -658,8 +762,35 @@ export const buyerApi = {
     });
   },
 
+  async listMembers() {
+    return apiRequest<any[]>('/api/buyer/members', { cache: 'no-store' });
+  },
+
+  async listSuppliers() {
+    return apiRequest<any[]>('/api/buyer/suppliers', { cache: 'no-store' });
+  },
+
+  async getSupplierProfile(supplierId: string) {
+    return apiRequest<any>(`/api/buyer/suppliers/${encodeURIComponent(supplierId)}`, { cache: 'no-store' });
+  },
+
+  async listCallInvitations(callId: string) {
+    return apiRequest<any[]>(`/api/buyer/calls/${encodeURIComponent(callId)}/invitations`, { cache: 'no-store' });
+  },
+
+  async inviteSuppliers(callId: string, supplierIds: string[]) {
+    return apiRequest(`/api/buyer/calls/${encodeURIComponent(callId)}/invitations`, {
+      method: 'POST',
+      body: JSON.stringify({ supplierIds }),
+    });
+  },
+
   async listBids(callId: string) {
     return apiRequest<any[]>(`/api/buyer/bids/${callId}`);
+  },
+
+  async getOpeningSession(callId: string) {
+    return apiRequest<any>(`/api/buyer/bids/${encodeURIComponent(callId)}/session`, { cache: 'no-store' });
   },
 
   async conductOpeningSession(callId: string, witnesses?: any[]) {
@@ -757,6 +888,293 @@ export const buyerApi = {
     const objectUrl = URL.createObjectURL(blob);
     return { blob, fileName, mimeType, objectUrl };
   },
+
+  // Step 4: Buyer Admin & Workspace Customization
+  async getTeam() {
+    return apiRequest<{ members: any[]; pendingInvitations: any[]; roles: any[] }>('/api/buyer/team', {
+      cache: 'no-store',
+    });
+  },
+
+  async listRoles() {
+    return apiRequest<any[]>('/api/buyer/roles', { cache: 'no-store' });
+  },
+
+  async inviteMember(payload: {
+    email: string;
+    roleName?: string;
+    roleId?: string;
+    department?: string;
+    jobTitle?: string;
+    approvalLimitBWP?: number | null;
+  }) {
+    return apiRequest<{
+      id: string;
+      email: string;
+      role: string;
+      department: string;
+      jobTitle: string;
+      approvalLimitBWP: number | null;
+      sentAt: string;
+      expiresAt: string;
+      inviteToken: string;
+    }>('/api/buyer/team/invite', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateMember(
+    memberId: string,
+    payload: {
+      roleName?: string;
+      roleId?: string;
+      department?: string;
+      jobTitle?: string;
+      approvalLimitBWP?: number | null;
+      mfaEnabled?: boolean;
+      conflictDeclared?: boolean;
+    }
+  ) {
+    return apiRequest(`/api/buyer/team/members/${encodeURIComponent(memberId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateMemberStatus(memberId: string, status: 'active' | 'suspended', reason?: string) {
+    return apiRequest(`/api/buyer/team/members/${encodeURIComponent(memberId)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status, reason }),
+    });
+  },
+
+  async removeMember(memberId: string) {
+    return apiRequest(`/api/buyer/team/members/${encodeURIComponent(memberId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async revokeTeamInvitation(invitationId: string) {
+    return apiRequest(`/api/buyer/team/invitations/${encodeURIComponent(invitationId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async resendTeamInvitation(invitationId: string) {
+    return apiRequest<{ id: string; email: string; expiresAt: string; inviteToken: string }>(
+      `/api/buyer/team/invitations/${encodeURIComponent(invitationId)}/resend`,
+      { method: 'POST' }
+    );
+  },
+
+  async getBranding() {
+    return apiRequest<{
+      id: string;
+      name: string;
+      slug: string;
+      brandSubtext: string;
+      brandPrimaryColor: string;
+      customDomain: string;
+      contactEmail: string;
+      contactPhone: string;
+      physicalAddress: string;
+      city: string;
+      welcomeNotice: string;
+    }>('/api/buyer/branding', { cache: 'no-store' });
+  },
+
+  async updateBranding(payload: {
+    name: string;
+    brandSubtext?: string;
+    brandPrimaryColor?: string;
+    customDomain?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    welcomeNotice?: string;
+  }) {
+    return apiRequest<any>('/api/buyer/branding', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getSettings() {
+    return apiRequest<{
+      minRfpAdvertisingDays: number;
+      defaultCurrency: string;
+      defaultClosingTimeCat: string;
+      clarificationCutoffDays: number;
+      requireGazetteNotice: boolean;
+      autoDeadlineReminders: boolean;
+      requireMfaEvaluators: boolean;
+    }>('/api/buyer/settings', { cache: 'no-store' });
+  },
+
+  async updateSettings(payload: {
+    minRfpAdvertisingDays: number;
+    defaultCurrency: string;
+    defaultClosingTimeCat: string;
+    clarificationCutoffDays: number;
+    requireGazetteNotice: boolean;
+    autoDeadlineReminders: boolean;
+    requireMfaEvaluators: boolean;
+  }) {
+    return apiRequest<any>('/api/buyer/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async listFormTemplates() {
+    return apiRequest<any[]>('/api/buyer/form-templates', { cache: 'no-store' });
+  },
+
+  async createFormTemplate(payload: {
+    title: string;
+    purpose?: string;
+    description?: string;
+    version?: string;
+    fields: any[];
+  }) {
+    return apiRequest<{ id: string; templates: any[] }>('/api/buyer/form-templates', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateFormTemplate(
+    templateId: string,
+    payload: { title?: string; description?: string; version?: string; fields: any[] }
+  ) {
+    return apiRequest<{ success: boolean; templates: any[] }>(
+      `/api/buyer/form-templates/${encodeURIComponent(templateId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async deleteFormTemplate(templateId: string) {
+    return apiRequest(`/api/buyer/form-templates/${encodeURIComponent(templateId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getWorkflows() {
+    return apiRequest<{ stages: any[]; scoringTemplates: any[]; roles: any[] }>('/api/buyer/workflows', {
+      cache: 'no-store',
+    });
+  },
+
+  async createWorkflowStage(payload: {
+    appliesTo: 'registration' | 'eoi' | 'rfp';
+    name: string;
+    sequenceNo: number;
+    stageType: 'review' | 'approval';
+    requiredRoleId?: string | null;
+    slaDays?: number | null;
+  }) {
+    return apiRequest<{ id: string; stages: any[]; scoringTemplates: any[]; roles: any[] }>(
+      '/api/buyer/workflows/stages',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }
+    );
+  },
+
+  async deleteWorkflowStage(stageId: string) {
+    return apiRequest(`/api/buyer/workflows/stages/${encodeURIComponent(stageId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async saveScoringTemplates(scoringTemplates: any[]) {
+    return apiRequest<{ scoringTemplates: any[] }>('/api/buyer/workflows/scoring-templates', {
+      method: 'PUT',
+      body: JSON.stringify({ scoringTemplates }),
+    });
+  },
+
+  async getIntegrations() {
+    return apiRequest<{ apiClients: any[]; webhooks: any[] }>('/api/buyer/integrations', { cache: 'no-store' });
+  },
+
+  async createApiKey(payload: { name: string; scopes?: string[] }) {
+    return apiRequest<{
+      id: string;
+      name: string;
+      keyPrefix: string;
+      scopes: string[];
+      createdAt: string;
+      plainKeyOnce: string;
+    }>('/api/buyer/integrations/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async revokeApiKey(clientId: string) {
+    return apiRequest(`/api/buyer/integrations/api-keys/${encodeURIComponent(clientId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async saveWebhook(payload: { id?: string; url: string; eventTypes?: string[]; isActive?: boolean }) {
+    return apiRequest<{
+      id: string;
+      url: string;
+      eventTypes: string[];
+      isActive: boolean;
+      createdAt: string;
+      signingSecretOnce?: string;
+    }>('/api/buyer/integrations/webhooks', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteWebhook(endpointId: string) {
+    return apiRequest(`/api/buyer/integrations/webhooks/${encodeURIComponent(endpointId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getBilling() {
+    return apiRequest<{
+      subscription: {
+        id: string | null;
+        status: string;
+        currentPeriodStart: string | null;
+        currentPeriodEnd: string | null;
+        planName: string;
+        planCode: string;
+        price: number;
+        currency: string;
+        billingInterval: string;
+        maxUsers: number | null;
+        maxCallsPerYear: number | null;
+        features: Record<string, any>;
+      } | null;
+      usage: {
+        callsPublishedThisYear: number;
+        activeSeatsUsed: number;
+      };
+      availablePlans: any[];
+      invoices: {
+        id: string;
+        invoiceNumber: string;
+        amount: number;
+        currency: string;
+        status: string;
+        issuedAt: string | null;
+        dueAt: string | null;
+        paidAt: string | null;
+      }[];
+    }>('/api/buyer/billing', { cache: 'no-store' });
+  },
 };
 
 // ---------------------------------------------------------------------
@@ -773,6 +1191,20 @@ export const auditApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async verifyChain() {
+    return apiRequest<{
+      valid: boolean;
+      chainLinkValid: boolean;
+      totalChecked: number;
+      brokenLinks: number;
+      hashMismatches: number;
+      latestHash: string | null;
+      firstBrokenEventId: string | null;
+      firstBrokenReason: string | null;
+      checkedAt: string;
+    }>('/api/audit/verify', { cache: 'no-store' });
   },
 };
 
@@ -1113,6 +1545,22 @@ export interface AdminNotificationRecord {
   sentAt: string | null;
 }
 
+export interface AdminInAppNotificationRecord {
+  id: string;
+  eventType: string;
+  title: string;
+  body: string | null;
+  linkUrl: string | null;
+  priority: 'urgent' | 'info' | 'success' | 'warning' | string;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  recipientName: string;
+  recipientEmail: string | null;
+  workspaceName: string;
+  workspaceType: 'Buyer' | 'Supplier' | 'Platform' | string;
+}
+
 export interface AdminAuditEventRecord {
   id: string;
   timestamp: string;
@@ -1124,6 +1572,8 @@ export interface AdminAuditEventRecord {
   entityId: string;
   details: string;
   ipAddress: string;
+  prevHash?: string | null;
+  rowHash?: string | null;
 }
 
 export interface AdminPlatformSettings {
@@ -1415,6 +1865,10 @@ export const adminApi = {
   },
 
   // Notifications
+  async listInAppNotifications(): Promise<AdminInAppNotificationRecord[]> {
+    return apiRequest('/api/admin/notifications/in-app', { cache: 'no-store' });
+  },
+
   async listNotifications(): Promise<AdminNotificationRecord[]> {
     return apiRequest('/api/admin/notifications', { cache: 'no-store' });
   },
@@ -1443,6 +1897,20 @@ export const adminApi = {
     if (filters?.limit) qs.set('limit', String(filters.limit));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return apiRequest(`/api/admin/audit-log${suffix}`, { cache: 'no-store' });
+  },
+
+  async verifyAuditChain() {
+    return apiRequest<{
+      valid: boolean;
+      chainLinkValid: boolean;
+      totalChecked: number;
+      brokenLinks: number;
+      hashMismatches: number;
+      latestHash: string | null;
+      firstBrokenEventId: string | null;
+      firstBrokenReason: string | null;
+      checkedAt: string;
+    }>('/api/admin/audit-log/verify', { cache: 'no-store' });
   },
 
   // Support Sessions

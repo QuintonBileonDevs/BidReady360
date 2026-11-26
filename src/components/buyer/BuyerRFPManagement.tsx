@@ -12,6 +12,11 @@ import {
   FileText,
   Key,
   AlertCircle,
+  Users,
+  Send,
+  Plus,
+  Trash2,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const BuyerRFPManagement: React.FC = () => {
@@ -20,10 +25,24 @@ export const BuyerRFPManagement: React.FC = () => {
   const [orgCalls, setOrgCalls] = useState<Call[]>(contextCalls);
   const [orgClarifications, setOrgClarifications] = useState<Clarification[]>(contextClarifications);
   const [selectedCallId, setSelectedCallId] = useState<string>(contextCalls[0]?.id || '');
-  const [activeTab, setActiveTab] = useState<'clarifications' | 'addenda' | 'sealed_bids'>('sealed_bids');
+  const [activeTab, setActiveTab] = useState<'clarifications' | 'addenda' | 'sealed_bids' | 'invitations'>('sealed_bids');
   const [bidsList, setBidsList] = useState<any[]>([]);
+  const [openingSession, setOpeningSession] = useState<any | null>(null);
   const [isLoadingBids, setIsLoadingBids] = useState(false);
+
+  // Witness modal for Opening Ceremony
+  const [members, setMembers] = useState<any[]>([]);
+  const [isOpeningModalOpen, setIsOpeningModalOpen] = useState(false);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [externalWitnesses, setExternalWitnesses] = useState<{ name: string; witnessRole: string }[]>([]);
   const [isOpeningCeremony, setIsOpeningCeremony] = useState(false);
+
+  // Invitations state
+  const [callInvitations, setCallInvitations] = useState<any[]>([]);
+  const [orgSuppliers, setOrgSuppliers] = useState<any[]>([]);
+  const [selectedInviteIds, setSelectedInviteIds] = useState<string[]>([]);
+  const [isLoadingInvitations, setIsLoadingInvitations] = useState(false);
+  const [isSendingInvites, setIsSendingInvites] = useState(false);
 
   // Answer state
   const [replyingClarId, setReplyingClarId] = useState<string | null>(null);
@@ -34,6 +53,7 @@ export const BuyerRFPManagement: React.FC = () => {
   const [isCreatingAddendum, setIsCreatingAddendum] = useState(false);
   const [addendumTitle, setAddendumTitle] = useState('');
   const [addendumSummary, setAddendumSummary] = useState('');
+  const [addendumNewClosesAt, setAddendumNewClosesAt] = useState('');
   const [isSubmittingAddendum, setIsSubmittingAddendum] = useState(false);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -49,9 +69,11 @@ export const BuyerRFPManagement: React.FC = () => {
 
   const loadBuyerWorkspaceData = useCallback(async () => {
     try {
-      const [callsRes, clarsRes] = await Promise.all([
+      const [callsRes, clarsRes, memRes, supRes] = await Promise.all([
         buyerApi.listCalls().catch(() => null),
         buyerApi.listClarifications().catch(() => null),
+        buyerApi.listMembers().catch(() => []),
+        buyerApi.listSuppliers().catch(() => []),
       ]);
 
       if (Array.isArray(callsRes)) {
@@ -95,6 +117,8 @@ export const BuyerRFPManagement: React.FC = () => {
             title: a.title,
             issuedDate: a.publishedAt ? String(a.publishedAt).slice(0, 10) : '',
             summary: a.body || '',
+            newClosesAt: a.newClosesAt || undefined,
+            acknowledgementsCount: typeof a.acknowledgementsCount === 'number' ? a.acknowledgementsCount : 0,
             downloadUrl: '#',
           })),
         }));
@@ -118,8 +142,18 @@ export const BuyerRFPManagement: React.FC = () => {
         }));
         setOrgClarifications(mappedClars);
       }
+
+      if (Array.isArray(memRes)) {
+        setMembers(memRes);
+        if (currentUser?.id && memRes.some((m: any) => m.userId === currentUser.id)) {
+          setSelectedMemberIds((prev) => (prev.length > 0 ? prev : [currentUser.id]));
+        }
+      }
+      if (Array.isArray(supRes)) {
+        setOrgSuppliers(supRes);
+      }
     } catch {}
-  }, []);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     loadBuyerWorkspaceData();
@@ -131,23 +165,42 @@ export const BuyerRFPManagement: React.FC = () => {
     if (!callId) return;
     setIsLoadingBids(true);
     try {
-      const list = await buyerApi.listBids(callId);
+      const [list, session] = await Promise.all([
+        buyerApi.listBids(callId).catch(() => []),
+        buyerApi.getOpeningSession(callId).catch(() => null),
+      ]);
       setBidsList(Array.isArray(list) ? list : []);
+      setOpeningSession(session || null);
     } catch {
       setBidsList([]);
+      setOpeningSession(null);
     } finally {
       setIsLoadingBids(false);
+    }
+  }, []);
+
+  const loadInvitationsForSelectedCall = useCallback(async (callId: string) => {
+    if (!callId) return;
+    setIsLoadingInvitations(true);
+    try {
+      const list = await buyerApi.listCallInvitations(callId);
+      setCallInvitations(Array.isArray(list) ? list : []);
+    } catch {
+      setCallInvitations([]);
+    } finally {
+      setIsLoadingInvitations(false);
     }
   }, []);
 
   useEffect(() => {
     if (selectedCall?.id) {
       loadBidsForSelectedCall(selectedCall.id);
+      loadInvitationsForSelectedCall(selectedCall.id);
     }
-  }, [selectedCall?.id, loadBidsForSelectedCall]);
+  }, [selectedCall?.id, loadBidsForSelectedCall, loadInvitationsForSelectedCall]);
 
   const callClarifications = orgClarifications.filter((c) => c.callId === selectedCall?.id);
-  const areAllOpened = bidsList.length > 0 && bidsList.some((b) => b.status === 'opened');
+  const areAllOpened = Boolean(openingSession?.sessionStatus === 'completed') || (bidsList.length > 0 && bidsList.some((b) => b.status === 'opened'));
 
   const handlePublishAnswer = async (clarId: string) => {
     if (!answerText.trim() || isPublishingAnswer) return;
@@ -176,10 +229,12 @@ export const BuyerRFPManagement: React.FC = () => {
       await buyerApi.createAddendum(selectedCall.id, {
         title: addendumTitle.trim(),
         body: addendumSummary.trim(),
+        newClosesAt: addendumNewClosesAt ? new Date(addendumNewClosesAt).toISOString() : undefined,
       });
       setIsCreatingAddendum(false);
       setAddendumTitle('');
       setAddendumSummary('');
+      setAddendumNewClosesAt('');
       await loadBuyerWorkspaceData();
       showToast('Addendum persisted and published to all participating bidders.');
     } catch (err: any) {
@@ -201,21 +256,73 @@ export const BuyerRFPManagement: React.FC = () => {
     }
   };
 
-  const handleExecuteOpeningSession = async () => {
+  const effectiveMemberWitnesses = new Set<string>(selectedMemberIds);
+  if (currentUser?.id && members.some((m) => m.userId === currentUser.id)) {
+    effectiveMemberWitnesses.add(currentUser.id);
+  }
+  const validExternalCount = externalWitnesses.filter((w) => w.name.trim().length >= 2).length;
+  const totalSelectedWitnesses =
+    effectiveMemberWitnesses.size +
+    (currentUser?.id && members.some((m) => m.userId === currentUser.id) ? 0 : 1) +
+    validExternalCount;
+  const quorumSatisfied = members.length >= 2 ? effectiveMemberWitnesses.size >= 2 : totalSelectedWitnesses >= 2;
+
+  const handleExecuteOpeningSession = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedCall || isOpeningCeremony) return;
+    if (!quorumSatisfied) {
+      setErrorMessage('Opening quorum requires at least 2 distinct organization officers/witnesses.');
+      return;
+    }
     setIsOpeningCeremony(true);
     setErrorMessage(null);
     try {
-      await buyerApi.conductOpeningSession(selectedCall.id);
+      const payloadWitnesses = [
+        ...Array.from(effectiveMemberWitnesses).map((uid) => {
+          const m = members.find((mem) => mem.userId === uid);
+          return {
+            userId: uid,
+            name: m?.fullName,
+            witnessRole: uid === currentUser?.id ? 'Presiding Officer' : m?.roleName || 'Co-Witness',
+          };
+        }),
+        ...externalWitnesses
+          .filter((w) => w.name.trim().length >= 2)
+          .map((w) => ({
+            name: w.name.trim(),
+            witnessRole: w.witnessRole.trim() || 'External Witness',
+          })),
+      ];
+
+      await buyerApi.conductOpeningSession(selectedCall.id, payloadWitnesses);
+      setIsOpeningModalOpen(false);
       await loadBidsForSelectedCall(selectedCall.id);
       await loadBuyerWorkspaceData();
-      showToast('Sealed bid opening ceremony executed and logged.');
+      showToast('Sealed bid opening ceremony executed and witness register committed to audit ledger.');
     } catch (err: any) {
       setErrorMessage(err?.message || 'Unable to unseal bids for this call.');
     } finally {
       setIsOpeningCeremony(false);
     }
   };
+
+  const handleSendInvitations = async () => {
+    if (!selectedCall || selectedInviteIds.length === 0 || isSendingInvites) return;
+    setIsSendingInvites(true);
+    setErrorMessage(null);
+    try {
+      await buyerApi.inviteSuppliers(selectedCall.id, selectedInviteIds);
+      setSelectedInviteIds([]);
+      await loadInvitationsForSelectedCall(selectedCall.id);
+      showToast(`Sent ${selectedInviteIds.length} formal tender invitation${selectedInviteIds.length === 1 ? '' : 's'}.`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to dispatch supplier invitations.');
+    } finally {
+      setIsSendingInvites(false);
+    }
+  };
+
+  const invitedSupplierIds = new Set(callInvitations.map((inv) => inv.supplierId));
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -240,13 +347,13 @@ export const BuyerRFPManagement: React.FC = () => {
             <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               RFP Control Center
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">· Clarifications, Addenda & Cryptographic Sealed Envelopes</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">· Clarifications, Addenda, Invitations & Sealed Envelopes</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900 dark:text-white">
             RFP Governance & Sealed Bid Opening
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
-            Oversee sealed tender packages, answer bidder questions with formal audit trails, and manage call status, visibility, and addenda.
+            Oversee sealed tender packages, answer bidder questions, issue addenda, and dispatch formal supplier invitations.
           </p>
         </div>
 
@@ -304,7 +411,7 @@ export const BuyerRFPManagement: React.FC = () => {
       <div className="border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('sealed_bids')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'sealed_bids'
               ? 'border-[#1F5F99] text-[#1F5F99]'
               : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -316,7 +423,7 @@ export const BuyerRFPManagement: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('clarifications')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'clarifications'
               ? 'border-[#1F5F99] text-[#1F5F99]'
               : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -328,7 +435,7 @@ export const BuyerRFPManagement: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('addenda')}
-          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'addenda'
               ? 'border-[#1F5F99] text-[#1F5F99]'
               : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -336,6 +443,18 @@ export const BuyerRFPManagement: React.FC = () => {
         >
           <FileText className="w-4 h-4" />
           <span>Addenda ({selectedCall?.addenda.length || 0})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('invitations')}
+          className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'invitations'
+              ? 'border-[#1F5F99] text-[#1F5F99]'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Invitations ({callInvitations.length})</span>
         </button>
       </div>
 
@@ -372,18 +491,18 @@ export const BuyerRFPManagement: React.FC = () => {
 
                 <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                   {areAllOpened
-                    ? 'The tender box has been unsealed by the authorized procurement committee. Financial offers are decrypted for evaluation.'
-                    : `In compliance with Botswana procurement laws, bidder pricing remains sealed until closing time: ${selectedCall.closingDate} (${selectedCall.closingTimeCAT}).`}
+                    ? 'The tender box has been unsealed by a witnessed procurement opening session. Financial offers are decrypted for evaluation.'
+                    : `Bidder pricing remains cryptographically sealed until closing time: ${selectedCall.closingDate} (${selectedCall.closingTimeCAT}) and a 2-witness opening ceremony.`}
                 </p>
               </div>
 
               <div className="p-5 bg-white/10 rounded-2xl backdrop-blur-xs border border-white/10 text-center space-y-3 shrink-0">
                 <div className="text-xs text-slate-300 font-mono">
-                  {areAllOpened ? 'Opening Officer:' : 'Statutory Closing Countdown:'}
+                  {areAllOpened ? 'Opening Presiding Officer:' : 'Statutory Closing Countdown:'}
                 </div>
                 {areAllOpened ? (
                   <div className="font-bold text-sm text-[#2F8F5B] font-mono">
-                    {officerDisplay}
+                    {openingSession?.conductedByName || officerDisplay}
                   </div>
                 ) : (
                   <div className="text-2xl font-bold font-mono text-[#E8A33D] tabular-nums">
@@ -394,17 +513,36 @@ export const BuyerRFPManagement: React.FC = () => {
                 {!areAllOpened && (
                   <button
                     type="button"
-                    disabled={isOpeningCeremony || bidsList.length === 0}
-                    onClick={handleExecuteOpeningSession}
-                    className="w-full px-4 py-2 bg-[#E8A33D] hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-xs"
+                    disabled={isOpeningCeremony || bidsList.filter((b) => b.status === 'submitted').length === 0}
+                    onClick={() => setIsOpeningModalOpen(true)}
+                    className="w-full px-4 py-2 bg-[#E8A33D] hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer"
                   >
                     <Key className="w-4 h-4" />
-                    <span>{isOpeningCeremony ? 'Unsealing...' : 'Execute Opening Ceremony'}</span>
+                    <span>Configure Witnesses & Open</span>
                   </button>
                 )}
               </div>
             </div>
           </div>
+
+          {openingSession && (
+            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[#065F46] font-semibold">
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
+                  Official Opening Session Record ({openingSession.witnesses?.length || 0} witnesses verified)
+                </span>
+                <span className="font-mono text-[11px]">
+                  {new Date(openingSession.openedAt).toLocaleString('en-BW')}
+                </span>
+              </div>
+              {openingSession.registerSha256 && (
+                <div className="font-mono text-[11px] text-slate-700 bg-white p-2 rounded border border-emerald-200 break-all">
+                  Register SHA-256: {openingSession.registerSha256}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs space-y-4 p-6">
             <div className="flex items-center justify-between">
@@ -467,6 +605,8 @@ export const BuyerRFPManagement: React.FC = () => {
                             <span className="text-base text-[#1F5F99]">
                               {bid.currency || 'BWP'} {Number(bid.totalPrice).toLocaleString()}
                             </span>
+                          ) : bid.status === 'withdrawn' ? (
+                            <span className="text-slate-400 italic">Withdrawn</span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-slate-400 font-medium">
                               <Lock className="w-3.5 h-3.5 text-[#E8A33D]" /> Sealed
@@ -475,7 +615,7 @@ export const BuyerRFPManagement: React.FC = () => {
                         </td>
 
                         <td className="py-3 px-3 text-right">
-                          <StatusChip status={bid.status === 'opened' ? 'Approved' : 'Under review'} />
+                          <StatusChip status={bid.status === 'opened' ? 'Approved' : bid.status === 'withdrawn' ? 'Withdrawn' : 'Under review'} />
                         </td>
                       </tr>
                     ))
@@ -596,7 +736,7 @@ export const BuyerRFPManagement: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsCreatingAddendum(true)}
-                className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184a77] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5"
+                className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184a77] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer"
               >
                 <FilePlus className="w-4 h-4" />
                 <span>Issue New Addendum</span>
@@ -628,6 +768,15 @@ export const BuyerRFPManagement: React.FC = () => {
                     className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Extend Closing Deadline (Optional)</label>
+                  <input
+                    type="datetime-local"
+                    value={addendumNewClosesAt}
+                    onChange={(e) => setAddendumNewClosesAt(e.target.value)}
+                    className="w-full sm:w-auto p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
@@ -654,18 +803,246 @@ export const BuyerRFPManagement: React.FC = () => {
                 </div>
               ) : (
                 selectedCall.addenda.map((add) => (
-                  <div key={add.id} className="p-4 border border-slate-200 rounded-xl bg-white flex items-start justify-between gap-4 text-xs">
+                  <div key={add.id} className="p-4 border border-slate-200 rounded-xl bg-white flex flex-col sm:flex-row sm:items-start justify-between gap-4 text-xs">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-[#10212E]">{add.title}</span>
                         <span className="text-slate-400 font-mono">Issued {add.issuedDate}</span>
+                        {typeof add.acknowledgementsCount === 'number' && (
+                          <span className="font-mono text-[11px] bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded">
+                            {add.acknowledgementsCount} supplier ack{add.acknowledgementsCount === 1 ? '' : 's'}
+                          </span>
+                        )}
                       </div>
                       <p className="text-slate-600 leading-relaxed">{add.summary}</p>
+                      {add.newClosesAt && (
+                        <p className="font-mono text-[11px] text-[#92400E]">
+                          New Closing Deadline: {new Date(add.newClosesAt).toLocaleString('en-BW')}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: Invitations */}
+      {activeTab === 'invitations' && selectedCall && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-heading font-semibold text-base text-[#10212E]">
+                  Formal Supplier Tender Invitations ({selectedCall.visibility || 'open'})
+                </h3>
+                <p className="text-slate-500">
+                  Invite qualified suppliers to participate in this tender call. Required for Invite-Only tenders.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={selectedInviteIds.length === 0 || isSendingInvites}
+                onClick={handleSendInvitations}
+                className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184a77] disabled:opacity-50 text-white font-semibold rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isSendingInvites ? 'Sending...' : `Send Invitations (${selectedInviteIds.length})`}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Select Suppliers */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-700 uppercase text-[11px]">Available Suppliers</h4>
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                  {orgSuppliers.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400">No active suppliers available.</div>
+                  ) : (
+                    orgSuppliers.map((sup) => {
+                      const alreadyInvited = invitedSupplierIds.has(sup.id);
+                      const checked = selectedInviteIds.includes(sup.id);
+                      return (
+                        <label
+                          key={sup.id}
+                          className={`p-3 flex items-center justify-between gap-2 ${alreadyInvited ? 'bg-slate-50 opacity-70' : 'cursor-pointer hover:bg-slate-50'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              disabled={alreadyInvited}
+                              checked={alreadyInvited || checked}
+                              onChange={() =>
+                                setSelectedInviteIds((prev) =>
+                                  prev.includes(sup.id) ? prev.filter((id) => id !== sup.id) : [...prev, sup.id]
+                                )
+                              }
+                            />
+                            <div>
+                              <div className="font-semibold text-slate-900">{sup.legalName}</div>
+                              <div className="text-[11px] text-slate-500">
+                                {sup.city || 'Botswana'} · {sup.verificationStatus || 'active'}
+                              </div>
+                            </div>
+                          </div>
+                          {alreadyInvited && (
+                            <span className="text-[10px] font-semibold bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded">
+                              Invited
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Sent Invitations Register */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-slate-700 uppercase text-[11px]">
+                  Dispatched Invitations ({callInvitations.length})
+                </h4>
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                  {isLoadingInvitations ? (
+                    <div className="p-6 text-center text-slate-400">Loading invitations...</div>
+                  ) : callInvitations.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400">No formal invitations dispatched for this call yet.</div>
+                  ) : (
+                    callInvitations.map((inv) => (
+                      <div key={inv.id} className="p-3 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-slate-900">{inv.supplierName}</div>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            Invited {inv.invitedAt ? new Date(inv.invitedAt).toLocaleDateString('en-BW') : '—'}
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] capitalize">
+                          {inv.status || 'invited'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Witness Quorum Modal */}
+      {isOpeningModalOpen && selectedCall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
+            <div className="pb-3 border-b border-slate-200">
+              <span className="text-[11px] font-bold text-[#1F5F99] uppercase">Statutory Opening Quorum (&gt;= 2 Witnesses)</span>
+              <h3 className="font-heading font-bold text-lg text-[#10212E]">
+                Execute Opening Ceremony — {selectedCall.callNumber}
+              </h3>
+            </div>
+
+            <form onSubmit={handleExecuteOpeningSession} className="space-y-4">
+              {members.length > 0 && (
+                <div className="space-y-2">
+                  <label className="font-semibold text-slate-800 block">Organization Co-Witnesses</label>
+                  <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                    {members.map((m) => {
+                      const isPresiding = m.userId === currentUser?.id;
+                      const checked = effectiveMemberWitnesses.has(m.userId);
+                      return (
+                        <label
+                          key={m.userId}
+                          className={`flex items-center justify-between p-2.5 ${isPresiding ? 'bg-[#EAF2FA]/60' : 'cursor-pointer hover:bg-slate-50'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={isPresiding}
+                              onChange={() =>
+                                setSelectedMemberIds((prev) =>
+                                  prev.includes(m.userId) ? prev.filter((id) => id !== m.userId) : [...prev, m.userId]
+                                )
+                              }
+                            />
+                            <span className="font-medium text-slate-900">
+                              {m.fullName} {isPresiding ? '(Presiding Officer)' : ''}
+                            </span>
+                          </div>
+                          <span className="font-mono text-slate-500">{m.roleName}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-800">External Witnesses</label>
+                  <button
+                    type="button"
+                    onClick={() => setExternalWitnesses((prev) => [...prev, { name: '', witnessRole: 'External Witness' }])}
+                    className="text-[#1F5F99] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add External Witness
+                  </button>
+                </div>
+                {externalWitnesses.map((ew, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      value={ew.name}
+                      onChange={(e) =>
+                        setExternalWitnesses((prev) => prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)))
+                      }
+                      className="col-span-6 p-2 border border-slate-300 rounded-lg"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Role / Title"
+                      value={ew.witnessRole}
+                      onChange={(e) =>
+                        setExternalWitnesses((prev) => prev.map((r, i) => (i === idx ? { ...r, witnessRole: e.target.value } : r)))
+                      }
+                      className="col-span-5 p-2 border border-slate-300 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setExternalWitnesses((prev) => prev.filter((_, i) => i !== idx))}
+                      className="col-span-1 text-[#C2412D] flex items-center justify-center"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className={`p-3 rounded-lg ${quorumSatisfied ? 'bg-emerald-50 text-[#065F46]' : 'bg-amber-50 text-amber-900'}`}>
+                {quorumSatisfied
+                  ? 'Quorum verified: >= 2 witnesses selected.'
+                  : 'Select at least 2 distinct witnesses to proceed.'}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsOpeningModalOpen(false)}
+                  className="px-3 py-1.5 text-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isOpeningCeremony || !quorumSatisfied}
+                  className="px-4 py-2 bg-[#E8A33D] hover:bg-amber-600 text-slate-950 font-bold rounded-lg disabled:opacity-50"
+                >
+                  {isOpeningCeremony ? 'Unsealing...' : 'Confirm Witnesses & Unseal'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

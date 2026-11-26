@@ -1,99 +1,190 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Criterion, Evaluator, Score } from '../../types';
+import { buyerApi } from '../../services/api';
 import {
-  TrendingUp,
   ShieldCheck,
   CheckCircle2,
-  Award,
-  AlertTriangle,
   UserCheck,
-  Percent,
-  Sliders,
-  Save,
   Trophy,
+  AlertCircle,
+  Lock,
+  Loader2,
+  Save,
 } from 'lucide-react';
 
 export const BuyerEvaluation: React.FC = () => {
-  const { criteria, evaluators, scores, saveScore, signConflictDeclaration, applications, calls, updateAwardDecision } = useApp();
-  const [selectedCallId, setSelectedCallId] = useState<string>(calls[0]?.id || '');
-  const [activeEvaluatorId, setActiveEvaluatorId] = useState<string>(evaluators[0]?.id || '');
+  const { currentUser, profileSummary } = useApp();
+
+  const [calls, setCalls] = useState<any[]>([]);
+  const [selectedCallId, setSelectedCallId] = useState<string>('');
+  const [bids, setBids] = useState<any[]>([]);
+  const [criteria, setCriteria] = useState<any[]>([]);
+  const [scores, setScores] = useState<any[]>([]);
+  const [assignment, setAssignment] = useState<any | null>(null);
+
+  const [draftScores, setDraftScores] = useState<Record<string, number>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [isSigningConflict, setIsSigningConflict] = useState(false);
   const [conflictNotes, setConflictNotes] = useState('');
+  const [hasConflictChoice, setHasConflictChoice] = useState(false);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [lockedEvaluatorIds, setLockedEvaluatorIds] = useState<string[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const selectedCall = calls.find((c) => c.id === selectedCallId) || calls[0];
-  const callCriteria = criteria.filter((c) => c.callId === selectedCall?.id);
-  const currentEvaluator = evaluators.find((e) => e.id === activeEvaluatorId) || evaluators[0];
-  const isScoreLocked = lockedEvaluatorIds.includes(currentEvaluator.id);
-
-  const callApplications = applications.filter((a) => a.callId === selectedCall?.id);
+  const evaluatorName = currentUser?.fullName || profileSummary?.displayName || 'Committee Evaluator';
 
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handleScoreChange = (appId: string, critId: string, val: number) => {
-    if (isScoreLocked || !currentEvaluator.hasDeclaredConflict) return;
-    saveScore({
-      callId: selectedCall.id,
-      applicationId: appId,
-      evaluatorId: currentEvaluator.id,
-      evaluatorName: currentEvaluator.name,
-      evaluatorRole: currentEvaluator.role,
-      criterionId: critId,
-      score: Math.min(100, Math.max(0, val)),
-      comments: 'Evaluation verified by score sheet.',
-    });
+  useEffect(() => {
+    buyerApi
+      .listCalls()
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        setCalls(list);
+        if (list[0]?.id) setSelectedCallId(list[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const loadEvaluationData = useCallback(async (callId: string) => {
+    if (!callId) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const [bidsRes, evalRes] = await Promise.all([
+        buyerApi.listBids(callId).catch(() => []),
+        buyerApi.getEvaluations(callId).catch(() => ({ criteria: [], scores: [], assignment: null })),
+      ]);
+      const openedBids = (Array.isArray(bidsRes) ? bidsRes : []).filter((b: any) => b.status === 'opened');
+      setBids(openedBids);
+      setCriteria(Array.isArray(evalRes?.criteria) ? evalRes.criteria : []);
+      const fetchedScores = Array.isArray(evalRes?.scores) ? evalRes.scores : [];
+      setScores(fetchedScores);
+      setAssignment(evalRes?.assignment || null);
+
+      const initialDraft: Record<string, number> = {};
+      const myAssignId = evalRes?.assignment?.id;
+      for (const s of fetchedScores) {
+        if (!myAssignId || s.evaluatorAssignmentId === myAssignId) {
+          if (s.scoreValue !== null && s.scoreValue !== undefined) {
+            initialDraft[`${s.bidId}|${s.criterionId}`] = Number(s.scoreValue);
+          }
+        }
+      }
+      setDraftScores(initialDraft);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to load evaluation matrix.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedCallId) {
+      loadEvaluationData(selectedCallId);
+    }
+  }, [selectedCallId, loadEvaluationData]);
+
+  const selectedCall = calls.find((c) => c.id === selectedCallId);
+  const hasSignedIndependence = assignment?.coiStatus === 'none';
+  const hasConflictFlag = assignment?.coiStatus === 'conflict';
+  const isScoreLocked = Boolean(assignment?.scorecardLocked);
+
+  const handleSignConflict = async () => {
+    if (!selectedCallId || isSaving) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      await buyerApi.declareConflict(selectedCallId, hasConflictChoice, conflictNotes.trim() || undefined);
+      setIsSigningConflict(false);
+      await loadEvaluationData(selectedCallId);
+      showToast(
+        hasConflictChoice
+          ? 'Conflict of interest disclosure recorded. Scoring remains restricted.'
+          : `Conflict of Interest independence declaration signed by ${evaluatorName}.`
+      );
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to record conflict declaration.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleLockScores = () => {
-    setLockedEvaluatorIds((prev) => [...prev, currentEvaluator.id]);
-    showToast(`Scorecard finalized and locked for ${currentEvaluator.name}. Scores cannot be modified.`);
+  const handleSaveScore = async (bidId: string, criterionId: string, maxScore: number, value: number) => {
+    if (!selectedCallId || !hasSignedIndependence || isScoreLocked) return;
+    const bounded = Math.min(maxScore || 100, Math.max(0, value));
+    setDraftScores((prev) => ({ ...prev, [`${bidId}|${criterionId}`]: bounded }));
+    try {
+      await buyerApi.submitScore(selectedCallId, criterionId, bidId, bounded);
+      const evalRes = await buyerApi.getEvaluations(selectedCallId);
+      setScores(Array.isArray(evalRes?.scores) ? evalRes.scores : []);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to save evaluation score.');
+    }
   };
 
-  const handleSignConflict = () => {
-    signConflictDeclaration(currentEvaluator.id, conflictNotes || undefined);
-    setIsSigningConflict(false);
-    showToast(`Conflict of Interest statutory declaration signed by ${currentEvaluator.name}.`);
+  const handleLockScorecard = async () => {
+    if (!selectedCallId || isSaving) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      await buyerApi.lockScorecard(selectedCallId);
+      await loadEvaluationData(selectedCallId);
+      showToast(`Scorecard finalized and locked for ${evaluatorName}.`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to lock scorecard.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Compute composite rankings
   const rankedBidders = useMemo(() => {
-    return callApplications.map((app) => {
-      let totalWeightedScore = 0;
-      let totalWeights = 0;
-
-      callCriteria.forEach((crit) => {
-        // Average score across evaluators for this criterion
-        const critScores = scores.filter(
-          (s) => s.callId === selectedCall.id && s.applicationId === app.id && s.criterionId === crit.id
-        );
-        const avgCritScore = critScores.length > 0
-          ? critScores.reduce((sum, s) => sum + s.score, 0) / critScores.length
-          : 0;
-
-        totalWeightedScore += (avgCritScore * (crit.weight / 100));
-        totalWeights += crit.weight;
-      });
-
-      return {
-        app,
-        compositeScore: Number(totalWeightedScore.toFixed(1)),
-        hasScores: scores.some((s) => s.callId === selectedCall.id && s.applicationId === app.id),
-      };
-    }).sort((a, b) => b.compositeScore - a.compositeScore);
-  }, [callApplications, callCriteria, scores, selectedCall]);
+    return bids
+      .map((bid) => {
+        let totalWeighted = 0;
+        let hasAnyScore = false;
+        for (const crit of criteria) {
+          const critScores = scores.filter(
+            (s) => s.bidId === bid.id && s.criterionId === crit.id && s.scoreValue !== null && s.scoreValue !== undefined
+          );
+          if (critScores.length > 0) hasAnyScore = true;
+          const avgRaw =
+            critScores.length > 0
+              ? critScores.reduce((sum, s) => sum + Number(s.scoreValue || 0), 0) / critScores.length
+              : 0;
+          const maxScore = Number(crit.maxScore || 100) || 100;
+          const normalizedPct = (avgRaw / maxScore) * 100;
+          totalWeighted += normalizedPct * (Number(crit.weight || 0) / 100);
+        }
+        return {
+          bid,
+          compositeScore: Number(totalWeighted.toFixed(1)),
+          hasScores: hasAnyScore,
+        };
+      })
+      .sort((a, b) => b.compositeScore - a.compositeScore);
+  }, [bids, criteria, scores]);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      {/* Toast */}
       {toastMessage && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs flex items-center gap-2 shadow-xs">
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 text-[#C2412D] dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-xl text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
         </div>
       )}
 
@@ -104,45 +195,56 @@ export const BuyerEvaluation: React.FC = () => {
             <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Scoring Matrix
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">· Multi-Evaluator Weighted Composite</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">· Weighted Composite Evaluation</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900 dark:text-white">
             Tender Evaluation & Scoring Console
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
-            Record committee marks against weighted statutory criteria and generate auto-ranked composite scorecards.
+            Record committee marks against weighted statutory criteria on unsealed tender envelopes after signing independence declarations.
           </p>
         </div>
 
-        <div>
-          <select
-            value={selectedCallId}
-            onChange={(e) => setSelectedCallId(e.target.value)}
-            className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-white"
-          >
-            {calls.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.callNumber} — {c.title.substring(0, 30)}...
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={selectedCallId}
+          onChange={(e) => setSelectedCallId(e.target.value)}
+          className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-800 dark:text-white"
+        >
+          {calls.length === 0 && <option value="">No tender calls</option>}
+          {calls.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.referenceNo} — {String(c.title || '').slice(0, 40)}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Conflict of Interest Declaration Notice */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">
-          <div className={`p-2.5 rounded-xl shrink-0 ${currentEvaluator.hasDeclaredConflict ? 'bg-emerald-50 text-[#2F8F5B]' : 'bg-amber-50 text-[#E8A33D]'}`}>
+          <div
+            className={`p-2.5 rounded-xl shrink-0 ${
+              hasSignedIndependence
+                ? 'bg-emerald-50 text-[#2F8F5B]'
+                : hasConflictFlag
+                ? 'bg-rose-50 text-[#C2412D]'
+                : 'bg-amber-50 text-[#E8A33D]'
+            }`}
+          >
             <UserCheck className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-[#10212E]">
-                Active Evaluator: {currentEvaluator.name} ({currentEvaluator.role})
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-sm text-[#10212E] dark:text-white">
+                Evaluator: {evaluatorName}
               </span>
-              {currentEvaluator.hasDeclaredConflict ? (
+              {hasSignedIndependence ? (
                 <span className="text-[11px] bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded font-bold border border-emerald-200">
                   Independence Declaration Signed
+                </span>
+              ) : hasConflictFlag ? (
+                <span className="text-[11px] bg-rose-50 text-[#C2412D] px-2 py-0.5 rounded font-bold border border-rose-200">
+                  Conflict Declared — Scoring Blocked
                 </span>
               ) : (
                 <span className="text-[11px] bg-amber-50 text-amber-900 px-2 py-0.5 rounded font-bold border border-[#E8A33D]">
@@ -151,72 +253,78 @@ export const BuyerEvaluation: React.FC = () => {
               )}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {currentEvaluator.hasDeclaredConflict
-                ? `Signed on ${currentEvaluator.declarationDate}. "${currentEvaluator.conflictDetails}"`
-                : 'Under Section 42 of the Botswana Public Procurement Act, evaluators must declare any commercial or family interest before scoring.'}
+              {hasSignedIndependence
+                ? `Signed on ${assignment.coiDeclaredAt ? new Date(assignment.coiDeclaredAt).toLocaleString() : 'record'}. Scoring authorized.`
+                : 'Under Section 42 of the Public Procurement Act, evaluators must declare independence before scoring any bids.'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Switch active evaluator */}
-          <select
-            value={activeEvaluatorId}
-            onChange={(e) => setActiveEvaluatorId(e.target.value)}
-            className="p-2 bg-white border border-slate-300 rounded-lg text-xs font-medium"
+        {!isScoreLocked && (
+          <button
+            type="button"
+            disabled={!selectedCallId}
+            onClick={() => setIsSigningConflict(true)}
+            className="px-3.5 py-2 bg-[#E8A33D] hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0 disabled:opacity-50"
           >
-            {evaluators.map((e) => (
-              <option key={e.id} value={e.id}>
-                Switch Evaluator: {e.name}
-              </option>
-            ))}
-          </select>
-
-          {!currentEvaluator.hasDeclaredConflict && (
-            <button
-              onClick={() => setIsSigningConflict(true)}
-              className="px-3.5 py-2 bg-[#E8A33D] hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-colors"
-            >
-              Sign Declaration
-            </button>
-          )}
-        </div>
+            {assignment ? 'Update Declaration' : 'Sign Declaration'}
+          </button>
+        )}
       </div>
 
       {/* Conflict Modal */}
-      {isSigningConflict && (
+      {isSigningConflict && selectedCall && (
         <div className="fixed inset-0 z-50 bg-[#10212E]/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl text-xs">
-            <h3 className="font-heading font-bold text-base text-[#10212E]">
+          <div className="bg-white dark:bg-[#132635] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl text-xs">
+            <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
               Statutory Conflict of Interest Declaration
             </h3>
-            <p className="text-slate-600 leading-relaxed">
-              I, <strong>{currentEvaluator.name}</strong>, serving as {currentEvaluator.role} for {selectedCall.organizationName}, hereby solemnly declare that I have no personal, financial, familial, or business connection to any bidding entity participating in tender {selectedCall.callNumber}.
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              I, <strong>{evaluatorName}</strong>, evaluating tender <strong>{selectedCall.referenceNo}</strong>, declare whether I hold any personal, financial, or business relationship with participating bidders.
             </p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={!hasConflictChoice}
+                  onChange={() => setHasConflictChoice(false)}
+                />
+                <span className="font-medium text-slate-800 dark:text-white">I declare NO conflict of interest (Authorize scoring)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={hasConflictChoice}
+                  onChange={() => setHasConflictChoice(true)}
+                />
+                <span className="font-medium text-[#C2412D]">I declare a potential conflict of interest (Recuse from scoring)</span>
+              </label>
+            </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Additional Notes / Disclosures</label>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">Additional Notes / Disclosures</label>
               <textarea
                 rows={2}
                 value={conflictNotes}
                 onChange={(e) => setConflictNotes(e.target.value)}
                 placeholder="Optional disclosure notes..."
-                className="w-full p-2 border border-slate-300 rounded-lg"
+                className="w-full p-2 border border-slate-300 dark:border-[#1E364A] rounded-lg"
               />
             </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#1E364A]">
               <button
                 type="button"
                 onClick={() => setIsSigningConflict(false)}
-                className="px-3 py-1.5 text-slate-600"
+                className="px-3 py-1.5 text-slate-600 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                disabled={isSaving}
                 onClick={handleSignConflict}
-                className="px-4 py-2 bg-[#2F8F5B] text-white font-bold rounded-lg hover:bg-emerald-700"
+                className="px-4 py-2 bg-[#2F8F5B] text-white font-bold rounded-lg hover:bg-emerald-700 cursor-pointer disabled:opacity-50"
               >
-                Sign & Authorize Scoring
+                {isSaving ? 'Recording...' : 'Record Declaration'}
               </button>
             </div>
           </div>
@@ -224,29 +332,31 @@ export const BuyerEvaluation: React.FC = () => {
       )}
 
       {/* Criteria Breakdown Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-        {callCriteria.map((crit) => (
-          <div key={crit.id} className="p-4 bg-white border border-slate-200 rounded-xl space-y-1 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-800 truncate">{crit.title}</span>
-              <span className="font-bold text-[#1F5F99] bg-[#EAF2FA] px-2 py-0.5 rounded font-mono">
-                {crit.weight}%
-              </span>
+      {criteria.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          {criteria.map((crit) => (
+            <div key={crit.id} className="p-4 bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-xl space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-slate-800 dark:text-white truncate">{crit.name}</span>
+                <span className="font-bold text-[#1F5F99] bg-[#EAF2FA] px-2 py-0.5 rounded font-mono shrink-0">
+                  {crit.weight}%
+                </span>
+              </div>
+              <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2">
+                {crit.description || `Max score: ${crit.maxScore || 100}`}
+              </p>
             </div>
-            <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2">
-              {crit.description}
-            </p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Multi-Evaluator Scoring Matrix Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-2xs">
+      {/* Scoring Matrix Table */}
+      <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-heading font-semibold text-base text-[#10212E]">
-                Evaluator Scoring Matrix ({currentEvaluator.name} Marks)
+              <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
+                Evaluator Scoring Matrix
               </h3>
               {isScoreLocked && (
                 <span className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded font-bold border border-slate-300">
@@ -256,138 +366,163 @@ export const BuyerEvaluation: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500">
               {isScoreLocked
-                ? 'Scores for this evaluator have been locked and cannot be changed.'
-                : 'Enter individual scores (0-100) per candidate bidder.'}
+                ? 'Your scorecard is locked in PostgreSQL and protected by audit triggers.'
+                : 'Enter scores against each criterion for unsealed bids (values persist immediately on change).'}
             </p>
           </div>
 
-          {!isScoreLocked && currentEvaluator.hasDeclaredConflict && (
+          {!isScoreLocked && hasSignedIndependence && bids.length > 0 && criteria.length > 0 && (
             <button
               type="button"
-              onClick={handleLockScores}
-              className="px-3.5 py-1.5 bg-[#1F5F99] hover:bg-[#164673] text-white text-xs font-semibold rounded-lg inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              disabled={isSaving}
+              onClick={handleLockScorecard}
+              className="px-3.5 py-1.5 bg-[#1F5F99] hover:bg-[#164673] text-white text-xs font-semibold rounded-lg inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Lock & Finalize Scorecard</span>
+              <span>{isSaving ? 'Locking...' : 'Lock & Finalize Scorecard'}</span>
             </button>
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                <th className="py-2.5 px-3">Candidate Bidder</th>
-                {callCriteria.map((c) => (
-                  <th key={c.id} className="py-2.5 px-3 text-center">
-                    {c.title} ({c.weight}%)
-                  </th>
-                ))}
-                <th className="py-2.5 px-3 text-right">Composite Score</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {callApplications.map((app) => {
-                const appRank = rankedBidders.find((r) => r.app.id === app.id);
-                return (
-                  <tr key={app.id} className="hover:bg-slate-50">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-[#10212E]">{app.supplierName}</div>
-                      <span className="text-[11px] text-slate-400 font-mono">ID: {app.id}</span>
-                    </td>
-
-                    {callCriteria.map((crit) => {
-                      const existingScore = scores.find(
-                        (s) =>
-                          s.callId === selectedCall.id &&
-                          s.applicationId === app.id &&
-                          s.evaluatorId === currentEvaluator.id &&
-                          s.criterionId === crit.id
-                      );
-
-                      return (
-                        <td key={crit.id} className="py-3 px-3 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            disabled={!currentEvaluator.hasDeclaredConflict || isScoreLocked}
-                            value={existingScore ? existingScore.score : ''}
-                            onChange={(e) => handleScoreChange(app.id, crit.id, Number(e.target.value))}
-                            placeholder="0-100"
-                            className="w-16 p-1.5 text-center font-mono font-bold bg-white border border-slate-300 rounded-lg text-slate-900 disabled:bg-slate-100 disabled:text-slate-400"
-                          />
-                        </td>
-                      );
-                    })}
-
-                    <td className="py-3 px-3 text-right font-mono font-bold text-sm text-[#1F5F99]">
-                      {appRank?.compositeScore}%
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Auto-Ranked Results Leaderboard */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-2xs">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Trophy className="w-5 h-5 text-[#E8A33D]" />
-            <h3 className="font-heading font-semibold text-base text-[#10212E]">
-              Auto-Ranked Evaluation Results & Preferred Bidder
-            </h3>
+        {isLoading ? (
+          <div className="py-10 flex items-center justify-center gap-2 text-xs text-slate-500">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Loading evaluation workspace...</span>
           </div>
-          <span className="text-xs text-slate-500 font-mono">Weighted Total: 100%</span>
-        </div>
-
-        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-          {rankedBidders.map((item, idx) => {
-            const isWinner = idx === 0 && item.compositeScore > 0;
-            return (
-              <div
-                key={item.app.id}
-                className={`p-4 flex items-center justify-between gap-4 transition-colors ${
-                  isWinner ? 'bg-amber-50/40' : 'bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-3.5">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs font-mono ${
-                      isWinner ? 'bg-[#E8A33D] text-white' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    #{idx + 1}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm text-[#10212E]">{item.app.supplierName}</span>
-                      {isWinner && (
-                        <span className="text-[10px] font-bold bg-[#E8A33D] text-slate-950 px-2 py-0.5 rounded">
-                          Recommended for Award
+        ) : bids.length === 0 ? (
+          <div className="p-6 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+            <Lock className="w-4 h-4 shrink-0" />
+            <span>
+              No unsealed bids are available to score for this tender. Sealed envelopes remain locked until an official Bid Opening Session is conducted.
+            </span>
+          </div>
+        ) : criteria.length === 0 ? (
+          <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl">
+            No evaluation criteria have been defined for this tender call yet.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-[#10212E] border-b border-slate-200 dark:border-[#1E364A] text-slate-600 dark:text-slate-300 font-semibold">
+                  <th className="py-2.5 px-3">Candidate Bidder</th>
+                  {criteria.map((c) => (
+                    <th key={c.id} className="py-2.5 px-3 text-center">
+                      {c.name} ({c.weight}%)
+                    </th>
+                  ))}
+                  <th className="py-2.5 px-3 text-right">Composite Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-[#1E364A]">
+                {bids.map((bid) => {
+                  const ranked = rankedBidders.find((r) => r.bid.id === bid.id);
+                  return (
+                    <tr key={bid.id} className="hover:bg-slate-50/60 dark:hover:bg-[#10212E]/60">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-[#10212E] dark:text-white">{bid.supplierName}</div>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {bid.receiptNumber || bid.id}
                         </span>
-                      )}
+                      </td>
+
+                      {criteria.map((crit) => {
+                        const val = draftScores[`${bid.id}|${crit.id}`];
+                        const max = Number(crit.maxScore || 100);
+                        return (
+                          <td key={crit.id} className="py-3 px-3 text-center">
+                            <input
+                              type="number"
+                              min={0}
+                              max={max}
+                              disabled={!hasSignedIndependence || isScoreLocked}
+                              value={val !== undefined ? val : ''}
+                              onChange={(e) => {
+                                const num = Number(e.target.value);
+                                setDraftScores((prev) => ({ ...prev, [`${bid.id}|${crit.id}`]: num }));
+                              }}
+                              onBlur={(e) => {
+                                if (e.target.value !== '') {
+                                  handleSaveScore(bid.id, crit.id, max, Number(e.target.value));
+                                }
+                              }}
+                              placeholder={`0-${max}`}
+                              className="w-16 p-1.5 text-center font-mono font-bold bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#1E364A] rounded-lg text-slate-900 dark:text-white disabled:bg-slate-100 disabled:text-slate-400"
+                            />
+                          </td>
+                        );
+                      })}
+
+                      <td className="py-3 px-3 text-right font-mono font-bold text-sm text-[#1F5F99]">
+                        {ranked?.compositeScore ?? 0}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Auto-Ranked Leaderboard */}
+      {rankedBidders.length > 0 && (
+        <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-[#E8A33D]" />
+              <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
+                Auto-Ranked Evaluation Results
+              </h3>
+            </div>
+            <span className="text-xs text-slate-500 font-mono">Multi-Evaluator Composite</span>
+          </div>
+
+          <div className="divide-y divide-slate-100 dark:divide-[#1E364A] border border-slate-200 dark:border-[#1E364A] rounded-xl overflow-hidden">
+            {rankedBidders.map((item, idx) => {
+              const isWinner = idx === 0 && item.compositeScore > 0;
+              return (
+                <div
+                  key={item.bid.id}
+                  className={`p-4 flex items-center justify-between gap-4 ${
+                    isWinner ? 'bg-amber-50/40 dark:bg-amber-950/20' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs font-mono ${
+                        isWinner ? 'bg-[#E8A33D] text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      #{idx + 1}
                     </div>
-                    <span className="text-xs text-slate-500 font-mono">
-                      Offer: BWP {item.app.bid?.totalAmountBWP.toLocaleString() || 'N/A'} · Citizen 100%
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-[#10212E] dark:text-white">{item.bid.supplierName}</span>
+                        {isWinner && (
+                          <span className="text-[10px] font-bold bg-[#E8A33D] text-slate-950 px-2 py-0.5 rounded">
+                            Highest Ranked
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-500 font-mono">
+                        Offer: {item.bid.currency || 'BWP'} {item.bid.totalPrice != null ? Number(item.bid.totalPrice).toLocaleString() : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-lg font-bold font-mono text-[#1F5F99]">
+                      {item.compositeScore}%
                     </span>
+                    <span className="text-[11px] text-slate-400 block">Composite Score</span>
                   </div>
                 </div>
-
-                <div className="text-right">
-                  <span className="text-lg font-bold font-mono text-[#1F5F99]">
-                    {item.compositeScore}%
-                  </span>
-                  <span className="text-[11px] text-slate-400 block">Composite Score</span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

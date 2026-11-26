@@ -1,119 +1,187 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
-import { referenceApi } from '../../services/api';
+import { Loader2, AlertCircle, Receipt } from 'lucide-react';
+import { buyerApi } from '../../services/api';
+
+function formatDate(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleDateString('en-BW', { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 export const BuyerBilling: React.FC = () => {
-  const [activePlan, setActivePlan] = useState<{ name: string; price: number; currency: string; maxCallsPerYear: number | null; maxUsers: number | null } | null>(null);
+  const [billing, setBilling] = useState<Awaited<ReturnType<typeof buyerApi.getBilling>> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadPlan = useCallback(async () => {
+  const loadBilling = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await referenceApi.loadAll();
-      if (!data || !Array.isArray(data.plans)) {
-        throw new Error('Invalid plans response');
-      }
-      const buyerPlans = data.plans.filter((p: any) => p.audience === 'buyer');
-      const selected = buyerPlans[0] || data.plans[0] || null;
-      setActivePlan(
-        selected
-          ? {
-              name: selected.name,
-              price: Number(selected.price) || 0,
-              currency: selected.currency || 'BWP',
-              maxCallsPerYear: selected.maxCallsPerYear ?? null,
-              maxUsers: selected.maxUsers ?? null,
-            }
-          : null
-      );
-    } catch (err) {
-      console.error('Failed to load buyer plan from database:', err);
-      setActivePlan(null);
-      setError('We could not load this list. Try again.');
+      const data = await buyerApi.getBilling();
+      setBilling(data);
+    } catch (err: any) {
+      setBilling(null);
+      setError(err?.message || 'We could not load your organization billing and usage records.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadPlan();
-  }, [loadPlan]);
+    void loadBilling();
+  }, [loadBilling]);
+
+  const sub = billing?.subscription || null;
+  const usage = billing?.usage || { callsPublishedThisYear: 0, activeSeatsUsed: 0 };
+  const invoices = billing?.invoices || [];
+
+  const callsPct =
+    sub?.maxCallsPerYear && sub.maxCallsPerYear > 0
+      ? Math.min(100, Math.round((usage.callsPublishedThisYear / sub.maxCallsPerYear) * 100))
+      : 0;
+  const seatsPct =
+    sub?.maxUsers && sub.maxUsers > 0
+      ? Math.min(100, Math.round((usage.activeSeatsUsed / sub.maxUsers) * 100))
+      : 0;
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
-            Subscription & usage allowance
+            Subscription &amp; usage allowance
           </h1>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Monitor annual call quotas, evaluator seat allocations, and payment receipts.
+            Monitor annual call quotas, evaluator seat allocations, and persisted billing invoices.
           </p>
         </div>
       </div>
 
-      {/* Plan Card */}
       {isLoading ? (
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 flex items-center justify-center gap-3 text-[#6B7A87]">
           <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
-          <span className="text-[14px]">Loading subscription plan from database...</span>
+          <span className="text-[14px]">Loading subscription and live usage counters...</span>
         </div>
       ) : error ? (
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-rose-200 dark:border-rose-900 p-6 flex items-center justify-between gap-4">
-          <span className="text-[14px] text-rose-700 dark:text-rose-300">{error}</span>
+          <div className="flex items-center gap-2 text-[14px] text-rose-700 dark:text-rose-300">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span>{error}</span>
+          </div>
           <button
             type="button"
-            onClick={loadPlan}
+            onClick={loadBilling}
             className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[13px] font-medium cursor-pointer shrink-0"
           >
             Retry
           </button>
         </div>
-      ) : !activePlan ? (
+      ) : !sub ? (
         <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center text-[#6B7A87] text-[14px]">
           No active subscription plan found in database.
         </div>
       ) : (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[12px] text-[#1F5F99] font-medium bg-[#EAF2FA] px-2 py-0.5 rounded-[4px]">
-                Active subscription
-              </span>
-              <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
-                {activePlan.name}
-              </h3>
-            </div>
-            <div className="text-right">
-              <div className="font-heading font-semibold text-[24px] text-[#10212E] dark:text-white tabular-nums">
-                {activePlan.currency} {activePlan.price.toLocaleString()} <span className="text-[13px] text-[#6B7A87] font-normal">/ month</span>
+        <div className="space-y-6">
+          {/* Active Subscription Card */}
+          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[12px] text-[#1F5F99] font-medium bg-[#EAF2FA] px-2 py-0.5 rounded-[4px] capitalize">
+                  {sub.status} subscription
+                </span>
+                <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
+                  {sub.planName}
+                </h3>
               </div>
-              <span className="text-[12px] text-[#2F8F5B]">Next billing on 1 Nov 2026</span>
+              <div className="text-right">
+                <div className="font-heading font-semibold text-[24px] text-[#10212E] dark:text-white tabular-nums">
+                  {sub.currency} {sub.price.toLocaleString()}{' '}
+                  <span className="text-[13px] text-[#6B7A87] font-normal">/ {sub.billingInterval}</span>
+                </div>
+                <span className="text-[12px] text-[#2F8F5B]">
+                  {sub.currentPeriodEnd
+                    ? `Current period ends ${formatDate(sub.currentPeriodEnd)}`
+                    : 'Standard organization allocation'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[14px]">
+              <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] space-y-2">
+                <div className="flex items-center justify-between text-[12px] text-[#6B7A87]">
+                  <span>Tender calls created this year</span>
+                  <span className="font-mono font-semibold text-[#10212E] dark:text-white">
+                    {usage.callsPublishedThisYear}
+                    {sub.maxCallsPerYear !== null ? ` / ${sub.maxCallsPerYear}` : ' (Unlimited)'}
+                  </span>
+                </div>
+                <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#1E364A] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#1F5F99] transition-all"
+                    style={{ width: sub.maxCallsPerYear !== null ? `${callsPct}%` : '100%' }}
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] space-y-2">
+                <div className="flex items-center justify-between text-[12px] text-[#6B7A87]">
+                  <span>Active officer &amp; evaluator seats</span>
+                  <span className="font-mono font-semibold text-[#10212E] dark:text-white">
+                    {usage.activeSeatsUsed}
+                    {sub.maxUsers !== null ? ` / ${sub.maxUsers}` : ' (Unlimited)'}
+                  </span>
+                </div>
+                <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#1E364A] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#2F8F5B] transition-all"
+                    style={{ width: sub.maxUsers !== null ? `${seatsPct}%` : '100%' }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[14px]">
-            <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] space-y-1">
-              <span className="text-[12px] text-[#6B7A87] block">Tender calls published</span>
-              <div className="font-semibold text-[#10212E] dark:text-white text-[18px] tabular-nums">
-                {activePlan.maxCallsPerYear === null ? 'Unlimited calls' : `Up to ${activePlan.maxCallsPerYear} calls / year`}
-              </div>
-              <div className="h-1.5 w-full bg-[#EAF2FA] rounded-full overflow-hidden">
-                <div className="h-full bg-[#1F5F99] w-[56%]" />
-              </div>
+          {/* Organization Invoices Table */}
+          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
+            <div className="p-5 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-[#1F5F99]" />
+              <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
+                Platform Billing Invoices
+              </h2>
             </div>
-
-            <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] space-y-1">
-              <span className="text-[12px] text-[#6B7A87] block">Evaluator & officer seats</span>
-              <div className="font-semibold text-[#10212E] dark:text-white text-[18px] tabular-nums">
-                {activePlan.maxUsers === null ? 'Unlimited seats' : `Up to ${activePlan.maxUsers} seats`}
+            {invoices.length === 0 ? (
+              <div className="p-8 text-center text-[13px] text-[#6B7A87]">
+                No billing invoices have been issued to your organization yet.
               </div>
-              <div className="h-1.5 w-full bg-[#EAF2FA] rounded-full overflow-hidden">
-                <div className="h-full bg-[#2F8F5B] w-[60%]" />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[13px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+                  <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87]">
+                    <tr>
+                      <th className="p-3.5">Invoice No</th>
+                      <th className="p-3.5">Issued</th>
+                      <th className="p-3.5">Due Date</th>
+                      <th className="p-3.5">Amount</th>
+                      <th className="p-3.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+                    {invoices.map((inv) => (
+                      <tr key={inv.id}>
+                        <td className="p-3.5 font-mono font-medium">{inv.invoiceNumber}</td>
+                        <td className="p-3.5">{formatDate(inv.issuedAt)}</td>
+                        <td className="p-3.5">{formatDate(inv.dueAt)}</td>
+                        <td className="p-3.5 font-mono font-semibold">
+                          {inv.currency} {inv.amount.toLocaleString()}
+                        </td>
+                        <td className="p-3.5 capitalize">{inv.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

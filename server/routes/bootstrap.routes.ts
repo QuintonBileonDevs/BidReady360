@@ -7,6 +7,7 @@ import { documentsRepository } from '../repositories/documents.repository';
 import { applicationsRepository } from '../repositories/applications.repository';
 import { consentRepository } from '../repositories/consent.repository';
 import { usersRepository } from '../repositories/users.repository';
+import { notificationsRepository } from '../repositories/notifications.repository';
 import { resolveDeterministicTenant, persistActiveTenantToSession } from '../services/tenant.resolver';
 import { computeSupplierCompleteness, CompletenessResult } from '../services/completeness.service';
 
@@ -177,6 +178,23 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
     ].join('|');
     const serverFingerprint = crypto.createHash('sha256').update(fingerprintRaw).digest('hex');
 
+    if (activeTenant.tenantType === 'supplier' && activeTenant.tenantId) {
+      await notificationsRepository
+        .syncExpiringDocumentNotifications(activeTenant.tenantId)
+        .catch(() => {});
+    }
+
+    const notifications = await notificationsRepository
+      .listForUser(
+        user.id,
+        {
+          tenantType: activeTenant.tenantType === 'supplier' ? 'supplier' : 'organization',
+          tenantId: activeTenant.tenantId,
+        },
+        50
+      )
+      .catch(() => []);
+
     res.json({
       activeTenant,
       profileSummary: req.profileSummary || null,
@@ -192,6 +210,7 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
       pastProjects,
       teamMembers,
       pendingInvitations,
+      notifications,
       user: {
         id: user.id,
         email: user.email,

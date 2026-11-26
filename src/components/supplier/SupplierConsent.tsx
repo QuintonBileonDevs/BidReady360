@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
+import { auditApi, supplierApi } from '../../services/api';
 import { ConsentGrant } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
@@ -27,10 +28,13 @@ import {
 interface SharingActivityItem {
   id: string;
   organizationName: string;
+  actorName?: string;
   action: string;
   dateStr: string;
   timestamp: string;
+  sortTs: number;
   ipAddress: string;
+  source: 'access' | 'audit';
 }
 
 export const SupplierConsent: React.FC = () => {
@@ -38,12 +42,9 @@ export const SupplierConsent: React.FC = () => {
     consentGrants,
     revokeConsent,
     grantConsent,
-    updateConsentScope,
     supplier,
     organizations,
     documents,
-    applications,
-    addAuditEvent,
     setActiveNav,
   } = useApp();
 
@@ -61,10 +62,14 @@ export const SupplierConsent: React.FC = () => {
   }
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Drawers & Modals
   const [isShareDrawerOpen, setIsShareDrawerOpen] = useState(false);
+  const [isSubmittingShare, setIsSubmittingShare] = useState(false);
   const [revokingGrant, setRevokingGrant] = useState<ConsentGrant | null>(null);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [isRevoking, setIsRevoking] = useState(false);
 
   // "Share with an organization" Drawer Form State
   const [selectedOrgId, setSelectedOrgId] = useState<string>(
@@ -99,10 +104,70 @@ export const SupplierConsent: React.FC = () => {
     'Vendor qualification and annual tender bidding accreditation'
   );
 
-  // Activity list records populated from live access logs (no fabricated mock entries)
-  const [activitiesList] = useState<SharingActivityItem[]>([]);
+  // Activity list populated strictly from persisted audit ledger
+  const [activitiesList, setActivitiesList] = useState<SharingActivityItem[]>([]);
+
+  const loadConsentActivities = useCallback(async () => {
+    try {
+      const [accessLogs, auditLogs] = await Promise.all([
+        supplierApi.listConsentAccessLogs(30).catch(() => []),
+        auditApi.listLogs('ConsentGrant').catch(() => []),
+      ]);
+
+      const mappedAccess: SharingActivityItem[] = Array.isArray(accessLogs)
+        ? accessLogs.map((ev: any) => {
+            const ts = ev.createdAt ? new Date(ev.createdAt).getTime() : 0;
+            const scopes = Array.isArray(ev.accessedFields) && ev.accessedFields.length > 0
+              ? ` (${ev.accessedFields.join(', ')})`
+              : '';
+            const actionLabel =
+              ev.accessType === 'document_download' || ev.accessType === 'document_view'
+                ? `inspected document${scopes}`
+                : ev.accessType === 'profile_view'
+                ? `viewed supplier profile${scopes}`
+                : `${String(ev.accessType || 'accessed data').replace(/_/g, ' ')}${scopes}`;
+            return {
+              id: `access-${ev.id}`,
+              organizationName: ev.organizationName || 'Procuring Organization',
+              actorName: ev.accessedByName || 'Procurement Officer',
+              action: `${ev.accessedByName ? `(${ev.accessedByName}) ` : ''}${actionLabel}`,
+              dateStr: ev.createdAt
+                ? new Date(ev.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '',
+              timestamp: ev.createdAt ? new Date(ev.createdAt).toLocaleString('en-GB') : '',
+              sortTs: ts,
+              ipAddress: ev.ipAddress || 'Recorded',
+              source: 'access',
+            };
+          })
+        : [];
+
+      const mappedAudit: SharingActivityItem[] = Array.isArray(auditLogs)
+        ? auditLogs.slice(0, 20).map((ev: any) => ({
+            id: `audit-${ev.id}`,
+            organizationName: ev.organizationName || ev.actorName || 'Procuring Organization',
+            action: ev.action || 'Consent record updated',
+            dateStr: ev.timestamp
+              ? new Date(ev.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              : '',
+            timestamp: ev.timestamp ? new Date(ev.timestamp).toLocaleString('en-GB') : '',
+            sortTs: ev.timestamp ? new Date(ev.timestamp).getTime() : 0,
+            ipAddress: ev.ipAddress || 'Recorded',
+            source: 'audit',
+          }))
+        : [];
+
+      const combined = [...mappedAccess, ...mappedAudit].sort((a, b) => b.sortTs - a.sortTs).slice(0, 30);
+      setActivitiesList(combined);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    void loadConsentActivities();
+  }, [loadConsentActivities]);
 
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 5000);
   };
@@ -113,6 +178,7 @@ export const SupplierConsent: React.FC = () => {
       showToast('Email verification is mandatory before sharing documents or granting access.');
       return;
     }
+    setErrorMessage(null);
     setSelectedOrgId(organizations[0]?.id || '');
     setShareCompanyDetails(true);
     setShareDirectorsOwners(true);
@@ -121,13 +187,14 @@ export const SupplierConsent: React.FC = () => {
     setPickedDocNames(defaultVerifiedDocTypes);
     setExpiryDateInput(defaultOneYearExpiry);
     setHasExpiryDate(true);
-    setPurposeLine('Vendor qualification and tender bidding accreditation');
+    setPurposeLine('Vendor qualification and annual tender bidding accreditation');
     setIsShareDrawerOpen(true);
   };
 
   // Submit new grant from drawer
-  const handleConfirmShare = (e: React.FormEvent) => {
+  const handleConfirmShare = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingShare) return;
     if (!supplier.emailVerified) {
       showToast('Email verification is mandatory before sharing documents.');
       return;
@@ -135,49 +202,63 @@ export const SupplierConsent: React.FC = () => {
     const targetOrg = organizations.find((o) => o.id === selectedOrgId);
     if (!targetOrg) return;
 
-    grantConsent({
-      supplierId: supplier.id,
-      organizationId: targetOrg.id,
-      organizationName: targetOrg.name,
-      expiryDate: hasExpiryDate && expiryDateInput ? expiryDateInput : undefined,
-      purpose: purposeLine.trim() || 'Procurement evaluation and verification',
-      scope: {
-        companyDetails: shareCompanyDetails,
-        directorsOwners: shareDirectorsOwners,
-        pastProjects: sharePastProjects,
-        selectedDocuments: shareSelectedDocs,
-        taxCompliance: shareSelectedDocs && pickedDocNames.some((d) => d.includes('Tax')),
-        financialStatements: shareSelectedDocs && pickedDocNames.some((d) => d.includes('Financial')),
-        keyPersonnel: true,
-        pastContracts: sharePastProjects,
-        bankingDetails: false,
-      },
-      selectedDocumentNames: shareSelectedDocs ? pickedDocNames : [],
-      tiedApplicationNumbers: [],
-      lastAccessedAt: 'Just now',
-    });
+    setIsSubmittingShare(true);
+    setErrorMessage(null);
+    try {
+      const selectedDocumentIds = shareSelectedDocs
+        ? documents
+            .filter((d) => pickedDocNames.includes(d.documentType))
+            .map((d) => d.id)
+        : [];
 
-    setIsShareDrawerOpen(false);
-    showToast(`Access successfully granted to ${targetOrg.name}.`);
+      await grantConsent({
+        supplierId: supplier.id,
+        organizationId: targetOrg.id,
+        organizationName: targetOrg.name,
+        expiryDate: hasExpiryDate && expiryDateInput ? expiryDateInput : undefined,
+        purpose: purposeLine.trim() || 'Procurement evaluation and verification',
+        scope: {
+          companyDetails: shareCompanyDetails,
+          directorsOwners: shareDirectorsOwners,
+          pastProjects: sharePastProjects,
+          selectedDocuments: shareSelectedDocs,
+          taxCompliance: shareSelectedDocs && pickedDocNames.some((d) => d.includes('Tax')),
+          financialStatements: shareSelectedDocs && pickedDocNames.some((d) => d.includes('Financial')),
+          keyPersonnel: true,
+          pastContracts: sharePastProjects,
+          bankingDetails: false,
+        },
+        selectedDocumentIds,
+        selectedDocumentNames: shareSelectedDocs ? pickedDocNames : [],
+        tiedApplicationNumbers: [],
+      });
+
+      setIsShareDrawerOpen(false);
+      await loadConsentActivities();
+      showToast(`Access successfully granted to ${targetOrg.name}.`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to save consent grant.');
+    } finally {
+      setIsSubmittingShare(false);
+    }
   };
 
   // Execute revoke after confirmation dialog
-  const handleExecuteRevoke = () => {
-    if (!revokingGrant) return;
-
-    revokeConsent(revokingGrant.id);
-    addAuditEvent({
-      action: 'Sharing access revoked',
-      actorName: `${supplier.directors?.[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier admin'} (Supplier admin)`,
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      entityType: 'Organization',
-      entityId: revokingGrant.organizationId,
-      details: `Revoked data sharing agreement with ${revokingGrant.organizationName}. Access to company details, directors, and documents terminated.`,
-    });
-
-    showToast(`Access permissions revoked for ${revokingGrant.organizationName}.`);
-    setRevokingGrant(null);
+  const handleExecuteRevoke = async () => {
+    if (!revokingGrant || isRevoking) return;
+    setIsRevoking(true);
+    setErrorMessage(null);
+    try {
+      await revokeConsent(revokingGrant.id, revokeReason.trim() || undefined);
+      await loadConsentActivities();
+      showToast(`Access permissions revoked for ${revokingGrant.organizationName}.`);
+      setRevokingGrant(null);
+      setRevokeReason('');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Unable to revoke consent grant.');
+    } finally {
+      setIsRevoking(false);
+    }
   };
 
   // Plain summary generator for drawer
@@ -257,6 +338,22 @@ export const SupplierConsent: React.FC = () => {
             type="button"
             onClick={() => setToastMessage(null)}
             className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-4 rounded-[12px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] flex items-center justify-between gap-3 text-[14px]">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-[#C2412D] shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-[#8E2A1B] hover:opacity-75 text-[14px] cursor-pointer"
           >
             ✕
           </button>
@@ -429,7 +526,10 @@ export const SupplierConsent: React.FC = () => {
                     {isActive ? (
                       <button
                         type="button"
-                        onClick={() => setRevokingGrant(grant)}
+                        onClick={() => {
+                          setRevokeReason('');
+                          setRevokingGrant(grant);
+                        }}
                         className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#C2412D] hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <XCircle className="w-4 h-4" />
@@ -437,7 +537,7 @@ export const SupplierConsent: React.FC = () => {
                       </button>
                     ) : (
                       <span className="text-[14px] text-[#6B7A87] italic font-medium px-2 py-1">
-                        Access revoked
+                        {grant.status === 'Expired' ? 'Grant expired' : 'Access revoked'}
                       </span>
                     )}
                   </div>
@@ -811,9 +911,10 @@ export const SupplierConsent: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  disabled={isSubmittingShare}
+                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] disabled:opacity-50 text-white rounded-[6px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
-                  <span>Confirm and share</span>
+                  <span>{isSubmittingShare ? 'Saving...' : 'Confirm and share'}</span>
                 </button>
               </div>
             </form>
@@ -873,6 +974,19 @@ export const SupplierConsent: React.FC = () => {
                   No active tender submissions are currently tied to this grant. You can reinstate access at any time.
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
+                  Reason for revocation (optional)
+                </label>
+                <input
+                  type="text"
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  placeholder="e.g. Tender completed or updating compliance credentials"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                />
+              </div>
             </div>
 
             {/* Modal Actions */}
@@ -886,10 +1000,11 @@ export const SupplierConsent: React.FC = () => {
               </button>
               <button
                 type="button"
+                disabled={isRevoking}
                 onClick={handleExecuteRevoke}
-                className="px-5 py-2 bg-[#C2412D] hover:bg-[#A12B1B] text-white rounded-[6px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-5 py-2 bg-[#C2412D] hover:bg-[#A12B1B] disabled:opacity-50 text-white rounded-[6px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
-                <span>Revoke access</span>
+                <span>{isRevoking ? 'Revoking...' : 'Revoke access'}</span>
               </button>
             </div>
           </div>

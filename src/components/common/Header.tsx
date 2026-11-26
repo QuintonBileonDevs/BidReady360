@@ -229,11 +229,16 @@ export const Header: React.FC = () => {
                 type="button"
                 onClick={() => setIsNotifOpen(true)}
                 className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer shrink-0"
-                aria-label="Open notifications"
+                aria-label={unreadNotifs > 0 ? `Open notifications (${unreadNotifs} unread)` : 'Open notifications'}
               >
                 <Bell className="w-4 h-4" strokeWidth={1.75} />
                 {unreadNotifs > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#C2412D] rounded-full" />
+                  <span
+                    data-testid="notification-unread-badge"
+                    className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-[#C2412D] text-white text-[10px] font-semibold leading-none rounded-[4px] flex items-center justify-center tabular-nums"
+                  >
+                    {unreadNotifs > 99 ? '99+' : unreadNotifs}
+                  </span>
                 )}
               </button>
             )}

@@ -57,6 +57,7 @@ export const BuyerLayout: React.FC = () => {
     setActiveNav,
     buyerSubRole,
     setSelectedCallId,
+    buyerBranding,
   } = useApp();
 
   const [currentTab, setCurrentTab] = useState<string>('overview');
@@ -84,9 +85,23 @@ export const BuyerLayout: React.FC = () => {
   }, [isUserMenuOpen]);
 
   const orgDisplayName =
+    buyerBranding?.name ||
     registeredBuyerOrgName ||
     profileSummary?.supplierOrOrgName ||
     'Procuring Organization';
+  const brandColor =
+    buyerBranding?.brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(buyerBranding.brandPrimaryColor)
+      ? buyerBranding.brandPrimaryColor
+      : '#1F5F99';
+  const brandSubtext = buyerBranding?.brandSubtext || 'Procuring entity workspace';
+  const brandDomain = buyerBranding?.customDomain || '';
+  const orgInitials =
+    orgDisplayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0].toUpperCase())
+      .join('') || 'PO';
   const buyerName = currentUser?.fullName || profileSummary?.displayName || 'Procurement Officer';
   const buyerEmail = currentUser?.email || registeredBuyerEmail || '';
   const buyerInitials =
@@ -225,7 +240,10 @@ export const BuyerLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-white flex flex-col">
       {/* 1. Unified Buyer Workspace Header */}
-      <header className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] h-16 flex items-center px-4 sm:px-6 justify-between gap-6">
+      <header
+        className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] h-16 flex items-center px-4 sm:px-6 justify-between gap-6 border-t-[3px]"
+        style={{ borderTopColor: brandColor }}
+      >
         {/* Left: Brand Wordmark + Organization Breadcrumb */}
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -251,19 +269,25 @@ export const BuyerLayout: React.FC = () => {
             className="hidden sm:block h-5 w-px bg-[#D5E0EA] dark:bg-[#1E364A] shrink-0"
           />
 
-          <nav aria-label="Workspace breadcrumb" className="hidden sm:flex items-center gap-2 text-[13px] min-w-0">
+          <nav aria-label="Workspace breadcrumb" className="hidden sm:flex items-center gap-2.5 text-[13px] min-w-0">
             <button
               type="button"
               onClick={() => setCurrentTab('overview')}
-              className="text-[#6B7A87] dark:text-[#8DA2B5] hover:text-[#10212E] dark:hover:text-white transition-colors truncate max-w-[240px] cursor-pointer"
-              title={orgDisplayName}
+              className="flex items-center gap-2 text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E] dark:hover:text-white transition-colors min-w-0 cursor-pointer"
+              title={`${orgDisplayName} — ${brandSubtext}`}
             >
-              {orgDisplayName}
+              <span
+                className="w-6 h-6 rounded-[5px] text-white font-bold text-[10px] flex items-center justify-center shrink-0"
+                style={{ backgroundColor: brandColor }}
+              >
+                {orgInitials}
+              </span>
+              <span className="truncate max-w-[220px] font-medium">{orgDisplayName}</span>
             </button>
             <span aria-hidden="true" className="text-[#94A3B8] dark:text-[#4B6378] shrink-0">
               /
             </span>
-            <span className="font-medium text-[#10212E] dark:text-white whitespace-nowrap truncate">
+            <span className="font-semibold text-[#10212E] dark:text-white whitespace-nowrap truncate">
               {activeTabLabel}
             </span>
           </nav>
@@ -275,11 +299,16 @@ export const BuyerLayout: React.FC = () => {
             type="button"
             onClick={() => setIsNotifOpen(true)}
             className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer shrink-0"
-            aria-label="Open notifications"
+            aria-label={unreadNotifs > 0 ? `Open notifications (${unreadNotifs} unread)` : 'Open notifications'}
           >
             <Bell className="w-4 h-4" strokeWidth={1.75} />
             {unreadNotifs > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-[#C2412D] rounded-full" />
+              <span
+                data-testid="buyer-notification-unread-badge"
+                className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-[#C2412D] text-white text-[10px] font-semibold leading-none rounded-[4px] flex items-center justify-center tabular-nums"
+              >
+                {unreadNotifs > 99 ? '99+' : unreadNotifs}
+              </span>
             )}
           </button>
 
@@ -292,7 +321,10 @@ export const BuyerLayout: React.FC = () => {
               aria-haspopup="menu"
               className="min-h-[40px] flex items-center gap-2.5 pl-2 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5F99]"
             >
-              <div className="w-8 h-8 rounded-[6px] bg-[#1F5F99] text-white flex items-center justify-center font-semibold text-[13px] shrink-0">
+              <div
+                className="w-8 h-8 rounded-[6px] text-white flex items-center justify-center font-semibold text-[13px] shrink-0"
+                style={{ backgroundColor: brandColor }}
+              >
                 {buyerInitials}
               </div>
               <div className="hidden sm:block text-left leading-tight">
@@ -395,14 +427,18 @@ export const BuyerLayout: React.FC = () => {
                       }}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                         isActive
-                          ? 'bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] font-semibold'
+                          ? 'font-semibold'
                           : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] hover:text-[#10212E] dark:hover:text-white'
                       }`}
+                      style={
+                        isActive
+                          ? { backgroundColor: `${brandColor}18`, color: brandColor }
+                          : undefined
+                      }
                     >
                       <Icon
-                        className={`w-4 h-4 shrink-0 ${
-                          isActive ? 'text-[#1F5F99] dark:text-[#6FAEE0]' : 'text-[#6B7A87]'
-                        }`}
+                        className="w-4 h-4 shrink-0"
+                        style={isActive ? { color: brandColor } : undefined}
                         strokeWidth={1.5}
                       />
                       <span className="truncate">{item.label}</span>
@@ -413,9 +449,20 @@ export const BuyerLayout: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-4 mt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] space-y-0.5">
-            <div className="truncate font-medium text-[#43525F] dark:text-[#B2C3D2]">{orgDisplayName}</div>
-            <div className="text-[11px]">Procuring entity workspace</div>
+          <div className="pt-4 mt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-start gap-2.5 text-[12px] text-[#6B7A87] dark:text-[#8DA2B5]">
+            <div
+              className="w-8 h-8 rounded-[6px] text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5"
+              style={{ backgroundColor: brandColor }}
+            >
+              {orgInitials}
+            </div>
+            <div className="min-w-0 space-y-0.5">
+              <div className="truncate font-semibold text-[#10212E] dark:text-white">{orgDisplayName}</div>
+              <div className="text-[11px] truncate">{brandSubtext}</div>
+              {brandDomain && (
+                <div className="text-[10px] font-mono truncate opacity-80">{brandDomain}</div>
+              )}
+            </div>
           </div>
         </aside>
 
@@ -440,7 +487,37 @@ export const BuyerLayout: React.FC = () => {
         </main>
       </div>
 
-      <NotificationDrawer isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} />
+      <NotificationDrawer
+        isOpen={isNotifOpen}
+        onClose={() => setIsNotifOpen(false)}
+        onNavigate={(link) => {
+          const normalized = link.trim().toLowerCase();
+          const map: Record<string, string> = {
+            overview: 'overview',
+            dashboard: 'overview',
+            'buyer-dashboard': 'overview',
+            calls: 'calls',
+            'rfp-management': 'calls',
+            clarifications: 'clarifications',
+            applications: 'applications',
+            'review-queue': 'applications',
+            roster: 'roster',
+            'supplier-database': 'roster',
+            'bids-opening': 'bids-opening',
+            evaluation: 'evaluation',
+            awards: 'awards',
+            reports: 'reports',
+            team: 'team',
+            branding: 'branding',
+            'audit-log': 'audit-log',
+            audit: 'audit-log',
+            settings: 'settings',
+            'buyer-settings': 'settings',
+          };
+          const targetTab = normalized.startsWith('call:') ? 'calls' : map[normalized] || 'overview';
+          setCurrentTab(targetTab);
+        }}
+      />
     </div>
   );
 };

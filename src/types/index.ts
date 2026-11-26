@@ -205,11 +205,27 @@ export interface PriceLineItem {
   totalPriceBWP?: number;
 }
 
+export interface BuyerBrandingConfig {
+  id?: string;
+  name: string;
+  slug?: string;
+  brandSubtext: string;
+  brandPrimaryColor: string;
+  customDomain: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  welcomeNotice: string;
+}
+
 export interface Call {
   id: string;
   callNumber: string;
   organizationId: string;
   organizationName: string;
+  orgBrandPrimaryColor?: string;
+  orgBrandSubtext?: string;
+  orgCustomDomain?: string;
+  orgWelcomeNotice?: string;
   title: string;
   summary: string;
   type: 'Registration drive' | 'EOI' | 'RFP';
@@ -236,6 +252,10 @@ export interface Call {
     title: string;
     issuedDate: string;
     summary: string;
+    body?: string;
+    newClosesAt?: string | null;
+    acknowledgementsCount?: number;
+    acknowledged?: boolean;
     downloadUrl: string;
   }[];
 }
@@ -262,8 +282,10 @@ export interface ConsentGrant {
   grantedAt: string;
   validUntil?: string;
   expiryDate?: string;
+  revokedAt?: string;
+  revocationReason?: string;
   purpose?: string;
-  status: 'Active' | 'Revoked';
+  status: 'Active' | 'Revoked' | 'Expired';
   scope: {
     companyDetails?: boolean;
     directorsOwners?: boolean;
@@ -300,6 +322,7 @@ export interface Bid {
   supplierId: string;
   supplierName: string;
   currency: 'BWP';
+  status?: 'draft' | 'submitted' | 'opened' | 'withdrawn' | 'disqualified' | string;
   pricingLineItems: PriceLineItem[];
   totalAmountBWP: number;
   technicalProposalFileName: string;
@@ -312,13 +335,15 @@ export interface Bid {
 
 export interface InformationRequest {
   id: string;
-  requestedBy: string;
+  requestedBy?: string;
   requestedAt: string;
-  dueDate: string;
+  dueDate?: string;
+  dueAt?: string | null;
   message: string;
-  status: 'Pending response' | 'Responded';
+  status?: 'Pending response' | 'Responded' | string;
   responseMessage?: string;
-  respondedAt?: string;
+  responseNote?: string | null;
+  respondedAt?: string | null;
   respondedBy?: string;
 }
 
@@ -328,6 +353,7 @@ export interface Application {
   callNumber: string;
   callTitle: string;
   callType: 'Registration drive' | 'EOI' | 'RFP';
+  closesAt?: string | null;
   organizationId: string;
   organizationName: string;
   supplierId: string;
@@ -349,7 +375,9 @@ export interface Application {
   }[];
   informationRequest?: InformationRequest;
   withdrawnAt?: string;
+  withdrawalReason?: string | null;
   sharedDocumentIds: string[];
+  documents?: any[];
   pinnedDocumentVersionIds?: string[];
   completenessScore?: number;
   answers?: Record<string, any>;
@@ -425,9 +453,11 @@ export interface AwardDecision {
   justification: string;
   status: 'Draft' | 'Pending approval' | 'Approved & Published' | 'Rejected';
   draftedBy: string;
+  recommendedByUserId?: string;
   draftedAt: string;
   approvedBy?: string;
   approvedAt?: string;
+  decisionComment?: string;
 }
 
 export interface AuditEvent {
@@ -436,7 +466,7 @@ export interface AuditEvent {
   actorRole: 'Supplier' | 'Procurement Officer' | 'Evaluator' | 'Approver' | 'Auditor' | 'System' | 'Super Admin' | 'Operator';
   organizationName: string;
   action: string;
-  entityType: 'Call' | 'Application' | 'Bid' | 'Document' | 'Consent' | 'Evaluation' | 'Award' | 'Form' | 'Organization' | 'Supplier';
+  entityType: 'Call' | 'CallAddendum' | 'Application' | 'Bid' | 'Document' | 'Consent' | 'ConsentGrant' | 'Evaluation' | 'Award' | 'Form' | 'Organization' | 'Supplier' | string;
   entityId: string;
   timestamp: string;
   details: string;
@@ -447,10 +477,12 @@ export interface NotificationItem {
   id: string;
   recipientRole: 'Supplier' | 'Buyer';
   recipientId: string;
+  eventType?: string;
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
   type: 'urgent' | 'info' | 'success' | 'warning';
   actionLink?: string;
+  data?: Record<string, any> | null;
 }

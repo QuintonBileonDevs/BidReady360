@@ -25,6 +25,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     clarifications: contextClarifications,
     profileSummary,
     registeredBuyerOrgName,
+    buyerBranding,
   } = useApp();
 
   const [orgCalls, setOrgCalls] = useState<Call[]>([]);
@@ -124,7 +125,24 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
   const applications = orgApps.length > 0 ? orgApps : contextApps;
   const clarifications = orgClarifications.length > 0 ? orgClarifications : contextClarifications;
   const orgDisplayName =
-    profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization';
+    buyerBranding?.name ||
+    profileSummary?.supplierOrOrgName ||
+    registeredBuyerOrgName ||
+    'Procuring Organization';
+  const brandColor =
+    buyerBranding?.brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(buyerBranding.brandPrimaryColor)
+      ? buyerBranding.brandPrimaryColor
+      : '#1F5F99';
+  const brandSubtext = buyerBranding?.brandSubtext || '';
+  const brandDomain = buyerBranding?.customDomain || '';
+  const brandWelcomeNotice = buyerBranding?.welcomeNotice || '';
+  const orgInitials =
+    orgDisplayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || '')
+      .join('') || 'PO';
 
   const pendingApps = useMemo(
     () => applications.filter((a) => a.status === 'Submitted' || a.status === 'Under review'),
@@ -239,34 +257,69 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
   return (
     <div className="space-y-12">
-      {/* 1. Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-        <div className="space-y-1">
-          <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
-            Dashboard
-          </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            {orgDisplayName} · Signed in as <strong>{buyerSubRole}</strong>
-          </p>
+      {/* 1. Branded Page Header */}
+      <div
+        className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 p-6 space-y-4"
+        style={{ borderLeftColor: brandColor }}
+      >
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0">
+            <div
+              className="w-12 h-12 rounded-[10px] text-white font-heading font-bold text-[18px] flex items-center justify-center shrink-0 shadow-xs"
+              style={{ backgroundColor: brandColor }}
+            >
+              {orgInitials}
+            </div>
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="font-heading font-semibold text-[26px] sm:text-[30px] leading-tight text-[#10212E] dark:text-white truncate">
+                  {orgDisplayName}
+                </h1>
+                {brandDomain && (
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87]">
+                    https://{brandDomain}
+                  </span>
+                )}
+              </div>
+              <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+                {brandSubtext ? `${brandSubtext} · ` : ''}Signed in as <strong>{buyerSubRole}</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => onNavigate('form-builder')}
+              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer"
+            >
+              Form builder
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('create-call')}
+              className="px-4 py-2.5 text-white rounded-[6px] text-[15px] font-medium transition-opacity hover:opacity-90 cursor-pointer flex items-center gap-2"
+              style={{ backgroundColor: brandColor }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Publish call</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => onNavigate('form-builder')}
-            className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#132635] rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer"
-          >
-            Form builder
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate('create-call')}
-            className="px-4 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Publish call</span>
-          </button>
-        </div>
+        {brandWelcomeNotice && (
+          <div className="pt-3 border-t border-[#D5E0EA]/70 dark:border-[#1E364A] text-[13px] text-[#43525F] dark:text-[#B2C3D2] flex items-center justify-between gap-3">
+            <span>{brandWelcomeNotice}</span>
+            <button
+              type="button"
+              onClick={() => onNavigate('branding')}
+              className="text-[12px] font-semibold shrink-0 hover:underline cursor-pointer"
+              style={{ color: brandColor }}
+            >
+              Edit branding
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. Needs Attention Row (Compact Cards) */}

@@ -1,1056 +1,820 @@
-import React, { useState, useEffect } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { buyerApi } from '../../services/api';
 import {
-  Shield,
   Users,
-  CheckCircle2,
-  Lock,
-  UserCheck,
-  Building,
-  Key,
   UserPlus,
+  Shield,
   Search,
-  Filter,
-  MoreVertical,
-  Edit3,
-  UserX,
-  Mail,
-  Phone,
-  Building2,
-  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Edit2,
   Trash2,
-  RotateCcw,
-  X,
-  ChevronDown,
-  SlidersHorizontal,
-  Send,
+  Clock,
+  RefreshCw,
+  AlertTriangle,
+  Copy,
   Check,
-  ShieldCheck,
-  FileCheck2,
+  Loader2,
+  Lock,
+  Mail,
+  Send,
+  X,
 } from 'lucide-react';
 
-export interface TeamMember {
+interface TeamMember {
   id: string;
+  userId: string;
   fullName: string;
   email: string;
-  phone: string;
+  roleId: string | null;
+  roleName: string;
+  roleCode: string;
   department: string;
   jobTitle: string;
-  role: 'Org Admin' | 'Procurement Officer' | 'Evaluator' | 'Approver' | 'Auditor';
   approvalLimitBWP: number | null;
-  status: 'Active' | 'Invited' | 'Suspended';
+  status: string;
   mfaEnabled: boolean;
-  mfaType: 'Authenticator' | 'SMS' | 'Pending';
-  lastActive: string;
-  joinedDate: string;
   conflictDeclared: boolean;
+  joinedAt: string | null;
+  lastActiveAt: string | null;
 }
 
-const DEPARTMENTS = [
-  'Supply Chain Management',
-  'Civil & Infrastructure Works',
-  'Treasury & Financial Planning',
-  'Executive Office',
-  'Internal Audit & Compliance',
-  'Public Health & Environment',
-];
+interface PendingInvitation {
+  id: string;
+  email: string;
+  roleId: string | null;
+  role: string;
+  roleCode: string;
+  department: string;
+  jobTitle: string;
+  approvalLimitBWP: number | null;
+  invitedBy: string;
+  sentAt: string;
+  expiresAt: string;
+  status: string;
+}
 
-const ROLES_INFO = [
-  {
-    role: 'Org Admin',
-    description: 'Manages organization profile, adds council staff members, configures procurement departments, and defines global tender approval thresholds.',
-    permissions: ['Manage team members', 'Configure form templates', 'View audit logs', 'Set approval limits'],
-  },
-  {
-    role: 'Procurement Officer',
-    description: 'Creates calls for tenders, manages pre-qualification rosters, screens supplier vault documents, drafts addenda, and moderates clarifications.',
-    permissions: ['Create calls & EOIs', 'Screen applications', 'Publish clarifications', 'Issue addenda', 'Draft award decisions'],
-  },
-  {
-    role: 'Evaluator',
-    description: 'Subject matter expert who reviews technical submissions, executes conflict of interest statutory declarations, and enters matrix scores.',
-    permissions: ['Sign conflict declarations', 'Score applications', 'View technical vaults'],
-  },
-  {
-    role: 'Approver',
-    description: 'Head of Procurement Unit or Town Clerk authorized to execute statutory sign-off on contract awards and publish notices of award.',
-    permissions: ['Approve award decisions', 'Publish official award notices', 'Authorize cancellations'],
-  },
-  {
-    role: 'Auditor',
-    description: 'Independent oversight officer (e.g. Auditor General or PPRA Compliance Inspector) with read-only forensics access to all bids and sealed hashes.',
-    permissions: ['View full immutable audit trail', 'Verify sealed hashes', 'Export compliance reports'],
-  },
-];
+interface OrgRole {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  approvalLimitBWP: number | null;
+  isSystem: boolean;
+  permissions: string[];
+}
 
 export const BuyerTeamRoles: React.FC = () => {
-  const { addAuditEvent, currentUser, profileSummary, registeredBuyerOrgName } = useApp();
-  const actorDisplayName = currentUser?.fullName || profileSummary?.displayName || 'Org Admin';
-  const orgDisplayName = profileSummary?.supplierOrOrgName || registeredBuyerOrgName || 'Procuring Organization';
-
+  const [activeTab, setActiveTab] = useState<'members' | 'invitations' | 'roles'>('members');
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
+  const [roles, setRoles] = useState<OrgRole[]>([]);
 
-  // Tab switch: 'members' vs 'roles'
-  const [activeTab, setActiveTab] = useState<'members' | 'roles'>('members');
-
-  // Search & Filter State
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('All');
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('All');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('All');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Modals state
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Generated invite link banner (one-time token returned by server)
+  const [generatedInvite, setGeneratedInvite] = useState<{
+    email: string;
+    token: string;
+    url: string;
+    expiresAt: string;
+  } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Modals
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
-  const [suspendingMember, setSuspendingMember] = useState<TeamMember | null>(null);
-  const [suspensionReason, setSuspensionReason] = useState('');
-  const [removingMember, setRemovingMember] = useState<TeamMember | null>(null);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState<TeamMember | null>(null);
 
-  // New Member Form State
-  const [newFullName, setNewFullName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const [newDept, setNewDept] = useState(DEPARTMENTS[0]);
-  const [newJobTitle, setNewJobTitle] = useState('');
-  const [newRole, setNewRole] = useState<TeamMember['role']>('Procurement Officer');
-  const [newApprovalLimit, setNewApprovalLimit] = useState<number | ''>(5000000);
-  const [requireConflictDeclaration, setRequireConflictDeclaration] = useState(true);
-  const [enforceMfa, setEnforceMfa] = useState(true);
+  // Invite form state
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRoleId, setInviteRoleId] = useState('');
+  const [inviteDepartment, setInviteDepartment] = useState('Procurement Unit');
+  const [inviteJobTitle, setInviteJobTitle] = useState('Procurement Officer');
+  const [inviteLimitBWP, setInviteLimitBWP] = useState('');
 
-  // Filter members
-  const filteredMembers = members.filter((m) => {
-    const matchesSearch =
-      m.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.jobTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.department.toLowerCase().includes(searchQuery.toLowerCase());
+  // Edit member form state
+  const [editRoleId, setEditRoleId] = useState('');
+  const [editDepartment, setEditDepartment] = useState('');
+  const [editJobTitle, setEditJobTitle] = useState('');
+  const [editLimitBWP, setEditLimitBWP] = useState('');
+  const [editConflictDeclared, setEditConflictDeclared] = useState(false);
 
-    const matchesRole = selectedRoleFilter === 'All' || m.role === selectedRoleFilter;
-    const matchesDept = selectedDeptFilter === 'All' || m.department === selectedDeptFilter;
-    const matchesStatus = selectedStatusFilter === 'All' || m.status === selectedStatusFilter;
-
-    return matchesSearch && matchesRole && matchesDept && matchesStatus;
-  });
-
-  // Role counters
-  const officerCount = members.filter((m) => m.role === 'Procurement Officer' && m.status === 'Active').length;
-  const evaluatorCount = members.filter((m) => m.role === 'Evaluator' && m.status === 'Active').length;
-  const approverCount = members.filter((m) => m.role === 'Approver' && m.status === 'Active').length;
-  const totalSeatsUsed = members.filter((m) => m.status !== 'Suspended').length;
-
-  const showNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 5000);
+  const showToast = (msg: string) => {
+    setErrorMsg(null);
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 5000);
   };
 
-  // Add Member Submission
-  const handleAddMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-    if (!newFullName.trim() || !newEmail.trim() || !newJobTitle.trim()) {
-      setFormError('Please fill in all required fields.');
-      return;
+  const loadTeam = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const data = await buyerApi.getTeam();
+      setMembers(Array.isArray(data?.members) ? data.members : []);
+      setInvitations(Array.isArray(data?.pendingInvitations) ? data.pendingInvitations : []);
+      const fetchedRoles: OrgRole[] = Array.isArray(data?.roles) ? data.roles : [];
+      setRoles(fetchedRoles);
+      if (!inviteRoleId && fetchedRoles.length > 0) {
+        setInviteRoleId(fetchedRoles[0].id);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Unable to load organization team and roles.');
+    } finally {
+      setIsLoading(false);
     }
+  }, [inviteRoleId]);
 
-    const newMemberRecord: TeamMember = {
-      id: `tm-${Date.now()}`,
-      fullName: newFullName.trim(),
-      email: newEmail.trim().toLowerCase(),
-      phone: newPhone.trim() || '',
-      department: newDept,
-      jobTitle: newJobTitle.trim(),
-      role: newRole,
-      approvalLimitBWP:
-        newRole === 'Approver' || newRole === 'Procurement Officer'
-          ? typeof newApprovalLimit === 'number'
-            ? newApprovalLimit
-            : 1000000
-          : null,
-      status: 'Invited',
-      mfaEnabled: enforceMfa,
-      mfaType: enforceMfa ? 'Authenticator' : 'Pending',
-      lastActive: 'Invitation dispatched',
-      joinedDate: 'Pending sign-up',
-      conflictDeclared: false,
-    };
+  useEffect(() => {
+    void loadTeam();
+  }, [loadTeam]);
 
-    setMembers((prev) => [newMemberRecord, ...prev]);
-
-    addAuditEvent({
-      action: 'Team Member Invited',
-      actorName: actorDisplayName,
-      actorRole: 'Procurement Officer',
-      organizationName: orgDisplayName,
-      entityType: 'Organization',
-      entityId: newMemberRecord.id,
-      details: `Invited ${newMemberRecord.fullName} (${newMemberRecord.email}) as ${newMemberRecord.role} in ${newMemberRecord.department}.`,
-    });
-
-    setIsAddModalOpen(false);
-    resetAddForm();
-    showNotification(`Invitation sent to ${newMemberRecord.fullName} (${newMemberRecord.email}).`);
+  const buildInviteUrl = (token: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/accept-invite?inviteToken=${encodeURIComponent(token)}`;
   };
 
-  const resetAddForm = () => {
-    setNewFullName('');
-    setNewEmail('');
-    setNewPhone('');
-    setNewDept(DEPARTMENTS[0]);
-    setNewJobTitle('');
-    setNewRole('Procurement Officer');
-    setNewApprovalLimit(5000000);
-    setRequireConflictDeclaration(true);
-    setEnforceMfa(true);
-    setFormError(null);
+  const handleCopyLink = (text: string) => {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  // Save Edit Member
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMember) return;
+    if (!inviteEmail.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const selectedRole = roles.find((r) => r.id === inviteRoleId);
+      const parsedLimit = inviteLimitBWP.trim() !== '' ? Number(inviteLimitBWP) : null;
+      const res = await buyerApi.inviteMember({
+        email: inviteEmail.trim(),
+        roleId: selectedRole?.id,
+        roleName: selectedRole?.name || 'Procurement Officer',
+        department: inviteDepartment.trim() || 'Procurement',
+        jobTitle: inviteJobTitle.trim() || selectedRole?.name || 'Procurement Officer',
+        approvalLimitBWP: Number.isFinite(parsedLimit) ? parsedLimit : null,
+      });
 
-    setMembers((prev) =>
-      prev.map((m) => (m.id === editingMember.id ? editingMember : m))
-    );
+      setIsInviteModalOpen(false);
+      setInviteEmail('');
+      setInviteLimitBWP('');
+      if (res?.inviteToken) {
+        setGeneratedInvite({
+          email: res.email,
+          token: res.inviteToken,
+          url: buildInviteUrl(res.inviteToken),
+          expiresAt: res.expiresAt,
+        });
+      }
+      await loadTeam();
+      setActiveTab('invitations');
+      showToast(`Invitation created for ${res.email}. Share the one-time acceptance link below.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to send invitation.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    addAuditEvent({
-      action: 'Team Member Profile Updated',
-      actorName: actorDisplayName,
-      actorRole: 'Procurement Officer',
-      organizationName: orgDisplayName,
-      entityType: 'Organization',
-      entityId: editingMember.id,
-      details: `Updated profile for ${editingMember.fullName}: Role=${editingMember.role}, Dept=${editingMember.department}, Limit=${editingMember.approvalLimitBWP ? 'BWP ' + editingMember.approvalLimitBWP.toLocaleString() : 'N/A'}.`,
+  const openEditModal = (m: TeamMember) => {
+    setEditingMember(m);
+    const matchedRole = roles.find((r) => r.id === m.roleId || r.name === m.roleName);
+    setEditRoleId(matchedRole?.id || roles[0]?.id || '');
+    setEditDepartment(m.department || '');
+    setEditJobTitle(m.jobTitle || '');
+    setEditLimitBWP(m.approvalLimitBWP != null ? String(m.approvalLimitBWP) : '');
+    setEditConflictDeclared(Boolean(m.conflictDeclared));
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember || isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const selectedRole = roles.find((r) => r.id === editRoleId);
+      const parsedLimit = editLimitBWP.trim() !== '' ? Number(editLimitBWP) : null;
+      await buyerApi.updateMember(editingMember.id, {
+        roleId: selectedRole?.id,
+        roleName: selectedRole?.name,
+        department: editDepartment.trim(),
+        jobTitle: editJobTitle.trim(),
+        approvalLimitBWP: Number.isFinite(parsedLimit) ? parsedLimit : null,
+        conflictDeclared: editConflictDeclared,
+      });
+      setEditingMember(null);
+      await loadTeam();
+      showToast(`Updated permissions for ${editingMember.fullName}.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Unable to update team member.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleStatus = async (m: TeamMember) => {
+    const nextStatus: 'active' | 'suspended' = m.status === 'active' ? 'suspended' : 'active';
+    setErrorMsg(null);
+    try {
+      await buyerApi.updateMemberStatus(m.id, nextStatus);
+      await loadTeam();
+      showToast(`${m.fullName} is now ${nextStatus === 'active' ? 'Active' : 'Suspended'}.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update member status.');
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!confirmRemoveMember || isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await buyerApi.removeMember(confirmRemoveMember.id);
+      const name = confirmRemoveMember.fullName;
+      setConfirmRemoveMember(null);
+      await loadTeam();
+      showToast(`Removed ${name} from the organization workspace.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to remove team member.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendInvite = async (inv: PendingInvitation) => {
+    setErrorMsg(null);
+    try {
+      const res = await buyerApi.resendTeamInvitation(inv.id);
+      if (res?.inviteToken) {
+        setGeneratedInvite({
+          email: res.email,
+          token: res.inviteToken,
+          url: buildInviteUrl(res.inviteToken),
+          expiresAt: res.expiresAt,
+        });
+      }
+      await loadTeam();
+      showToast(`Generated a fresh invitation link for ${inv.email}.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to resend invitation.');
+    }
+  };
+
+  const handleRevokeInvite = async (inv: PendingInvitation) => {
+    setErrorMsg(null);
+    try {
+      await buyerApi.revokeTeamInvitation(inv.id);
+      await loadTeam();
+      showToast(`Revoked invitation for ${inv.email}.`);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to revoke invitation.');
+    }
+  };
+
+  const filteredMembers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return members.filter((m) => {
+      const matchesSearch =
+        !q ||
+        m.fullName.toLowerCase().includes(q) ||
+        m.email.toLowerCase().includes(q) ||
+        m.department.toLowerCase().includes(q) ||
+        m.jobTitle.toLowerCase().includes(q);
+      const matchesRole = roleFilter === 'ALL' || m.roleName === roleFilter;
+      const matchesStatus = statusFilter === 'ALL' || m.status === statusFilter;
+      return matchesSearch && matchesRole && matchesStatus;
     });
+  }, [members, searchQuery, roleFilter, statusFilter]);
 
-    showNotification(`Profile for ${editingMember.fullName} updated successfully.`);
-    setEditingMember(null);
-  };
-
-  // Suspend Member
-  const handleConfirmSuspend = () => {
-    if (!suspendingMember) return;
-
-    setMembers((prev) =>
-      prev.map((m) =>
-        m.id === suspendingMember.id
-          ? { ...m, status: 'Suspended', lastActive: 'Suspended' }
-          : m
-      )
-    );
-
-    addAuditEvent({
-      action: 'Team Member Access Suspended',
-      actorName: actorDisplayName,
-      actorRole: 'Procurement Officer',
-      organizationName: orgDisplayName,
-      entityType: 'Organization',
-      entityId: suspendingMember.id,
-      details: `Suspended access for ${suspendingMember.fullName}. Reason: ${suspensionReason || 'Administrative decision'}.`,
-    });
-
-    showNotification(`Access for ${suspendingMember.fullName} has been suspended.`);
-    setSuspendingMember(null);
-    setSuspensionReason('');
-  };
-
-  // Reactivate Member
-  const handleReactivate = (member: TeamMember) => {
-    setMembers((prev) =>
-      prev.map((m) =>
-        m.id === member.id ? { ...m, status: 'Active', lastActive: 'Reactivated just now' } : m
-      )
-    );
-
-    addAuditEvent({
-      action: 'Team Member Access Restored',
-      actorName: actorDisplayName,
-      actorRole: 'Procurement Officer',
-      organizationName: orgDisplayName,
-      entityType: 'Organization',
-      entityId: member.id,
-      details: `Restored active access for ${member.fullName}.`,
-    });
-
-    showNotification(`Access for ${member.fullName} has been restored to active status.`);
-    setOpenDropdownId(null);
-  };
-
-  // Resend Invite
-  const handleResendInvite = (member: TeamMember) => {
-    showNotification(`Invitation link re-dispatched to ${member.email}.`);
-    setOpenDropdownId(null);
-  };
-
-  // Remove Member
-  const handleConfirmRemove = () => {
-    if (!removingMember) return;
-
-    setMembers((prev) => prev.filter((m) => m.id !== removingMember.id));
-
-    addAuditEvent({
-      action: 'Team Member Removed',
-      actorName: actorDisplayName,
-      actorRole: 'Procurement Officer',
-      organizationName: orgDisplayName,
-      entityType: 'Organization',
-      entityId: removingMember.id,
-      details: `Removed ${removingMember.fullName} (${removingMember.role}) from organization team roster.`,
-    });
-
-    showNotification(`${removingMember.fullName} removed from organization team roster.`);
-    setRemovingMember(null);
-  };
+  const activeCount = members.filter((m) => m.status === 'active').length;
+  const mfaCount = members.filter((m) => m.mfaEnabled).length;
+  const uniqueRoleNames = Array.from(new Set(members.map((m) => m.roleName))).sort();
 
   return (
-    <div className="space-y-8">
-      {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-        <div className="space-y-1">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {toastMessage && (
+        <div className="p-4 bg-emerald-50 text-[#2F8F5B] border border-emerald-300 rounded-xl text-xs flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-[#1F5F99] bg-[#EAF2FA] dark:bg-[#1E364A] dark:text-[#6FAEE0] px-2.5 py-0.5 rounded-[4px]">
-              Organization governance
-            </span>
-            <span className="text-[13px] text-[#6B7A87]">· Separation of duties (Public Procurement Act)</span>
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{toastMessage}</span>
           </div>
-          <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
-            Team members & governance roles
-          </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Manage procurement officers, certified evaluators, and statutory approvers for {orgDisplayName}.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2.5 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors shadow-sm shrink-0"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add team member</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Notification Toast */}
-      {notification && (
-        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px] animate-fade-in">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
-            <span>{notification}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setNotification(null)}
-            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer"
-          >
-            ✕
+          <button type="button" onClick={() => setToastMessage(null)} className="cursor-pointer">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* 2. Key Metrics Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Seats Usage */}
-        <div className="bg-white dark:bg-[#132635] p-5 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[#6B7A87]">Assigned seats</span>
-            <Users className="w-4 h-4 text-[#1F5F99]" />
+      {errorMsg && (
+        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
           </div>
-          <div className="font-heading font-semibold text-[26px] text-[#10212E] dark:text-white tabular-nums">
-            {totalSeatsUsed} of 10
-          </div>
-          <div className="space-y-1">
-            <div className="h-1.5 w-full bg-[#EAF2FA] dark:bg-[#1E364A] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#1F5F99] rounded-full"
-                style={{ width: `${(totalSeatsUsed / 10) * 100}%` }}
-              />
+          <button type="button" onClick={() => setErrorMsg(null)} className="cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* One-time Invite Link Banner */}
+      {generatedInvite && (
+        <div className="p-5 bg-[#EAF2FA] border border-[#1F5F99]/30 rounded-2xl space-y-2.5 text-xs">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-0.5">
+              <strong className="text-[#10212E] text-sm block">
+                One-time invitation link for {generatedInvite.email}
+              </strong>
+              <p className="text-slate-600">
+                Only the SHA-256 hash of this token is stored in the database. Copy and share this link now (expires{' '}
+                {new Date(generatedInvite.expiresAt).toLocaleDateString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+                ).
+              </p>
             </div>
-            <span className="text-[12px] text-[#6B7A87] block">
-              {10 - totalSeatsUsed} seats remaining on plan
+            <button
+              type="button"
+              onClick={() => setGeneratedInvite(null)}
+              className="text-slate-500 hover:text-slate-800 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 p-2.5 bg-white border border-slate-300 rounded-lg font-mono text-[11px] text-[#10212E] break-all">
+              {generatedInvite.url}
+            </code>
+            <button
+              type="button"
+              onClick={() => handleCopyLink(generatedInvite.url)}
+              className="px-3.5 py-2.5 bg-[#1F5F99] hover:bg-[#184a77] text-white rounded-lg font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-[#1F5F99] bg-[#EAF2FA] px-2.5 py-0.5 rounded-md">
+              Governance & RBAC
             </span>
+            <span className="text-xs text-slate-500">· Approval Limits & Separation of Duties</span>
           </div>
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900">
+            Team Members, Roles & Invitations
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
+            Manage procurement officers, evaluation panel members, and award approvers. Authority limits and role assignments persist directly to PostgreSQL.
+          </p>
         </div>
 
-        {/* Procurement Officers */}
-        <div className="bg-white dark:bg-[#132635] p-5 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[#6B7A87]">Procurement officers</span>
-            <Shield className="w-4 h-4 text-[#1F5F99]" />
-          </div>
-          <div className="font-heading font-semibold text-[26px] text-[#10212E] dark:text-white tabular-nums">
-            {officerCount} active
-          </div>
-          <span className="text-[12px] text-[#6B7A87] block">
-            Call authoring & clarification screening
-          </span>
-        </div>
-
-        {/* Evaluators */}
-        <div className="bg-white dark:bg-[#132635] p-5 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[#6B7A87]">Certified evaluators</span>
-            <FileCheck2 className="w-4 h-4 text-[#2F8F5B]" />
-          </div>
-          <div className="font-heading font-semibold text-[26px] text-[#10212E] dark:text-white tabular-nums">
-            {evaluatorCount} declared
-          </div>
-          <span className="text-[12px] text-[#2F8F5B] block">
-            Independence declarations on file
-          </span>
-        </div>
-
-        {/* Approvers */}
-        <div className="bg-white dark:bg-[#132635] p-5 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-[#6B7A87]">Tender board approvers</span>
-            <ShieldCheck className="w-4 h-4 text-[#1F5F99]" />
-          </div>
-          <div className="font-heading font-semibold text-[26px] text-[#10212E] dark:text-white tabular-nums">
-            {approverCount} authorized
-          </div>
-          <span className="text-[12px] text-[#6B7A87] block">
-            Approval threshold: BWP 25.0M
-          </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadTeam}
+            disabled={isLoading}
+            className="px-3.5 py-2.5 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!inviteRoleId && roles.length > 0) setInviteRoleId(roles[0].id);
+              setIsInviteModalOpen(true);
+            }}
+            className="btn-primary py-2.5 px-4 text-xs shadow-xs cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Invite Team Member</span>
+          </button>
         </div>
       </div>
 
-      {/* 3. Tab Switch: Team Roster vs Statutory Roles Matrix */}
-      <div className="flex border-b border-[#D5E0EA] dark:border-[#1E364A] gap-6">
+      {/* KPI Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <span className="text-slate-500 block">Total Workspace Members</span>
+          <strong className="text-2xl font-heading font-bold text-[#10212E] mt-1 block">{members.length}</strong>
+          <span className="text-[11px] text-[#2F8F5B]">{activeCount} active seats</span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <span className="text-slate-500 block">Pending Invitations</span>
+          <strong className="text-2xl font-heading font-bold text-[#1F5F99] mt-1 block">{invitations.length}</strong>
+          <span className="text-[11px] text-slate-500">Token-secured email invites</span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <span className="text-slate-500 block">Configured Roles</span>
+          <strong className="text-2xl font-heading font-bold text-[#10212E] mt-1 block">{roles.length}</strong>
+          <span className="text-[11px] text-slate-500">Enforced across buyer APIs</span>
+        </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5">
+          <span className="text-slate-500 block">MFA Protected</span>
+          <strong className="text-2xl font-heading font-bold text-[#2F8F5B] mt-1 block">
+            {mfaCount} / {members.length}
+          </strong>
+          <span className="text-[11px] text-slate-500">Active members with MFA</span>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 text-xs">
         <button
           type="button"
           onClick={() => setActiveTab('members')}
-          className={`pb-3 text-[15px] font-semibold border-b-2 cursor-pointer transition-colors flex items-center gap-2 ${
-            activeTab === 'members'
-              ? 'border-[#1F5F99] text-[#1F5F99]'
-              : 'border-transparent text-[#6B7A87] hover:text-[#10212E]'
+          className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
+            activeTab === 'members' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
           }`}
         >
-          <Users className="w-4 h-4" />
-          <span>Team members ({members.length})</span>
+          <Users className="w-3.5 h-3.5" />
+          <span>Members ({members.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('invitations')}
+          className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
+            activeTab === 'invitations' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <Mail className="w-3.5 h-3.5" />
+          <span>Pending Invitations ({invitations.length})</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('roles')}
-          className={`pb-3 text-[15px] font-semibold border-b-2 cursor-pointer transition-colors flex items-center gap-2 ${
-            activeTab === 'roles'
-              ? 'border-[#1F5F99] text-[#1F5F99]'
-              : 'border-transparent text-[#6B7A87] hover:text-[#10212E]'
+          className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
+            activeTab === 'roles' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
           }`}
         >
-          <Shield className="w-4 h-4" />
-          <span>Statutory governance roles & RBAC matrix</span>
+          <Shield className="w-3.5 h-3.5" />
+          <span>Role Permissions ({roles.length})</span>
         </button>
       </div>
 
-      {/* TAB 1: Team Members Management */}
-      {activeTab === 'members' && (
+      {isLoading ? (
+        <div className="p-10 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Loading workspace team directory...</span>
+        </div>
+      ) : activeTab === 'members' ? (
         <div className="space-y-4">
-          {/* Search & Filter Controls */}
-          <div className="bg-white dark:bg-[#132635] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
+          {/* Filters */}
+          <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by name, email, job title, or department..."
-                className="w-full pl-9 pr-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                placeholder="Search name, email, department..."
+                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
               />
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Role filter */}
-              <select
-                value={selectedRoleFilter}
-                onChange={(e) => setSelectedRoleFilter(e.target.value)}
-                className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-              >
-                <option value="All">All roles</option>
-                <option value="Org Admin">Org Admin</option>
-                <option value="Procurement Officer">Procurement Officer</option>
-                <option value="Evaluator">Evaluator</option>
-                <option value="Approver">Approver</option>
-                <option value="Auditor">Auditor</option>
-              </select>
-
-              {/* Department filter */}
-              <select
-                value={selectedDeptFilter}
-                onChange={(e) => setSelectedDeptFilter(e.target.value)}
-                className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-              >
-                <option value="All">All departments</option>
-                {DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-
-              {/* Status filter */}
-              <select
-                value={selectedStatusFilter}
-                onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-              >
-                <option value="All">All statuses</option>
-                <option value="Active">Active</option>
-                <option value="Invited">Invited</option>
-                <option value="Suspended">Suspended</option>
-              </select>
-
-              {(searchQuery || selectedRoleFilter !== 'All' || selectedDeptFilter !== 'All' || selectedStatusFilter !== 'All') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setSelectedRoleFilter('All');
-                    setSelectedDeptFilter('All');
-                    setSelectedStatusFilter('All');
-                  }}
-                  className="px-3 py-2 text-[13px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset</span>
-                </button>
-              )}
-            </div>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+            >
+              <option value="ALL">All Roles</option>
+              {uniqueRoleNames.map((rn) => (
+                <option key={rn} value={rn}>
+                  {rn}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
           </div>
 
-          {/* Members Table */}
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-                <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
-                  <tr>
-                    <th className="p-4">Member</th>
-                    <th className="p-4">Department & title</th>
-                    <th className="p-4">Statutory role</th>
-                    <th className="p-4 text-right">Approval limit</th>
-                    <th className="p-4">Security</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Last active</th>
-                    <th className="p-4 text-right">Actions</th>
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                    <th className="py-3 px-4">Member</th>
+                    <th className="py-3 px-4">Role & Department</th>
+                    <th className="py-3 px-4">Award Authority (BWP)</th>
+                    <th className="py-3 px-4">Status & Security</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+                <tbody className="divide-y divide-slate-100">
                   {filteredMembers.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-[#6B7A87]">
-                        No team members match the selected filters.
+                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                        No team members match your current filters.
                       </td>
                     </tr>
                   ) : (
-                    filteredMembers.map((member) => {
-                      const isDropdownOpen = openDropdownId === member.id;
-                      const initials = member.fullName
-                        .split(' ')
-                        .map((n) => n[0])
-                        .slice(0, 2)
-                        .join('');
-
-                      return (
-                        <tr key={member.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors">
-                          {/* Member info */}
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold text-[13px] flex items-center justify-center shrink-0">
-                                {initials}
-                              </div>
-                              <div className="space-y-0.5">
-                                <div className="font-semibold text-[14px] text-[#10212E] dark:text-white">
-                                  {member.fullName}
-                                </div>
-                                <div className="text-[12px] text-[#6B7A87] flex items-center gap-1.5">
-                                  <span>{member.email}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Department & Job Title */}
-                          <td className="p-4">
-                            <div className="space-y-0.5">
-                              <span className="font-medium text-[13px] text-[#10212E] dark:text-white block">
-                                {member.jobTitle}
-                              </span>
-                              <span className="text-[12px] text-[#6B7A87] block">
-                                {member.department}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Role Chip */}
-                          <td className="p-4">
-                            <span
-                              className={`text-[12px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1.5 ${
-                                member.role === 'Org Admin'
-                                  ? 'bg-[#EAF2FA] text-[#1F5F99]'
-                                  : member.role === 'Procurement Officer'
-                                  ? 'bg-[#EFF6FF] text-[#2563EB]'
-                                  : member.role === 'Evaluator'
-                                  ? 'bg-[#F0FDF4] text-[#16A34A]'
-                                  : member.role === 'Approver'
-                                  ? 'bg-[#FAF5FF] text-[#9333EA]'
-                                  : 'bg-[#F8FAFC] text-[#475569]'
-                              }`}
-                            >
-                              <Shield className="w-3 h-3" />
-                              <span>{member.role}</span>
+                    filteredMembers.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-50/70">
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-[#10212E]">{m.fullName}</div>
+                          <div className="text-[11px] text-slate-500">{m.email}</div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] font-semibold">
+                            {m.roleName}
+                          </span>
+                          <div className="text-[11px] text-slate-500 mt-1">
+                            {m.jobTitle} · {m.department}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono">
+                          {m.approvalLimitBWP != null ? (
+                            <span className="font-bold text-[#10212E]">
+                              P {Number(m.approvalLimitBWP).toLocaleString()}
                             </span>
-                          </td>
-
-                          {/* Approval limit */}
-                          <td className="p-4 text-right tabular-nums text-[13px]">
-                            {member.approvalLimitBWP ? (
-                              <span className="font-semibold text-[#10212E] dark:text-white">
-                                BWP {member.approvalLimitBWP.toLocaleString()}
-                              </span>
-                            ) : (
-                              <span className="text-[#6B7A87]">N/A</span>
+                          ) : (
+                            <span className="text-slate-400">No award limit</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 space-y-1">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              m.status === 'active'
+                                ? 'bg-emerald-50 text-[#2F8F5B]'
+                                : 'bg-rose-50 text-[#C2412D]'
+                            }`}
+                          >
+                            {m.status}
+                          </span>
+                          <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                            <span>{m.mfaEnabled ? 'MFA On' : 'MFA Off'}</span>
+                            {m.conflictDeclared && (
+                              <span className="text-amber-700 font-semibold">· COI Declared</span>
                             )}
-                          </td>
-
-                          {/* Security / MFA */}
-                          <td className="p-4">
-                            {member.mfaEnabled ? (
-                              <span className="text-[12px] text-[#2F8F5B] bg-[#ECFDF5] px-2 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1">
-                                <Lock className="w-3 h-3" />
-                                <span>2FA {member.mfaType}</span>
-                              </span>
-                            ) : (
-                              <span className="text-[12px] text-[#D97706] bg-[#FFFBEB] px-2 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                <span>Pending 2FA</span>
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Status */}
-                          <td className="p-4">
-                            <span
-                              className={`text-[12px] px-2.5 py-0.5 rounded-[4px] font-medium ${
-                                member.status === 'Active'
-                                  ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                                  : member.status === 'Invited'
-                                  ? 'bg-[#FFFBEB] text-[#D97706]'
-                                  : 'bg-[#FEF2F2] text-[#C2412D]'
-                              }`}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(m)}
+                              className="p-1.5 rounded border border-slate-200 text-slate-600 hover:text-[#1F5F99] hover:border-[#1F5F99] cursor-pointer"
+                              title="Edit role & approval limit"
                             >
-                              {member.status}
-                            </span>
-                          </td>
-
-                          {/* Last Active */}
-                          <td className="p-4 text-[13px] text-[#6B7A87] whitespace-nowrap">
-                            {member.lastActive}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="p-4 text-right relative">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setEditingMember(member)}
-                                className="p-1.5 text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] rounded-[4px] transition-colors cursor-pointer"
-                                title="Edit member profile"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setOpenDropdownId(isDropdownOpen ? null : member.id)
-                                }
-                                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] hover:bg-[#F7FAFD] rounded-[4px] transition-colors cursor-pointer"
-                              >
-                                <MoreVertical className="w-4 h-4" />
-                              </button>
-                            </div>
-
-                            {/* Dropdown Menu */}
-                            {isDropdownOpen && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-20"
-                                  onClick={() => setOpenDropdownId(null)}
-                                />
-                                <div className="absolute right-4 top-12 z-30 w-52 bg-white dark:bg-[#132635] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-lg py-1.5 text-[13px] text-left animate-fade-in">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingMember(member);
-                                      setOpenDropdownId(null);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white flex items-center gap-2 cursor-pointer"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5 text-[#6B7A87]" />
-                                    <span>Edit profile & role</span>
-                                  </button>
-
-                                  {member.status === 'Invited' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleResendInvite(member)}
-                                      className="w-full px-3.5 py-2 text-left hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#1F5F99] flex items-center gap-2 cursor-pointer"
-                                    >
-                                      <Send className="w-3.5 h-3.5" />
-                                      <span>Resend invitation link</span>
-                                    </button>
-                                  )}
-
-                                  {member.status === 'Active' ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSuspendingMember(member);
-                                        setOpenDropdownId(null);
-                                      }}
-                                      className="w-full px-3.5 py-2 text-left hover:bg-rose-50 dark:hover:bg-rose-950/20 text-[#C2412D] flex items-center gap-2 cursor-pointer"
-                                    >
-                                      <UserX className="w-3.5 h-3.5" />
-                                      <span>Suspend member</span>
-                                    </button>
-                                  ) : member.status === 'Suspended' ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleReactivate(member)}
-                                      className="w-full px-3.5 py-2 text-left hover:bg-[#ECFDF5] text-[#2F8F5B] flex items-center gap-2 cursor-pointer"
-                                    >
-                                      <UserCheck className="w-3.5 h-3.5" />
-                                      <span>Restore active access</span>
-                                    </button>
-                                  ) : null}
-
-                                  <div className="border-t border-[#D5E0EA] dark:border-[#1E364A] my-1" />
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setRemovingMember(member);
-                                      setOpenDropdownId(null);
-                                    }}
-                                    className="w-full px-3.5 py-2 text-left hover:bg-rose-50 dark:hover:bg-rose-950/20 text-[#C2412D] flex items-center gap-2 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Remove from council</span>
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStatus(m)}
+                              className="px-2.5 py-1 rounded border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                            >
+                              {m.status === 'active' ? 'Suspend' : 'Reactivate'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmRemoveMember(m)}
+                              className="p-1.5 rounded border border-slate-200 text-slate-500 hover:text-[#C2412D] hover:border-rose-300 cursor-pointer"
+                              title="Remove member"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
-      )}
-
-      {/* TAB 2: Statutory Roles Matrix */}
-      {activeTab === 'roles' && (
-        <div className="space-y-6">
-          {/* Statutory Separation of Duties Notice */}
-          <div className="p-5 rounded-[12px] bg-[#EAF2FA] dark:bg-[#1E364A]/50 border border-[#D5E0EA] dark:border-[#1E364A] flex items-start gap-3.5 text-[14px]">
-            <ShieldCheck className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <strong className="font-semibold text-[#10212E] dark:text-white">
-                Statutory Separation of Duties Enforced
-              </strong>
-              <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-                In compliance with the Public Procurement Act, members assigned as <strong>Procurement Officers</strong> author calls and screen supplier vaults, but cannot evaluate technical scores or approve awards. <strong>Evaluators</strong> must sign electronic conflict of interest declarations prior to unsealing bids. <strong>Approvers</strong> execute statutory award decisions only within their assigned financial limits.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {ROLES_INFO.map((r, idx) => {
-              const assignedMembers = members.filter((m) => m.role === r.role && m.status !== 'Suspended');
-
-              return (
-                <div
-                  key={idx}
-                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] rounded-[8px]">
-                        <Shield className="w-5 h-5" />
-                      </div>
-                      <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
-                        {r.role}
-                      </h3>
-                    </div>
-                    <span className="text-[12px] text-[#1F5F99] bg-[#EAF2FA] dark:bg-[#1E364A] px-2.5 py-0.5 rounded-[4px] font-medium">
-                      {assignedMembers.length} assigned
-                    </span>
-                  </div>
-
-                  <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-                    {r.description}
-                  </p>
-
-                  {/* Assigned Personnel */}
-                  <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                    <span className="text-[12px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
-                      Assigned personnel
-                    </span>
-                    <ul className="space-y-1.5 text-[13px] text-[#10212E] dark:text-white">
-                      {assignedMembers.length === 0 ? (
-                        <li className="text-[#6B7A87] italic">No active members in this role</li>
-                      ) : (
-                        assignedMembers.map((m) => (
-                          <li key={m.id} className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#1F5F99]" />
-                            <span className="font-medium">{m.fullName}</span>
-                            <span className="text-[#6B7A87]">({m.jobTitle})</span>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </div>
-
-                  {/* Granular Capabilities */}
-                  <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                    <span className="text-[12px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
-                      Granular capabilities
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {r.permissions.map((p, i) => (
-                        <span
-                          key={i}
-                          className="text-[12px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] px-2.5 py-1 rounded-[4px]"
-                        >
-                          {p}
+      ) : activeTab === 'invitations' ? (
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <th className="py-3 px-4">Invited Email</th>
+                  <th className="py-3 px-4">Role & Unit</th>
+                  <th className="py-3 px-4">Approval Limit</th>
+                  <th className="py-3 px-4">Expires</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {invitations.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-slate-400">
+                      No pending invitations. Click "Invite Team Member" to add procurement staff.
+                    </td>
+                  </tr>
+                ) : (
+                  invitations.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-slate-50/70">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-[#10212E]">{inv.email}</div>
+                        <div className="text-[11px] text-slate-500">Invited by {inv.invitedBy}</div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] font-semibold">
+                          {inv.role}
                         </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          {inv.jobTitle} · {inv.department}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono">
+                        {inv.approvalLimitBWP != null
+                          ? `P ${Number(inv.approvalLimitBWP).toLocaleString()}`
+                          : '—'}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600">
+                        <div className="inline-flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>
+                            {inv.expiresAt
+                              ? new Date(inv.expiresAt).toLocaleDateString('en-GB', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })
+                              : '7 days'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleResendInvite(inv)}
+                            className="px-2.5 py-1 rounded border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>Regenerate Link</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRevokeInvite(inv)}
+                            className="px-2.5 py-1 rounded border border-rose-200 text-[#C2412D] hover:bg-rose-50 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <XCircle className="w-3 h-3" />
+                            <span>Revoke</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {roles.map((r) => (
+            <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="font-heading font-bold text-sm text-[#10212E]">{r.name}</h3>
+                  <p className="text-slate-500 mt-0.5">{r.description || 'Organization role'}</p>
+                </div>
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                  {r.code}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-600">
+                <Lock className="w-3.5 h-3.5 text-[#1F5F99]" />
+                <span>
+                  Default Award Limit:{' '}
+                  <strong className="font-mono text-[#10212E]">
+                    {r.approvalLimitBWP != null
+                      ? `P ${Number(r.approvalLimitBWP).toLocaleString()}`
+                      : 'None / Inherited'}
+                  </strong>
+                </span>
+              </div>
+              {r.permissions.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {r.permissions.map((perm) => (
+                    <span
+                      key={perm}
+                      className="px-2 py-0.5 rounded bg-[#F7FAFD] border border-slate-200 font-mono text-[10px] text-slate-700"
+                    >
+                      {perm}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* 4. MODAL: Add Team Member */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-              <div>
-                <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
-                  Add new team member
-                </h3>
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
-                  Invite a council official and assign their statutory procurement role.
-                </p>
-              </div>
+      {/* Invite Modal */}
+      {isInviteModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-heading font-bold text-base text-[#10212E]">Invite Organization Member</h3>
               <button
                 type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
+                onClick={() => setIsInviteModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-
-            <form onSubmit={handleAddMember} className="space-y-4">
-              {formError && (
-                <div className="p-3 rounded-[6px] bg-rose-50 border border-rose-200 text-[#C2412D] text-[13px] font-medium">
-                  {formError}
-                </div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Full Name */}
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Full name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newFullName}
-                    onChange={(e) => setNewFullName(e.target.value)}
-                    placeholder="e.g. Naledi Kebonang"
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-
-                {/* Email */}
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Work email address *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="n.kebonang@grc.gov.bw"
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Phone */}
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Mobile phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    placeholder="+267 72 345 678"
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-
-                {/* Department */}
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Department *
-                  </label>
-                  <select
-                    value={newDept}
-                    onChange={(e) => setNewDept(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  >
-                    {DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Job Title */}
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                  Job title / statutory designation *
-                </label>
+            <form onSubmit={handleInviteSubmit} className="space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Work Email *</label>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={newJobTitle}
-                  onChange={(e) => setNewJobTitle(e.target.value)}
-                  placeholder="e.g. Senior Quantity Surveyor / Buyer"
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="officer@organization.gov.bw"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
                 />
               </div>
-
-              {/* Statutory Role */}
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                  Statutory procurement role *
-                </label>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Assigned Role *</label>
                 <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as TeamMember['role'])}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  value={inviteRoleId}
+                  onChange={(e) => setInviteRoleId(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
                 >
-                  <option value="Procurement Officer">Procurement Officer (Call authoring & vault screening)</option>
-                  <option value="Evaluator">Evaluator (Technical scoring & declarations)</option>
-                  <option value="Approver">Approver (Statutory tender board sign-off)</option>
-                  <option value="Org Admin">Org Admin (Full governance administration)</option>
-                  <option value="Auditor">Auditor (Read-only immutable trail inspection)</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
                 </select>
               </div>
-
-              {/* Conditional Approval Limit */}
-              {(newRole === 'Approver' || newRole === 'Procurement Officer') && (
-                <div className="space-y-1.5 p-3.5 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A]">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[13px] font-semibold text-[#10212E] dark:text-white">
-                      Statutory approval threshold limit (BWP)
-                    </label>
-                    <span className="text-[12px] text-[#6B7A87]">Per contract award</span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-[#6B7A87] font-medium">
-                      BWP
-                    </span>
-                    <input
-                      type="number"
-                      value={newApprovalLimit}
-                      onChange={(e) =>
-                        setNewApprovalLimit(e.target.value === '' ? '' : Number(e.target.value))
-                      }
-                      className="w-full pl-14 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white font-semibold tabular-nums focus:outline-none focus:border-[#1F5F99]"
-                      min="0"
-                      step="500000"
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {[1000000, 2500000, 5000000, 10000000, 25000000].map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setNewApprovalLimit(val)}
-                        className="text-[11px] px-2 py-0.5 rounded bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] hover:border-[#1F5F99] cursor-pointer"
-                      >
-                        BWP {(val / 1000000).toFixed(1)}M
-                      </button>
-                    ))}
-                  </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Department</label>
+                  <input
+                    type="text"
+                    value={inviteDepartment}
+                    onChange={(e) => setInviteDepartment(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  />
                 </div>
-              )}
-
-              {/* Governance Checkboxes */}
-              <div className="space-y-2.5 pt-2">
-                <label className="flex items-start gap-2.5 text-[13px] text-[#43525F] dark:text-[#B2C3D2] cursor-pointer">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
                   <input
-                    type="checkbox"
-                    checked={requireConflictDeclaration}
-                    onChange={(e) => setRequireConflictDeclaration(e.target.checked)}
-                    className="mt-0.5 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                    type="text"
+                    value={inviteJobTitle}
+                    onChange={(e) => setInviteJobTitle(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
                   />
-                  <span>
-                    Require mandatory electronic conflict of interest declaration prior to viewing unsealed tenders.
-                  </span>
-                </label>
-
-                <label className="flex items-start gap-2.5 text-[13px] text-[#43525F] dark:text-[#B2C3D2] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={enforceMfa}
-                    onChange={(e) => setEnforceMfa(e.target.checked)}
-                    className="mt-0.5 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
-                  />
-                  <span>
-                    Enforce mandatory multi-factor authentication (2FA) setup during first account sign-in.
-                  </span>
-                </label>
+                </div>
               </div>
-
-              {/* Modal Actions */}
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Award Approval Limit (BWP, optional)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="1000"
+                  value={inviteLimitBWP}
+                  onChange={(e) => setInviteLimitBWP(e.target.value)}
+                  placeholder="e.g. 500000"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono"
+                />
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
+                  onClick={() => setIsInviteModalOpen(false)}
+                  className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer shadow-sm transition-colors"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184a77] text-white rounded-lg font-semibold disabled:opacity-50 cursor-pointer"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Send invitation</span>
+                  {isSubmitting ? 'Creating...' : 'Create Invitation'}
                 </button>
               </div>
             </form>
@@ -1058,201 +822,93 @@ export const BuyerTeamRoles: React.FC = () => {
         </div>
       )}
 
-      {/* 5. MODAL: Edit Team Member */}
+      {/* Edit Member Modal */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
-                  Edit team member
-                </h3>
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
-                  Update role, department, and statutory procurement authority.
-                </p>
+                <h3 className="font-heading font-bold text-base text-[#10212E]">Edit Member Permissions</h3>
+                <p className="text-slate-500">{editingMember.fullName}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingMember(null)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                  Full name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editingMember.fullName}
-                  onChange={(e) =>
-                    setEditingMember({ ...editingMember, fullName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                />
+            <form onSubmit={handleSaveEdit} className="space-y-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Role</label>
+                <select
+                  value={editRoleId}
+                  onChange={(e) => setEditRoleId(e.target.value)}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                >
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Email address
-                  </label>
-                  <input
-                    type="email"
-                    disabled
-                    value={editingMember.email}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] cursor-not-allowed"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Phone number
-                  </label>
-                  <input
-                    type="tel"
-                    value={editingMember.phone}
-                    onChange={(e) =>
-                      setEditingMember({ ...editingMember, phone: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Department
-                  </label>
-                  <select
-                    value={editingMember.department}
-                    onChange={(e) =>
-                      setEditingMember({ ...editingMember, department: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                  >
-                    {DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                    Job title
-                  </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Department</label>
                   <input
                     type="text"
-                    required
-                    value={editingMember.jobTitle}
-                    onChange={(e) =>
-                      setEditingMember({ ...editingMember, jobTitle: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                    value={editDepartment}
+                    onChange={(e) => setEditDepartment(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
+                  <input
+                    type="text"
+                    value={editJobTitle}
+                    onChange={(e) => setEditJobTitle(e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
               </div>
-
-              {/* Statutory Role */}
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                  Statutory procurement role
-                </label>
-                <select
-                  value={editingMember.role}
-                  onChange={(e) =>
-                    setEditingMember({
-                      ...editingMember,
-                      role: e.target.value as TeamMember['role'],
-                      approvalLimitBWP:
-                        e.target.value === 'Approver' || e.target.value === 'Procurement Officer'
-                          ? editingMember.approvalLimitBWP || 5000000
-                          : null,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                >
-                  <option value="Procurement Officer">Procurement Officer</option>
-                  <option value="Evaluator">Evaluator</option>
-                  <option value="Approver">Approver</option>
-                  <option value="Org Admin">Org Admin</option>
-                  <option value="Auditor">Auditor</option>
-                </select>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Award Approval Limit (BWP)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="1000"
+                  value={editLimitBWP}
+                  onChange={(e) => setEditLimitBWP(e.target.value)}
+                  placeholder="Leave blank for role default"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono"
+                />
               </div>
-
-              {/* Approval Limit */}
-              {(editingMember.role === 'Approver' || editingMember.role === 'Procurement Officer') && (
-                <div className="space-y-1.5 p-3.5 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A]">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[13px] font-semibold text-[#10212E] dark:text-white">
-                      Statutory approval limit (BWP)
-                    </label>
-                    <span className="text-[12px] text-[#6B7A87]">Per contract award</span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-[#6B7A87] font-medium">
-                      BWP
-                    </span>
-                    <input
-                      type="number"
-                      value={editingMember.approvalLimitBWP || 0}
-                      onChange={(e) =>
-                        setEditingMember({
-                          ...editingMember,
-                          approvalLimitBWP: Number(e.target.value),
-                        })
-                      }
-                      className="w-full pl-14 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white font-semibold tabular-nums focus:outline-none focus:border-[#1F5F99]"
-                      min="0"
-                      step="500000"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Status Toggle */}
-              <div className="space-y-1.5">
-                <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                  Account status
-                </label>
-                <select
-                  value={editingMember.status}
-                  onChange={(e) =>
-                    setEditingMember({
-                      ...editingMember,
-                      status: e.target.value as TeamMember['status'],
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Invited">Invited</option>
-                  <option value="Suspended">Suspended</option>
-                </select>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+              <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editConflictDeclared}
+                  onChange={(e) => setEditConflictDeclared(e.target.checked)}
+                  className="rounded border-slate-300 text-[#1F5F99]"
+                />
+                <span className="font-semibold text-slate-700">Annual Conflict of Interest (COI) Declared</span>
+              </label>
+              <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setEditingMember(null)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
+                  className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer shadow-sm transition-colors"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184a77] text-white rounded-lg font-semibold disabled:opacity-50 cursor-pointer"
                 >
-                  <Check className="w-4 h-4" />
-                  <span>Save changes</span>
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -1260,90 +916,29 @@ export const BuyerTeamRoles: React.FC = () => {
         </div>
       )}
 
-      {/* 6. MODAL: Suspend Member Confirmation */}
-      {suspendingMember && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-md w-full p-6 space-y-5 shadow-xl animate-fade-in">
-            <div className="flex items-center gap-3 text-[#C2412D]">
-              <div className="p-2 rounded-full bg-[#FEF2F2]">
-                <UserX className="w-6 h-6" />
-              </div>
-              <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
-                Suspend team member
-              </h3>
-            </div>
-
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-              Are you sure you want to suspend access for <strong>{suspendingMember.fullName}</strong>?
-              They will be unable to log in, screen submissions, or score tenders until access is reinstated.
-              Prior audit logs and signed declarations remain permanently sealed.
+      {/* Confirm Remove Modal */}
+      {confirmRemoveMember && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
+            <h3 className="font-heading font-bold text-base text-[#10212E]">Remove team member?</h3>
+            <p className="text-slate-600 leading-relaxed">
+              Removing <strong>{confirmRemoveMember.fullName}</strong> ({confirmRemoveMember.email}) will revoke their access to this buyer workspace immediately.
             </p>
-
-            <div className="space-y-1.5">
-              <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
-                Statutory suspension reason
-              </label>
-              <input
-                type="text"
-                value={suspensionReason}
-                onChange={(e) => setSuspensionReason(e.target.value)}
-                placeholder="e.g. Leave of absence / conflict recusal"
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#C2412D]"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-3">
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setSuspendingMember(null)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
+                onClick={() => setConfirmRemoveMember(null)}
+                className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleConfirmSuspend}
-                className="px-4 py-2 bg-[#C2412D] hover:bg-[#a53625] text-white rounded-[6px] text-[14px] font-medium cursor-pointer shadow-sm"
+                disabled={isSubmitting}
+                onClick={handleRemoveMember}
+                className="px-4 py-2 bg-[#C2412D] hover:bg-[#9e3322] text-white rounded-lg font-semibold disabled:opacity-50 cursor-pointer"
               >
-                Confirm suspension
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 7. MODAL: Remove Member Confirmation */}
-      {removingMember && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-md w-full p-6 space-y-5 shadow-xl animate-fade-in">
-            <div className="flex items-center gap-3 text-[#C2412D]">
-              <div className="p-2 rounded-full bg-[#FEF2F2]">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
-                Remove team member
-              </h3>
-            </div>
-
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
-              Are you sure you want to remove <strong>{removingMember.fullName}</strong> from the {orgDisplayName} team roster?
-              This will free up 1 license seat. Historical score sheets and signed audit events will continue to reference their name.
-            </p>
-
-            <div className="pt-2 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setRemovingMember(null)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRemove}
-                className="px-4 py-2 bg-[#C2412D] hover:bg-[#a53625] text-white rounded-[6px] text-[14px] font-medium cursor-pointer shadow-sm"
-              >
-                Remove member
+                {isSubmitting ? 'Removing...' : 'Remove Member'}
               </button>
             </div>
           </div>

@@ -147,17 +147,20 @@ export class EvaluationsRepository {
       );
 
       // 3. Write Audit Event
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: 'Scorecard Finalized & Locked',
-        entityType: 'EvaluatorAssignment',
-        entityId: assignment.id,
-        ipAddress: data.ipAddress,
-        details: `Evaluator scorecard locked and finalized for call ${data.callId}.`,
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          action: 'Scorecard Finalized & Locked',
+          entityType: 'EvaluatorAssignment',
+          entityId: assignment.id,
+          ipAddress: data.ipAddress,
+          details: `Evaluator scorecard locked and finalized for call ${data.callId}.`,
+        },
+        client
+      );
     });
   }
 

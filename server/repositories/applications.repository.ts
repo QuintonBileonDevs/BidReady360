@@ -1,31 +1,173 @@
 import { query, tx } from '../db/client';
 import { auditRepository } from './audit.repository';
+import { notificationsRepository } from './notifications.repository';
+
+export interface ApplicationDocumentView {
+  documentTypeId: string;
+  documentVersionId: string;
+  code: string;
+  name: string;
+  versionNo: number;
+  sha256: string;
+  storageKey: string | null;
+  documentNumber: string | null;
+  expiryDate: string | null;
+  verificationStatus: string | null;
+}
 
 export interface ApplicationView {
   id: string;
   callId: string;
   callNumber: string;
   callTitle: string;
+  callType?: string;
+  closesAt?: string | null;
   supplierId: string;
   supplierLegalName: string;
   cipaUin: string;
   organizationId: string;
   organizationName: string;
+  consentGrantId?: string | null;
   status: string;
   receiptNumber: string | null;
   submittedAt: string | null;
+  withdrawnAt?: string | null;
+  withdrawalReason?: string | null;
+  decisionNote?: string | null;
   answers: Record<string, any> | null;
-  documents: { documentTypeId: string; code: string; name: string; versionNo: number; sha256: string; storageKey: string }[];
+  documents: ApplicationDocumentView[];
   timeline: { stage: string; note: string | null; createdAt: string }[];
+  informationRequest?: {
+    id: string;
+    message: string;
+    requestedAt: string;
+    dueAt: string | null;
+    respondedAt: string | null;
+    responseNote: string | null;
+  } | null;
+  bid?: {
+    id: string;
+    status: string;
+    receiptNumber: string | null;
+    sealedHash: string | null;
+    totalAmountBWP: number | null;
+  } | null;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class ApplicationsRepository {
+  private async hydrateApplications(rows: any[], includeSupplierBidPrice: boolean): Promise<ApplicationView[]> {
+    if (!rows.length) return [];
+    const appIds = rows.map((r) => r.id);
+    const callSupplierPairs = rows.map((r) => ({ callId: r.callId, supplierId: r.supplierId }));
+
+    const [docsRes, timelineRes, infoRes, bidsRes] = await Promise.all([
+      query<any>(
+        `SELECT ad.application_id AS "applicationId",
+                ad.document_type_id AS "documentTypeId",
+                ad.document_version_id AS "documentVersionId",
+                dt.code,
+                dt.name,
+                ad.pinned_version_no AS "versionNo",
+                ad.pinned_sha256 AS "sha256",
+                sdv.storage_key AS "storageKey",
+                COALESCE(ad.document_number_snapshot, sdv.document_number) AS "documentNumber",
+                COALESCE(ad.expiry_date_snapshot, sdv.expiry_date) AS "expiryDate",
+                sdv.verification_status AS "verificationStatus"
+         FROM application_documents ad
+         JOIN document_types dt ON dt.id = ad.document_type_id
+         LEFT JOIN supplier_document_versions sdv ON sdv.id = ad.document_version_id
+         WHERE ad.application_id = ANY($1::uuid[])
+         ORDER BY dt.sort_order ASC, ad.attached_at ASC`,
+        [appIds]
+      ),
+      query<any>(
+        `SELECT application_id AS "applicationId", stage, note, created_at AS "createdAt"
+         FROM application_timeline
+         WHERE application_id = ANY($1::uuid[])
+         ORDER BY created_at ASC`,
+        [appIds]
+      ),
+      query<any>(
+        `SELECT id, application_id AS "applicationId", message, requested_at AS "requestedAt",
+                due_at AS "dueAt", responded_at AS "respondedAt", response_note AS "responseNote"
+         FROM application_info_requests
+         WHERE application_id = ANY($1::uuid[])
+         ORDER BY requested_at DESC`,
+        [appIds]
+      ),
+      query<any>(
+        `SELECT id, call_id AS "callId", supplier_id AS "supplierId", status,
+                receipt_number AS "receiptNumber", payload_sha256 AS "sealedHash",
+                ${includeSupplierBidPrice ? 'total_price' : `CASE WHEN status = 'opened' THEN total_price ELSE NULL END`} AS "totalPrice"
+         FROM bids
+         WHERE call_id = ANY($1::uuid[]) AND supplier_id = ANY($2::uuid[])`,
+        [
+          Array.from(new Set(callSupplierPairs.map((p) => p.callId))),
+          Array.from(new Set(callSupplierPairs.map((p) => p.supplierId))),
+        ]
+      ),
+    ]);
+
+    const docsByApp = new Map<string, ApplicationDocumentView[]>();
+    for (const d of docsRes.rows) {
+      const list = docsByApp.get(d.applicationId) || [];
+      list.push(d);
+      docsByApp.set(d.applicationId, list);
+    }
+
+    const timelineByApp = new Map<string, any[]>();
+    for (const t of timelineRes.rows) {
+      const list = timelineByApp.get(t.applicationId) || [];
+      list.push({ stage: t.stage, note: t.note, createdAt: t.createdAt });
+      timelineByApp.set(t.applicationId, list);
+    }
+
+    const latestInfoByApp = new Map<string, any>();
+    for (const ir of infoRes.rows) {
+      if (!latestInfoByApp.has(ir.applicationId)) {
+        latestInfoByApp.set(ir.applicationId, {
+          id: ir.id,
+          message: ir.message,
+          requestedAt: ir.requestedAt,
+          dueAt: ir.dueAt,
+          respondedAt: ir.respondedAt,
+          responseNote: ir.responseNote,
+        });
+      }
+    }
+
+    const bidByPair = new Map<string, any>();
+    for (const b of bidsRes.rows) {
+      bidByPair.set(`${b.callId}|${b.supplierId}`, {
+        id: b.id,
+        status: b.status,
+        receiptNumber: b.receiptNumber,
+        sealedHash: b.sealedHash,
+        totalAmountBWP: b.totalPrice !== null && b.totalPrice !== undefined ? Number(b.totalPrice) : null,
+      });
+    }
+
+    return rows.map((row) => ({
+      ...row,
+      documents: docsByApp.get(row.id) || [],
+      timeline: timelineByApp.get(row.id) || [],
+      informationRequest: latestInfoByApp.get(row.id) || null,
+      bid: bidByPair.get(`${row.callId}|${row.supplierId}`) || null,
+    }));
+  }
+
   async getByCallAndSupplier(callId: string, supplierId: string): Promise<ApplicationView | null> {
     const res = await query<any>(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              c.call_type AS "callType", c.closes_at AS "closesAt",
               a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
               a.organization_id AS "organizationId", o.name AS "organizationName",
-              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+              a.consent_grant_id AS "consentGrantId",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt",
+              a.withdrawn_at AS "withdrawnAt", a.withdrawal_reason AS "withdrawalReason",
+              a.decision_note AS "decisionNote", a.answers
        FROM applications a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
@@ -35,58 +177,41 @@ export class ApplicationsRepository {
     );
 
     if (!res.rows.length) return null;
-    const base = res.rows[0];
-
-    const [docsRes, timelineRes] = await Promise.all([
-      query(
-        `SELECT ad.document_type_id AS "documentTypeId", dt.code, dt.name,
-                ad.pinned_version_no AS "versionNo", ad.pinned_sha256 AS "sha256",
-                sdv.storage_key AS "storageKey"
-         FROM application_documents ad
-         JOIN document_types dt ON dt.id = ad.document_type_id
-         LEFT JOIN supplier_document_versions sdv ON sdv.id = ad.document_version_id
-         WHERE ad.application_id = $1`,
-        [base.id]
-      ),
-      query(
-        `SELECT stage, note, created_at AS "createdAt"
-         FROM application_timeline
-         WHERE application_id = $1
-         ORDER BY created_at ASC`,
-        [base.id]
-      ),
-    ]);
-
-    return {
-      ...base,
-      documents: docsRes.rows,
-      timeline: timelineRes.rows,
-    };
+    const hydrated = await this.hydrateApplications(res.rows, true);
+    return hydrated[0];
   }
 
   async listByOrganization(orgId: string): Promise<ApplicationView[]> {
     const res = await query<any>(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              c.call_type AS "callType", c.closes_at AS "closesAt",
               a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
               a.organization_id AS "organizationId", o.name AS "organizationName",
-              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+              a.consent_grant_id AS "consentGrantId",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt",
+              a.withdrawn_at AS "withdrawnAt", a.withdrawal_reason AS "withdrawalReason",
+              a.decision_note AS "decisionNote", a.answers
        FROM applications a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
        JOIN organizations o ON o.id = a.organization_id
-       WHERE a.organization_id = $1
+       WHERE a.organization_id = $1 AND a.status <> 'Draft'
        ORDER BY a.submitted_at DESC NULLS LAST, a.created_at DESC`,
       [orgId]
     );
-    return res.rows;
+    return this.hydrateApplications(res.rows, false);
   }
 
   async listBySupplier(supplierId: string): Promise<ApplicationView[]> {
     const res = await query<any>(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              c.call_type AS "callType", c.closes_at AS "closesAt",
               a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
               a.organization_id AS "organizationId", o.name AS "organizationName",
-              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+              a.consent_grant_id AS "consentGrantId",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt",
+              a.withdrawn_at AS "withdrawnAt", a.withdrawal_reason AS "withdrawalReason",
+              a.decision_note AS "decisionNote", a.answers
        FROM applications a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
@@ -95,11 +220,12 @@ export class ApplicationsRepository {
        ORDER BY a.submitted_at DESC NULLS LAST, a.created_at DESC`,
       [supplierId]
     );
-    return res.rows;
+    return this.hydrateApplications(res.rows, true);
   }
 
   /**
    * Submit an application with strict mandatory document verification.
+   * Respects existing finalized states and never reactivates revoked consent grants.
    */
   async submitApplication(data: {
     callId: string;
@@ -111,7 +237,6 @@ export class ApplicationsRepository {
     actorRole: string;
     ipAddress?: string;
   }): Promise<{ applicationId: string; receiptNumber: string }> {
-    // 1. Fetch Call & verify active organization, call status, and closing date
     const callRes = await query<{
       id: string;
       organization_id: string;
@@ -156,9 +281,8 @@ export class ApplicationsRepository {
       throw err;
     }
 
-    // 1a. Enforce Supplier Standing (block suspended or rejected suppliers)
-    const supRes = await query<{ status: string; verification_status: string }>(
-      `SELECT status, verification_status FROM suppliers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+    const supRes = await query<{ status: string; verification_status: string; legal_name: string }>(
+      `SELECT status, verification_status, legal_name FROM suppliers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
       [data.supplierId]
     );
     if (!supRes.rows.length) {
@@ -185,7 +309,6 @@ export class ApplicationsRepository {
       throw err;
     }
 
-    // 1b. Enforce statutory debarment block (platform-wide or procuring-entity-specific)
     const debarRes = await query<{ id: string; reason: string; ends_on: string | null }>(
       `SELECT id, reason, ends_on
        FROM debarments
@@ -208,7 +331,6 @@ export class ApplicationsRepository {
       throw err;
     }
 
-    // 2. Enforce Mandatory Documents check (exclude rejected/expired/unverifiable versions)
     const reqDocsRes = await query<{ document_type_id: string; code: string; name: string }>(
       `SELECT crd.document_type_id, dt.code, dt.name
        FROM call_required_documents crd
@@ -217,12 +339,9 @@ export class ApplicationsRepository {
       [data.callId]
     );
 
-    // Fetch supplier's attached versions (accepting versionId or documentId for compatibility)
     let attachedVersions: any[] = [];
     if (data.attachedDocumentVersionIds.length > 0) {
-      const validUuids = data.attachedDocumentVersionIds.filter((id) =>
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))
-      );
+      const validUuids = data.attachedDocumentVersionIds.filter((id) => UUID_REGEX.test(String(id)));
       if (validUuids.length > 0) {
         const vRes = await query<{
           id: string;
@@ -248,7 +367,6 @@ export class ApplicationsRepository {
       }
     }
 
-    // Check that every mandatory document is provided and valid
     const attachedTypeIds = new Set(attachedVersions.map((v) => v.document_type_id));
     for (const reqDoc of reqDocsRes.rows) {
       if (!attachedTypeIds.has(reqDoc.document_type_id)) {
@@ -264,27 +382,72 @@ export class ApplicationsRepository {
     const receiptNumber = `APP-${call.reference_no.replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-6)}`;
 
     return tx(async (client) => {
-      // 3. Upsert application
+      // Prevent resubmission over finalized decisions
+      const existingApp = await client.query<{ id: string; status: string }>(
+        `SELECT id, status FROM applications WHERE call_id = $1 AND supplier_id = $2 FOR UPDATE`,
+        [data.callId, data.supplierId]
+      );
+      if (existingApp.rows.length > 0 && ['Approved', 'Rejected'].includes(existingApp.rows[0].status)) {
+        const err: any = new Error(
+          `This application has already been finalized (${existingApp.rows[0].status}) and cannot be overwritten.`
+        );
+        err.status = 400;
+        err.code = 'APPLICATION_FINALIZED';
+        throw err;
+      }
+
+      // Link ONLY an existing active, unexpired consent grant; never reactivate a revoked grant
+      const activeGrantRes = await client.query<{ id: string }>(
+        `SELECT id
+         FROM consent_grants
+         WHERE supplier_id = $1
+           AND organization_id = $2
+           AND status = 'active'
+           AND (expires_at IS NULL OR expires_at > NOW())
+         ORDER BY granted_at DESC
+         LIMIT 1`,
+        [data.supplierId, call.organization_id]
+      );
+      const consentGrantId = activeGrantRes.rows[0]?.id || null;
+
       const appRes = await client.query<{ id: string }>(
         `INSERT INTO applications (
-          call_id, supplier_id, organization_id, status, answers, receipt_number,
-          submitted_by_user_id, submitted_at, updated_at
+          call_id, supplier_id, organization_id, consent_grant_id, status, answers, receipt_number,
+          submitted_by_user_id, submitted_at, withdrawn_at, withdrawal_reason, updated_at
         ) VALUES (
-          $1, $2, $3, 'Submitted', $4, $5, $6, NOW(), NOW()
+          $1, $2, $3, $4, 'Submitted', $5, $6, $7, NOW(), NULL, NULL, NOW()
         )
         ON CONFLICT (call_id, supplier_id) DO UPDATE
         SET status = 'Submitted',
+            consent_grant_id = COALESCE(EXCLUDED.consent_grant_id, applications.consent_grant_id),
             answers = EXCLUDED.answers,
             receipt_number = EXCLUDED.receipt_number,
             submitted_by_user_id = EXCLUDED.submitted_by_user_id,
             submitted_at = NOW(),
+            withdrawn_at = NULL,
+            withdrawal_reason = NULL,
             updated_at = NOW()
         RETURNING id`,
-        [data.callId, data.supplierId, call.organization_id, JSON.stringify(data.answers), receiptNumber, data.userId]
+        [
+          data.callId,
+          data.supplierId,
+          call.organization_id,
+          consentGrantId,
+          JSON.stringify(data.answers),
+          receiptNumber,
+          data.userId,
+        ]
       );
       const appId = appRes.rows[0].id;
 
-      // 4. Pin Document Snapshots
+      if (consentGrantId) {
+        await client.query(
+          `INSERT INTO consent_grant_applications (consent_grant_id, application_id, attached_at)
+           VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING`,
+          [consentGrantId, appId]
+        );
+      }
+
       await client.query(`DELETE FROM application_documents WHERE application_id = $1`, [appId]);
       for (const v of attachedVersions) {
         await client.query(
@@ -296,43 +459,354 @@ export class ApplicationsRepository {
         );
       }
 
-      // 5. Write to application_timeline
       await client.query(
         `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
-         VALUES ($1, 'Submitted', 'Formal bid package submitted with statutory checksum receipt.', $2, NOW())`,
+         VALUES ($1, 'Submitted', 'Formal dossier submitted with pinned vault document checksums.', $2, NOW())`,
         [appId, data.userId]
       );
 
-      // 6. Write to immutable audit_log
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        supplierId: data.supplierId,
-        organizationId: call.organization_id,
-        action: 'Application Submitted',
-        entityType: 'Application',
-        entityId: appId,
-        ipAddress: data.ipAddress,
-        details: `Application submitted for call ${call.reference_no} (Receipt: ${receiptNumber}). Attached ${attachedVersions.length} pinned document versions.`,
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: call.organization_id,
+          action: 'Application Submitted',
+          entityType: 'Application',
+          entityId: appId,
+          ipAddress: data.ipAddress,
+          details: `Application submitted for call ${call.reference_no} (Receipt: ${receiptNumber}). Attached ${attachedVersions.length} pinned document versions.`,
+        },
+        client
+      );
+
+      await notificationsRepository.notifyOrganizationMembers(
+        call.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: 'application_submitted',
+          title: `New application submitted for ${call.reference_no}`,
+          body: `${sup.legal_name} submitted an application dossier (receipt ${receiptNumber}). Open the applications queue to review the submission.`,
+          linkUrl: 'review-queue',
+          priority: 'info',
+          permissionCode: 'applications.view',
+          data: {
+            applicationId: appId,
+            callId: data.callId,
+            callNumber: call.reference_no,
+            supplierName: sup.legal_name,
+            receiptNumber,
+          },
+        },
+        client
+      );
 
       return { applicationId: appId, receiptNumber };
     });
   }
 
+  /**
+   * Withdraw a submitted application prior to closing deadline.
+   */
+  async withdrawApplication(data: {
+    applicationIdOrCallId: string;
+    supplierId: string;
+    userId: string;
+    reason?: string;
+    actorName: string;
+    actorRole: string;
+    ipAddress?: string;
+  }): Promise<{ applicationId: string; callId: string; withdrawnAt: string }> {
+    if (!UUID_REGEX.test(data.applicationIdOrCallId)) {
+      const err: any = new Error('Invalid application identifier.');
+      err.status = 400;
+      throw err;
+    }
+
+    return tx(async (client) => {
+      const appRes = await client.query<{
+        id: string;
+        call_id: string;
+        organization_id: string;
+        status: string;
+        reference_no: string;
+        title: string;
+        closes_at: string | null;
+      }>(
+        `SELECT a.id, a.call_id, a.organization_id, a.status, c.reference_no, c.title, c.closes_at
+         FROM applications a
+         JOIN calls c ON c.id = a.call_id
+         WHERE (a.id = $1 OR a.call_id = $1) AND a.supplier_id = $2
+         FOR UPDATE OF a`,
+        [data.applicationIdOrCallId, data.supplierId]
+      );
+      if (!appRes.rows.length) {
+        const err: any = new Error('Application not found.');
+        err.status = 404;
+        err.code = 'APPLICATION_NOT_FOUND';
+        throw err;
+      }
+      const app = appRes.rows[0];
+
+      if (!['Submitted', 'Under review', 'More information requested'].includes(app.status)) {
+        const err: any = new Error(`Applications in "${app.status}" status cannot be withdrawn.`);
+        err.status = 400;
+        err.code = 'INVALID_STATE_TRANSITION';
+        throw err;
+      }
+
+      if (app.closes_at && new Date() > new Date(app.closes_at)) {
+        const err: any = new Error('Closing deadline has passed; applications can no longer be withdrawn.');
+        err.status = 400;
+        err.code = 'CALL_CLOSED';
+        throw err;
+      }
+
+      const cleanReason = (data.reason || 'Withdrawn by supplier prior to closing deadline').trim();
+      await client.query(
+        `UPDATE applications
+         SET status = 'Withdrawn',
+             withdrawn_at = NOW(),
+             withdrawal_reason = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [app.id, cleanReason]
+      );
+
+      // Also withdraw any linked un-opened bid
+      await client.query(
+        `UPDATE bids
+         SET status = 'withdrawn', updated_at = NOW()
+         WHERE call_id = $1 AND supplier_id = $2 AND status IN ('draft', 'submitted')`,
+        [app.call_id, data.supplierId]
+      );
+
+      await client.query(
+        `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
+         VALUES ($1, 'Withdrawn', $2, $3, NOW())`,
+        [app.id, cleanReason, data.userId]
+      );
+
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: app.organization_id,
+          action: 'Application Withdrawn',
+          entityType: 'Application',
+          entityId: app.id,
+          ipAddress: data.ipAddress,
+          details: `Supplier withdrew application for ${app.reference_no}. Reason: ${cleanReason}`,
+        },
+        client
+      );
+
+      await notificationsRepository.notifyOrganizationMembers(
+        app.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: 'application_withdrawn',
+          title: `Application withdrawn for ${app.reference_no}`,
+          body: `${data.actorName || 'A supplier'} withdrew their application for ${app.title} before closing. Open the applications queue to view the updated list.`,
+          linkUrl: 'review-queue',
+          priority: 'warning',
+          permissionCode: 'applications.view',
+          data: {
+            applicationId: app.id,
+            callId: app.call_id,
+            callNumber: app.reference_no,
+            callTitle: app.title,
+            supplierName: data.actorName || 'A supplier',
+          },
+        },
+        client
+      );
+
+      return { applicationId: app.id, callId: app.call_id, withdrawnAt: new Date().toISOString() };
+    });
+  }
+
+  /**
+   * Supplier response to an open "More information requested" review cycle.
+   */
+  async respondToInfoRequest(data: {
+    applicationId: string;
+    supplierId: string;
+    userId: string;
+    responseMessage: string;
+    actorName: string;
+    actorRole: string;
+    ipAddress?: string;
+  }): Promise<void> {
+    const cleanMsg = String(data.responseMessage || '').trim();
+    if (!cleanMsg) {
+      const err: any = new Error('Response message is required.');
+      err.status = 400;
+      throw err;
+    }
+
+    await tx(async (client) => {
+      const appRes = await client.query<{
+        id: string;
+        call_id: string;
+        organization_id: string;
+        status: string;
+        reference_no: string;
+      }>(
+        `SELECT a.id, a.call_id, a.organization_id, a.status, c.reference_no
+         FROM applications a
+         JOIN calls c ON c.id = a.call_id
+         WHERE a.id = $1 AND a.supplier_id = $2
+         FOR UPDATE OF a`,
+        [data.applicationId, data.supplierId]
+      );
+      if (!appRes.rows.length) {
+        const err: any = new Error('Application not found.');
+        err.status = 404;
+        throw err;
+      }
+      const app = appRes.rows[0];
+      if (app.status !== 'More information requested') {
+        const err: any = new Error('This application is not currently awaiting additional information.');
+        err.status = 400;
+        err.code = 'INVALID_STATE_TRANSITION';
+        throw err;
+      }
+
+      await client.query(
+        `UPDATE application_info_requests
+         SET responded_at = NOW(),
+             response_note = $2,
+             responded_by_user_id = $3
+         WHERE id = (
+           SELECT id FROM application_info_requests
+           WHERE application_id = $1 AND responded_at IS NULL
+           ORDER BY requested_at DESC
+           LIMIT 1
+         )`,
+        [app.id, cleanMsg.slice(0, 1990), data.userId]
+      );
+
+      await client.query(
+        `INSERT INTO application_reviewer_messages (application_id, sender_user_id, sender_name, sender_role, message, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [app.id, data.userId, data.actorName, data.actorRole, cleanMsg]
+      );
+
+      await client.query(
+        `UPDATE applications SET status = 'Under review', updated_at = NOW() WHERE id = $1`,
+        [app.id]
+      );
+
+      await client.query(
+        `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
+         VALUES ($1, 'Under review', $2, $3, NOW())`,
+        [app.id, `Supplier submitted clarification: ${cleanMsg.slice(0, 450)}`, data.userId]
+      );
+
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: app.organization_id,
+          action: 'Application Information Submitted',
+          entityType: 'Application',
+          entityId: app.id,
+          ipAddress: data.ipAddress,
+          details: `Supplier responded to information request on ${app.reference_no} and returned dossier to Under review.`,
+        },
+        client
+      );
+
+      await notificationsRepository.notifyOrganizationMembers(
+        app.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: 'application_info_responded',
+          title: `Additional information submitted for ${app.reference_no}`,
+          body: `${data.actorName} replied to your information request. Open the applications queue to continue the review.`,
+          linkUrl: 'review-queue',
+          priority: 'info',
+          permissionCode: 'applications.review',
+          data: {
+            applicationId: app.id,
+            callId: app.call_id,
+            callNumber: app.reference_no,
+            actorName: data.actorName,
+          },
+        },
+        client
+      );
+    });
+  }
+
+  /**
+   * Record buyer application review decision enforcing valid state machine,
+   * review trail rows, info requests, approved supplier roster sync, audit & notification.
+   */
   async recordReviewDecision(data: {
     applicationId: string;
     orgId: string;
     userId: string;
     reviewerName: string;
     reviewerRole: string;
-    decision: 'Approved' | 'Rejected' | 'More information requested';
+    decision: 'Under review' | 'Approved' | 'Rejected' | 'More information requested';
     comment?: string;
     ipAddress?: string;
   }): Promise<void> {
+    const allowedDecisions = ['Under review', 'Approved', 'Rejected', 'More information requested'];
+    if (!allowedDecisions.includes(data.decision)) {
+      const err: any = new Error('Unsupported review decision.');
+      err.status = 400;
+      throw err;
+    }
+    const cleanComment = (data.comment || '').trim();
+    if (data.decision === 'More information requested' && !cleanComment) {
+      const err: any = new Error('Please specify what additional information is requested from the supplier.');
+      err.status = 400;
+      throw err;
+    }
+    if (data.decision === 'Rejected' && !cleanComment) {
+      const err: any = new Error('Please provide a statutory reason when rejecting an application.');
+      err.status = 400;
+      throw err;
+    }
+
     await tx(async (client) => {
-      // 1. Update application status
+      const appRes = await client.query<{
+        id: string;
+        call_id: string;
+        supplier_id: string;
+        status: string;
+        reference_no: string;
+        title: string;
+      }>(
+        `SELECT a.id, a.call_id, a.supplier_id, a.status, c.reference_no, c.title
+         FROM applications a
+         JOIN calls c ON c.id = a.call_id
+         WHERE a.id = $1 AND a.organization_id = $2
+         FOR UPDATE OF a`,
+        [data.applicationId, data.orgId]
+      );
+      if (!appRes.rows.length) {
+        const err: any = new Error('Application not found for your organization.');
+        err.status = 404;
+        err.code = 'APPLICATION_NOT_FOUND';
+        throw err;
+      }
+      const app = appRes.rows[0];
+      if (['Draft', 'Withdrawn', 'Approved', 'Rejected'].includes(app.status)) {
+        const err: any = new Error(`Cannot record review decision: application is in "${app.status}" state.`);
+        err.status = 400;
+        err.code = 'INVALID_STATE_TRANSITION';
+        throw err;
+      }
+
       await client.query(
         `UPDATE applications
          SET status = $2,
@@ -341,28 +815,92 @@ export class ApplicationsRepository {
              decision_note = $4,
              updated_at = NOW()
          WHERE id = $1 AND organization_id = $5`,
-        [data.applicationId, data.decision, data.userId, data.comment || null, data.orgId]
+        [data.applicationId, data.decision, data.userId, cleanComment || null, data.orgId]
       );
 
-      // 2. Add Timeline event
+      const reviewDecisionEnum =
+        data.decision === 'Approved'
+          ? 'approved'
+          : data.decision === 'Rejected'
+          ? 'rejected'
+          : data.decision === 'More information requested'
+          ? 'info_requested'
+          : 'comment';
+
+      await client.query(
+        `INSERT INTO application_reviews (application_id, reviewer_user_id, decision, comment, decided_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [data.applicationId, data.userId, reviewDecisionEnum, cleanComment || `Status transitioned to ${data.decision}`]
+      );
+
+      if (data.decision === 'More information requested') {
+        await client.query(
+          `INSERT INTO application_info_requests (application_id, requested_by_user_id, message, requested_at)
+           VALUES ($1, $2, $3, NOW())`,
+          [data.applicationId, data.userId, cleanComment.slice(0, 1990)]
+        );
+      }
+
+      if (data.decision === 'Approved') {
+        await client.query(
+          `INSERT INTO approved_suppliers (organization_id, supplier_id, source_application_id, status, valid_from, approved_at, last_reviewed_at)
+           VALUES ($1, $2, $3, 'active', CURRENT_DATE, NOW(), NOW())
+           ON CONFLICT (organization_id, supplier_id) DO UPDATE
+           SET status = 'active',
+               source_application_id = EXCLUDED.source_application_id,
+               last_reviewed_at = NOW()`,
+          [data.orgId, app.supplier_id, data.applicationId]
+        );
+      }
+
       await client.query(
         `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
          VALUES ($1, $2, $3, $4, NOW())`,
-        [data.applicationId, data.decision, data.comment || `Review decision recorded: ${data.decision}`, data.userId]
+        [data.applicationId, data.decision, cleanComment || `Review decision recorded: ${data.decision}`, data.userId]
       );
 
-      // 3. Write Audit Event
-      await auditRepository.logEvent({
-        actorName: data.reviewerName,
-        actorRole: data.reviewerRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: `Application ${data.decision}`,
-        entityType: 'Application',
-        entityId: data.applicationId,
-        ipAddress: data.ipAddress,
-        details: `Official review decision recorded: ${data.decision}. Note: ${data.comment || 'None'}`,
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.reviewerName,
+          actorRole: data.reviewerRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          supplierId: app.supplier_id,
+          action: `Application ${data.decision}`,
+          entityType: 'Application',
+          entityId: data.applicationId,
+          ipAddress: data.ipAddress,
+          details: `Official review decision recorded for ${app.reference_no}: ${data.decision}. Note: ${cleanComment || 'None'}`,
+        },
+        client
+      );
+
+      const nextStepNote = cleanComment
+        ? `${cleanComment} Open your applications to review the details.`
+        : data.decision === 'More information requested'
+        ? 'Open your applications to respond to the buyer request.'
+        : 'Open your applications to view the review details.';
+
+      await notificationsRepository.notifySupplierMembers(
+        app.supplier_id,
+        {
+          organizationId: data.orgId,
+          eventType: 'application_status_changed',
+          title: `Application status updated for ${app.reference_no}`,
+          body: `Your application for ${app.title} is now ${data.decision}. ${nextStepNote}`,
+          linkUrl: 'applications',
+          priority: data.decision === 'More information requested' ? 'urgent' : data.decision === 'Approved' ? 'success' : 'warning',
+          data: {
+            applicationId: data.applicationId,
+            callId: app.call_id,
+            callNumber: app.reference_no,
+            callTitle: app.title,
+            status: data.decision,
+            note: nextStepNote,
+          },
+        },
+        client
+      );
     });
   }
 }

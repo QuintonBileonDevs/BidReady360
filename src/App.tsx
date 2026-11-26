@@ -59,7 +59,13 @@ const MainContent: React.FC = () => {
     }
   }, [setActiveNav]);
 
-  useEffect(() => { if (activeNav !== 'opportunities' && viewingCallId) setViewingCallId(null); }, [activeNav, viewingCallId]);
+  useEffect(() => {
+    if (activeNav === 'opportunities' && selectedCallId && viewingCallId !== selectedCallId) {
+      setViewingCallId(selectedCallId);
+    } else if (activeNav !== 'opportunities' && viewingCallId) {
+      setViewingCallId(null);
+    }
+  }, [activeNav, selectedCallId, viewingCallId]);
 
   const supplierCompleteness = calculateSupplierCompleteness(supplier, documents);
   const isProfileComplete = supplierCompleteness.score >= 100;
@@ -77,7 +83,7 @@ const MainContent: React.FC = () => {
   );
 
   const renderContent = () => {
-    if (viewingCallId && activeNav === 'opportunities') return <PublicCallDetail callId={viewingCallId} onBack={() => setViewingCallId(null)} onApply={() => { setViewingCallId(null); setSelectedCallId(viewingCallId); setActiveNav('apply'); }} />;
+    if (viewingCallId && activeNav === 'opportunities') return <PublicCallDetail callId={viewingCallId} onBack={() => { setViewingCallId(null); setSelectedCallId(null); }} onApply={() => { setViewingCallId(null); setSelectedCallId(viewingCallId); setActiveNav('apply'); }} />;
     if (AUTH_ROUTES.includes(activeNav)) return <AuthScreen initialRoute={activeNav as any} />;
     if (ADMIN_PROTECTED_ROUTES.includes(activeNav)) {
       if (!isAuthenticated) return <RouteGuard targetRoute={activeNav} requiredRole="admin" />;

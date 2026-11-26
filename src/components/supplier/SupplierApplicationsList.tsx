@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supplierApi } from '../../services/api';
 import { Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
@@ -28,6 +29,7 @@ import {
   Info,
   ShieldAlert,
   Trash2,
+  MailCheck,
 } from 'lucide-react';
 
 interface SupplierApplicationsListProps {
@@ -72,10 +74,29 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
   const [replyMessage, setReplyMessage] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [replySuccessMessage, setReplySuccessMessage] = useState<string | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   // Withdraw state
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
+  // Formal Tender Invitations
+  const [invitations, setInvitations] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    supplierApi
+      .listInvitations()
+      .then((rows) => {
+        if (active && Array.isArray(rows)) setInvitations(rows);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Filter supplier's applications
   const supplierApps = applications.filter((a) => a.supplierId === supplier.id);
@@ -105,27 +126,38 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
   const selectedApp = supplierApps.find((a) => a.id === selectedAppId);
 
   // Handle Response submission
-  const handleSendResponse = (e: React.FormEvent) => {
+  const handleSendResponse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedApp || !replyMessage.trim()) return;
+    if (!selectedApp || !replyMessage.trim() || isSubmittingReply) return;
 
     setIsSubmittingReply(true);
-    respondToInformationRequest(selectedApp.id, replyMessage.trim());
-
-    setTimeout(() => {
-      setIsSubmittingReply(false);
+    setReplyError(null);
+    try {
+      await respondToInformationRequest(selectedApp.id, replyMessage.trim());
       setReplyMessage('');
       setReplySuccessMessage('Clarification submitted successfully. Status updated to Under review.');
       setTimeout(() => setReplySuccessMessage(null), 5000);
-    }, 400);
+    } catch (err: any) {
+      setReplyError(err?.message || 'Unable to submit clarification response.');
+    } finally {
+      setIsSubmittingReply(false);
+    }
   };
 
   // Handle Withdrawal
-  const handleConfirmWithdraw = () => {
-    if (!selectedApp) return;
-    withdrawApplication(selectedApp.id, withdrawReason.trim() || 'Withdrawn by supplier.');
-    setIsWithdrawModalOpen(false);
-    setWithdrawReason('');
+  const handleConfirmWithdraw = async () => {
+    if (!selectedApp || isWithdrawing) return;
+    setIsWithdrawing(true);
+    setWithdrawError(null);
+    try {
+      await withdrawApplication(selectedApp.id, withdrawReason.trim() || 'Withdrawn by supplier.');
+      setIsWithdrawModalOpen(false);
+      setWithdrawReason('');
+    } catch (err: any) {
+      setWithdrawError(err?.message || 'Unable to withdraw application.');
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   // Helper to determine next-step action label and handler
@@ -493,6 +525,11 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
                     placeholder="Enter your official clarification response, warranty confirmations, or logistical schedule..."
                     className="w-full p-3.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white placeholder:text-[#6B7A87] focus:outline-none focus:border-[#1F5F99]"
                   />
+                  {replyError && (
+                    <div className="p-3 rounded-[6px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] text-[13px]">
+                      {replyError}
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-4 pt-1">
                     <span className="text-[14px] text-[#6B7A87]">
                       Submitting updates your application status back to "Under review"
@@ -593,25 +630,50 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
               Shared vault documents
             </h3>
             <div className="space-y-2">
-              {selectedApp.sharedDocumentIds.map((docId) => {
-                const doc = documents.find((d) => d.id === docId);
-                return (
+              {selectedApp.documents && selectedApp.documents.length > 0 ? (
+                selectedApp.documents.map((pinned: any, idx: number) => (
                   <div
-                    key={docId}
+                    key={pinned.documentVersionId || idx}
                     className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-[14px]"
                   >
                     <div className="space-y-0.5">
                       <span className="font-medium text-[#10212E] dark:text-white block">
-                        {doc?.documentType || 'Statutory certificate'}
+                        {pinned.name || pinned.code || 'Pinned certificate'} (v{pinned.versionNo || 1})
                       </span>
-                      <span className="text-[14px] text-[#6B7A87]">
-                        Doc #{doc?.documentNumber || 'BW-REF'}
+                      <span className="text-[12px] text-[#6B7A87] font-mono">
+                        Doc #{pinned.documentNumber || 'Pinned snapshot'} {pinned.sha256 ? `· ${String(pinned.sha256).slice(0, 12)}...` : ''}
                       </span>
                     </div>
-                    {doc && <StatusChip status={doc.status} />}
+                    <StatusChip
+                      status={
+                        String(pinned.verificationStatus || '').toUpperCase() === 'VERIFIED'
+                          ? 'Verified'
+                          : 'Pending'
+                      }
+                    />
                   </div>
-                );
-              })}
+                ))
+              ) : (
+                selectedApp.sharedDocumentIds.map((docId) => {
+                  const doc = documents.find((d) => d.id === docId || d.versionId === docId);
+                  return (
+                    <div
+                      key={docId}
+                      className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-[14px]"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="font-medium text-[#10212E] dark:text-white block">
+                          {doc?.documentType || 'Statutory certificate'}
+                        </span>
+                        <span className="text-[14px] text-[#6B7A87]">
+                          Doc #{doc?.documentNumber || 'BW-REF'}
+                        </span>
+                      </div>
+                      {doc && <StatusChip status={doc.status} />}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -676,20 +738,30 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
                 />
               </div>
 
+              {withdrawError && (
+                <div className="p-3 rounded-[6px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] text-[13px]">
+                  {withdrawError}
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setIsWithdrawModalOpen(false)}
+                  onClick={() => {
+                    setWithdrawError(null);
+                    setIsWithdrawModalOpen(false);
+                  }}
                   className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] cursor-pointer"
                 >
                   Keep application
                 </button>
                 <button
                   type="button"
+                  disabled={isWithdrawing}
                   onClick={handleConfirmWithdraw}
-                  className="px-4 py-2 bg-[#DC2626] hover:bg-[#b91c1c] text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
+                  className="px-4 py-2 bg-[#DC2626] hover:bg-[#b91c1c] disabled:opacity-50 text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
                 >
-                  Withdraw proposal
+                  {isWithdrawing ? 'Withdrawing...' : 'Withdraw proposal'}
                 </button>
               </div>
             </div>
@@ -760,6 +832,46 @@ export const SupplierApplicationsList: React.FC<SupplierApplicationsListProps> =
           >
             Verify email now
           </button>
+        </div>
+      )}
+
+      {invitations.length > 0 && (
+        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#1F5F99]/30 p-5 space-y-3">
+          <div className="flex items-center gap-2 text-[14px] font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
+            <MailCheck className="w-4 h-4" />
+            <span>Formal Tender Invitations ({invitations.length})</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {invitations.map((inv) => (
+              <div
+                key={inv.id || inv.callId}
+                className="p-3.5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between gap-3 text-[13px]"
+              >
+                <div className="min-w-0">
+                  <span className="font-mono font-semibold text-[#1F5F99] dark:text-[#6FAEE0] block">
+                    {inv.referenceNo} · {inv.organizationName}
+                  </span>
+                  <span className="font-medium text-[#10212E] dark:text-white truncate block">
+                    {inv.title}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onNavigateToCall) {
+                      onNavigateToCall(inv.callId);
+                    } else {
+                      setSelectedCallId(inv.callId);
+                      setActiveNav('apply');
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-[#1F5F99] text-white rounded-[6px] text-[12px] font-medium shrink-0 cursor-pointer"
+                >
+                  View & Apply
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

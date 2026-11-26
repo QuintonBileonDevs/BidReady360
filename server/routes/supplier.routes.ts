@@ -9,6 +9,8 @@ import { documentsRepository } from '../repositories/documents.repository';
 import { consentRepository } from '../repositories/consent.repository';
 import { applicationsRepository } from '../repositories/applications.repository';
 import { bidsRepository } from '../repositories/bids.repository';
+import { callsRepository } from '../repositories/calls.repository';
+import { notificationsRepository } from '../repositories/notifications.repository';
 import { translateDbError } from '../db/errors';
 import { extractClientIp } from '../utils/ip';
 import { getClient } from '../db/client';
@@ -185,61 +187,27 @@ async function getSupplierIdForUser(client: any, userId: string, activeTenantId?
   return res.rows[0]?.supplier_id || null;
 }
 
-function writeAuditLogSafely(req: Request, action: string, entityId: string, t0: number) {
-  // separate connection, awaited inside its own try/catch, never blocks the response
-  (async () => {
-    try {
-      const actorName = req.user?.fullName || req.user?.email || 'Supplier Administrator';
-      const actorRole = req.activeTenant?.roleName || (req.user?.isPlatformAdmin ? 'Super Admin' : 'Supplier');
-      const supplierId = req.activeTenant?.tenantId || null;
-      await auditRepository.logEvent({
-        actorName,
-        actorRole,
-        supplierId,
-        action,
-        entityType: 'supplier_person',
-        entityId,
-        details: `Removed person record ${entityId}`,
-      });
-      console.log('[remove-director] audit done', Math.round(performance.now() - t0));
-      if (supplierId) {
-        await suppliersRepository.calculateCompleteness(supplierId).catch(() => {});
-      }
-    } catch (e: any) {
-      console.warn('[remove-director] audit log warning:', e.message);
-    }
-  })();
-}
-
 // DELETE /api/supplier/people/:id
 router.delete('/people/:id', async (req: Request, res: Response) => {
-  const t0 = performance.now();
-  console.log('[remove-director] route entered', Math.round(performance.now() - t0));
-
   if (!req.user || !req.session) {
     return res.status(401).json({ error: 'unauthorized', message: 'You must be signed in.' });
   }
-  console.log('[remove-director] session verified', Math.round(performance.now() - t0));
 
   let client;
   try {
-    client = await getClient(); // ONE verified client for the whole transaction
-    console.log('[remove-director] connection acquired', Math.round(performance.now() - t0));
-
+    client = await getClient();
     await client.query('BEGIN');
-    console.log('[remove-director] BEGIN', Math.round(performance.now() - t0));
-
     await client.query("SET LOCAL lock_timeout = '3s'");
     await client.query("SET LOCAL statement_timeout = '8s'");
 
-    const supplierId = await getSupplierIdForUser(client, req.user.id, req.activeTenant?.tenantId); // from the session, never from the request
+    const supplierId = await getSupplierIdForUser(client, req.user.id, req.activeTenant?.tenantId);
     if (!supplierId) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'forbidden', message: 'You do not have access.' });
     }
 
-    const r = await client.query(
-      'UPDATE supplier_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE RETURNING id',
+    const r = await client.query<{ id: string; full_name: string }>(
+      'UPDATE supplier_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE RETURNING id, full_name',
       [req.params.id, supplierId]
     );
 
@@ -255,15 +223,28 @@ router.delete('/people/:id', async (req: Request, res: Response) => {
       return res.json({ ok: true, alreadyRemoved: true });
     }
 
-    console.log('[remove-director] UPDATE done', Math.round(performance.now() - t0));
+    const actorName = req.user?.fullName || req.user?.email || 'Supplier Administrator';
+    const actorRole = req.activeTenant?.roleName || (req.user?.isPlatformAdmin ? 'Super Admin' : 'Supplier');
+
+    await auditRepository.logEvent(
+      {
+        actorName,
+        actorRole,
+        actorUserId: req.user.id,
+        supplierId,
+        action: 'supplier_person.remove',
+        entityType: 'supplier_person',
+        entityId: r.rows[0].id,
+        ipAddress: extractClientIp(req),
+        details: `Removed director/shareholder record ${r.rows[0].full_name || r.rows[0].id}.`,
+      },
+      client
+    );
 
     await client.query('COMMIT');
-    console.log('[remove-director] COMMIT done', Math.round(performance.now() - t0));
 
-    res.json({ ok: true, id: r.rows[0].id }); // respond BEFORE any optional extra work
-    console.log('[remove-director] response sent', Math.round(performance.now() - t0));
-
-    writeAuditLogSafely(req, 'supplier_person.remove', r.rows[0].id, t0); // separate connection, awaited inside its own try/catch, never blocks the response
+    await suppliersRepository.calculateCompleteness(supplierId).catch(() => {});
+    res.json({ ok: true, id: r.rows[0].id });
   } catch (err: any) {
     try {
       if (client) await client.query('ROLLBACK');
@@ -276,7 +257,7 @@ router.delete('/people/:id', async (req: Request, res: Response) => {
       });
     }
   } finally {
-    if (client) client.release(); // ALWAYS release
+    if (client) client.release();
   }
 });
 
@@ -353,6 +334,19 @@ router.post('/team/invite', async (req: Request, res: Response) => {
       role,
       invitedByUserId: ctx.userId,
     });
+    const supProfile = await suppliersRepository.getById(ctx.tenantId).catch(() => null);
+    await notificationsRepository
+      .queueEmailDelivery({
+        recipientEmail: invite.email,
+        templateCode: 'team_invitation',
+        vars: {
+          tenantName: supProfile?.legalName || 'Supplier Workspace',
+          inviterName: req.user?.fullName || 'Supplier Admin',
+          roleName: invite.role,
+          expiresAt: String(invite.expiresAt || '').slice(0, 10),
+        },
+      })
+      .catch(() => {});
     res.status(201).json(invite);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -716,15 +710,90 @@ router.get('/consent', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/supplier/consent/access-logs
+router.get('/consent/access-logs', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const logs = await consentRepository.listAccessLogsBySupplier(ctx.tenantId, limit);
+    res.json(logs);
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// POST /api/supplier/consent
+router.post('/consent', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { organizationId, scopes, selectedDocumentIds, selectedDocumentNames, expiresAt, purpose } = req.body || {};
+    if (!organizationId) {
+      return res.status(400).json({ error: 'MISSING_ORG', message: 'Procuring organization ID is required.' });
+    }
+    const grant = await consentRepository.grantConsent({
+      supplierId: ctx.tenantId,
+      organizationId,
+      userId: ctx.userId,
+      scopes,
+      selectedDocumentIds,
+      selectedDocumentNames,
+      expiresAt,
+      purpose,
+      actorName: req.user!.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req),
+    });
+    res.status(201).json(grant);
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// PATCH /api/supplier/consent/:id
+router.patch('/consent/:id', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { scopes, selectedDocumentIds, selectedDocumentNames, expiresAt } = req.body || {};
+    const updated = await consentRepository.updateConsentScope(
+      req.params.id,
+      ctx.tenantId,
+      ctx.userId,
+      { scopes, selectedDocumentIds, selectedDocumentNames, expiresAt },
+      {
+        actorName: req.user!.fullName,
+        actorRole: ctx.roleName,
+        ipAddress: extractClientIp(req),
+      }
+    );
+    res.json(updated);
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
 // POST /api/supplier/consent/:id/revoke
 router.post('/consent/:id/revoke', async (req: Request, res: Response) => {
   try {
     const ctx = getSupplierContext(req);
-    const { reason } = req.body;
-    await consentRepository.revokeConsent(req.params.id, ctx.tenantId, ctx.userId, reason || 'Revoked by supplier administrator');
+    const { reason } = req.body || {};
+    await consentRepository.revokeConsent(
+      req.params.id,
+      ctx.tenantId,
+      ctx.userId,
+      reason || 'Revoked by supplier administrator',
+      {
+        actorName: req.user!.fullName,
+        actorRole: ctx.roleName,
+        ipAddress: extractClientIp(req),
+      }
+    );
     res.json({ success: true, message: 'Data sharing access revoked.' });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
   }
 });
 
@@ -777,6 +846,60 @@ router.post('/applications/submit', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/supplier/applications/:id/withdraw
+router.post('/applications/:id/withdraw', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { reason } = req.body || {};
+    const result = await applicationsRepository.withdrawApplication({
+      applicationIdOrCallId: req.params.id,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      reason,
+      actorName: req.user!.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req),
+    });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// POST /api/supplier/applications/:id/respond
+router.post('/applications/:id/respond', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { responseMessage } = req.body || {};
+    await applicationsRepository.respondToInfoRequest({
+      applicationId: req.params.id,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      responseMessage,
+      actorName: req.user!.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req),
+    });
+    res.json({ success: true, message: 'Additional information submitted to procuring organization.' });
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// GET /api/supplier/bids/:callId
+router.get('/bids/:callId', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const bid = await bidsRepository.getByCallAndSupplier(req.params.callId, ctx.tenantId);
+    res.json(bid);
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
 // POST /api/supplier/bids/seal
 router.post('/bids/seal', async (req: Request, res: Response) => {
   try {
@@ -809,6 +932,39 @@ router.post('/bids/seal', async (req: Request, res: Response) => {
       });
       return;
     }
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// POST /api/supplier/bids/:callId/withdraw
+router.post('/bids/:callId/withdraw', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { reason } = req.body || {};
+    const result = await bidsRepository.withdrawBid({
+      callId: req.params.callId,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      reason,
+      actorName: req.user!.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req),
+    });
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+// GET /api/supplier/invitations
+router.get('/invitations', async (req: Request, res: Response) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const invitations = await callsRepository.listSupplierInvitations(ctx.tenantId);
+    res.json(invitations);
+  } catch (err: any) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
   }

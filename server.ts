@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import { app } from './server/app';
 import { getClient, guardStatus, DbGuardError } from './server/db/client';
 import { ensureFoundationSchema } from './server/db/migrations';
-import { ensureSystemRolePermissions } from './server/db/seed';
+import { ensureSystemRolePermissions, ensureInAppNotificationTemplates } from './server/db/seed';
 import { completenessService } from './server/services/completeness.service';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -21,9 +21,10 @@ async function startServer() {
     try {
       const client = await getClient();
       client.release();
-      // Ensure Step 1 foundation columns, indexes, and baseline RBAC role_permissions exist in PostgreSQL
+      // Ensure foundation columns, indexes, RBAC role_permissions, and in-app notification templates exist in PostgreSQL
       await ensureFoundationSchema();
       await ensureSystemRolePermissions();
+      await ensureInAppNotificationTemplates();
       // Start daily completeness reconciliation scheduler (00:05 Africa/Gaborone)
       completenessService.startScheduler();
     } catch (err: any) {

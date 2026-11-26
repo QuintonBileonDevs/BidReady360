@@ -475,6 +475,8 @@ export class DocumentsRepository {
       sha256: string | null;
       versionId: string;
       documentId: string;
+      supplierId: string;
+      documentTypeName: string | null;
     }>(
       `SELECT f.content,
               COALESCE(f.mime_type, v.mime_type) AS "mimeType",
@@ -482,19 +484,24 @@ export class DocumentsRepository {
               f.size_bytes AS "sizeBytes",
               COALESCE(f.sha256, v.sha256) AS sha256,
               v.id AS "versionId",
-              d.id AS "documentId"
+              d.id AS "documentId",
+              d.supplier_id AS "supplierId",
+              dt.name AS "documentTypeName"
        FROM document_files f
        JOIN supplier_document_versions v ON v.id = f.document_version_id
        JOIN supplier_documents d ON d.id = v.document_id
+       LEFT JOIN document_types dt ON dt.id = d.document_type_id
        WHERE d.status != 'deleted'
          AND (v.id = $1 OR d.id = $1 OR f.id = $1)
          AND (
            EXISTS (
              SELECT 1
-             FROM applications a
-             JOIN calls c ON c.id = a.call_id
-             WHERE a.supplier_id = d.supplier_id
-               AND c.organization_id = $2
+             FROM application_documents ad
+             JOIN applications a ON a.id = ad.application_id
+             WHERE (ad.document_version_id = v.id OR ad.document_type_id = d.document_type_id)
+               AND a.supplier_id = d.supplier_id
+               AND a.organization_id = $2
+               AND a.status <> 'Draft'
            )
            OR EXISTS (
              SELECT 1
@@ -502,6 +509,7 @@ export class DocumentsRepository {
              WHERE cg.supplier_id = d.supplier_id
                AND cg.organization_id = $2
                AND cg.status = 'active'
+               AND (cg.expires_at IS NULL OR cg.expires_at > NOW())
            )
          )
        ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
@@ -523,7 +531,9 @@ export class DocumentsRepository {
       sha256: row.sha256 ? row.sha256.trim() : null,
       versionId: row.versionId,
       documentId: row.documentId,
-    };
+      supplierId: row.supplierId,
+      documentTypeName: row.documentTypeName || undefined,
+    } as StoredDocumentFile & { supplierId: string; documentTypeName?: string };
   }
 
   /**

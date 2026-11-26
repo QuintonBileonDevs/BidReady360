@@ -1,45 +1,34 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { buyerApi } from '../../services/api';
-import { Application, SupplierDocument } from '../../types';
+import { Application } from '../../types';
 import { StatusChip } from '../common/StatusChip';
 import { DocumentVaultPreview } from '../common/DocumentVaultPreview';
 import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  FileCheck,
-  Building2,
-  Users,
   ShieldCheck,
   Eye,
   FileText,
   Search,
-  Filter,
-  ArrowRight,
-  Send,
   X,
-  Lock,
+  Loader2,
+  Clock,
 } from 'lucide-react';
 
 export const BuyerReviewQueue: React.FC = () => {
-  const {
-    applications: contextApps,
-    supplier,
-    allSuppliers,
-    documents,
-    updateApplicationStatus,
-    calls,
-    currentUser,
-    profileSummary,
-  } = useApp();
+  const { updateApplicationStatus, calls, currentUser, profileSummary } = useApp();
   const [liveApplications, setLiveApplications] = useState<Application[]>([]);
+  const [supplierConsentMap, setSupplierConsentMap] = useState<Record<string, any>>({});
+  const [isLoadingApps, setIsLoadingApps] = useState(true);
+
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [filterCallId, setFilterCallId] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Request More Info modal state
+  // Decision modal states
   const [isRequestingInfo, setIsRequestingInfo] = useState(false);
   const [infoRequestReason, setInfoRequestReason] = useState('');
   const [rejectReason, setRejectReason] = useState('');
@@ -51,56 +40,72 @@ export const BuyerReviewQueue: React.FC = () => {
   const reviewerDisplayName =
     currentUser?.fullName || profileSummary?.displayName || 'Procurement Officer';
 
-  useEffect(() => {
-    let active = true;
-    buyerApi
-      .listApplications()
-      .then((rows) => {
-        if (!active || !Array.isArray(rows)) return;
+  const loadQueue = useCallback(async () => {
+    setIsLoadingApps(true);
+    try {
+      const [rows, sups] = await Promise.all([
+        buyerApi.listApplications(),
+        buyerApi.listSuppliers().catch(() => []),
+      ]);
+
+      if (Array.isArray(rows)) {
         const mapped: Application[] = rows.map((r: any) => ({
           id: r.id,
           callId: r.callId,
           callNumber: r.callNumber || '',
           callTitle: r.callTitle || '',
-          callType: r.callType || 'RFP',
+          callType: r.callType === 'eoi' ? 'EOI' : r.callType === 'registration_drive' ? 'Registration drive' : 'RFP',
+          closesAt: r.closesAt || undefined,
           supplierId: r.supplierId,
           supplierName: r.supplierLegalName || r.supplierName || 'Supplier',
           organizationId: r.organizationId,
           organizationName: r.organizationName || '',
+          consentGrantId: r.consentGrantId || undefined,
           status: r.status || 'Submitted',
           receiptNumber: r.receiptNumber || undefined,
           submittedAt: r.submittedAt
             ? new Date(r.submittedAt).toISOString().slice(0, 16).replace('T', ' ')
             : '',
+          withdrawalReason: r.withdrawalReason || undefined,
           sharedDocumentIds: Array.isArray(r.documents)
             ? r.documents.map((d: any) => d.documentVersionId || d.documentTypeId)
             : [],
+          documents: Array.isArray(r.documents) ? r.documents : [],
           answers: r.answers || {},
           responses: Array.isArray(r.responses)
             ? r.responses
             : r.answers && typeof r.answers === 'object'
             ? Object.entries(r.answers).map(([label, value]) => ({
-                questionId: label,
+                fieldId: label,
                 label,
                 value: value as string | number | boolean,
               }))
             : [],
           timeline: Array.isArray(r.timeline) ? r.timeline : [],
+          informationRequest: r.informationRequest || undefined,
+          bid: r.bid || undefined,
         }));
         setLiveApplications(mapped);
-        if (mapped.length > 0 && !selectedAppId) {
-          setSelectedAppId(mapped[0].id);
+        setSelectedAppId((prev) => (prev && mapped.some((m) => m.id === prev) ? prev : mapped[0]?.id || ''));
+      }
+
+      if (Array.isArray(sups)) {
+        const map: Record<string, any> = {};
+        for (const s of sups) {
+          map[s.id] = s;
         }
-      })
-      .catch((err) => {
-        console.warn('[BuyerReviewQueue] Could not fetch buyer applications:', err);
-      });
-    return () => {
-      active = false;
-    };
+        setSupplierConsentMap(map);
+      }
+    } catch (err: any) {
+      setActionError(err?.message || 'Could not load organization application queue.');
+    } finally {
+      setIsLoadingApps(false);
+    }
   }, []);
 
-  const applications = liveApplications.length > 0 ? liveApplications : contextApps;
+  useEffect(() => {
+    loadQueue();
+  }, [loadQueue]);
 
   // Real inline document preview state
   const [previewDoc, setPreviewDoc] = useState<{
@@ -125,23 +130,30 @@ export const BuyerReviewQueue: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    closePreview();
+  }, [selectedAppId, closePreview]);
+
+  useEffect(() => {
     return () => {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     };
   }, []);
 
-  const handlePreviewDocument = async (doc: SupplierDocument) => {
+  const handlePreviewSubmittedDoc = async (doc: {
+    documentVersionId: string;
+    name: string;
+    code?: string;
+  }) => {
     closePreview();
     setIsPreviewLoading(true);
     setPreviewError(null);
     try {
-      const targetId = doc.versionId || doc.id;
-      const res = await buyerApi.fetchDocumentBlob(targetId);
+      const res = await buyerApi.fetchDocumentBlob(doc.documentVersionId);
       previewUrlRef.current = res.objectUrl;
       setPreviewDoc({
-        title: doc.documentType,
-        fileName: res.fileName || doc.fileName,
-        mimeType: res.mimeType || doc.mimeType || '',
+        title: doc.name,
+        fileName: res.fileName || `${doc.code || 'document'}.pdf`,
+        mimeType: res.mimeType || '',
         blob: res.blob,
         objectUrl: res.objectUrl,
       });
@@ -152,11 +164,12 @@ export const BuyerReviewQueue: React.FC = () => {
     }
   };
 
-  const selectedApp = applications.find((a) => a.id === selectedAppId) || applications[0];
+  const selectedApp = liveApplications.find((a) => a.id === selectedAppId) || liveApplications[0];
+  const consentedSupplier = selectedApp ? supplierConsentMap[selectedApp.supplierId] : null;
+  const attachedDocs = selectedApp?.documents || [];
+  const isFinalized = selectedApp ? ['Approved', 'Rejected', 'Withdrawn'].includes(selectedApp.status) : false;
 
-  const appSupplier = allSuppliers.find((s) => s.id === selectedApp?.supplierId) || supplier;
-
-  const filteredApps = applications.filter((a) => {
+  const filteredApps = liveApplications.filter((a) => {
     const matchesCall = filterCallId === 'ALL' || a.callId === filterCallId;
     const matchesStatus = filterStatus === 'ALL' || a.status === filterStatus;
     const matchesSearch =
@@ -168,7 +181,7 @@ export const BuyerReviewQueue: React.FC = () => {
   });
 
   const recordDecision = async (
-    decision: 'Approved' | 'Rejected' | 'More information requested',
+    decision: 'Under review' | 'Approved' | 'Rejected' | 'More information requested',
     comment: string
   ) => {
     if (!selectedApp || isSubmittingDecision) return;
@@ -176,15 +189,15 @@ export const BuyerReviewQueue: React.FC = () => {
     setActionError(null);
     try {
       await buyerApi.reviewApplication(selectedApp.id, decision, comment);
-      setLiveApplications((prev) =>
-        prev.map((a) => (a.id === selectedApp.id ? { ...a, status: decision } : a))
-      );
+      await loadQueue();
       updateApplicationStatus(selectedApp.id, decision, comment, reviewerDisplayName);
       setActionSuccess(
         decision === 'Approved'
-          ? `Application for ${selectedApp.supplierName} Approved.`
+          ? `Application for ${selectedApp.supplierName} Approved & admitted to roster.`
           : decision === 'Rejected'
           ? `Application rejected: ${selectedApp.supplierName}.`
+          : decision === 'Under review'
+          ? `Application marked Under review.`
           : `Requested supplementary details from ${selectedApp.supplierName}.`
       );
       setTimeout(() => setActionSuccess(null), 4000);
@@ -193,13 +206,6 @@ export const BuyerReviewQueue: React.FC = () => {
     } finally {
       setIsSubmittingDecision(false);
     }
-  };
-
-  const handleApprove = async () => {
-    await recordDecision(
-      'Approved',
-      'Verified compliance documents and questionnaire responses. Approved by procurement officer.'
-    );
   };
 
   const handleRequestInfoSubmit = async (e: React.FormEvent) => {
@@ -220,7 +226,6 @@ export const BuyerReviewQueue: React.FC = () => {
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
-      {/* Toast */}
       {actionSuccess && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 text-[#2F8F5B] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs flex items-center gap-2 shadow-xs">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -241,13 +246,13 @@ export const BuyerReviewQueue: React.FC = () => {
             <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Evaluation Desk
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">· Side-by-Side Verification Checklist</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">· Submitted Dossier Snapshots & Consent Enforcement</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900 dark:text-white">
             Supplier Application Review Queue
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 max-w-2xl leading-relaxed">
-            Compare candidate company registration data and verified vault documents beside your procurement checklist.
+            Inspect pinned vault dossier snapshots attached at submission, review questionnaire responses, and record audit-backed evaluation decisions.
           </p>
         </div>
       </div>
@@ -265,334 +270,427 @@ export const BuyerReviewQueue: React.FC = () => {
           />
         </div>
 
-        <div>
-          <select
-            value={filterCallId}
-            onChange={(e) => setFilterCallId(e.target.value)}
-            className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
-          >
-            <option value="ALL">All Tenders & Drives</option>
-            {calls.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.callNumber} — {c.title.substring(0, 30)}...
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={filterCallId}
+          onChange={(e) => setFilterCallId(e.target.value)}
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+        >
+          <option value="ALL">All Tenders & Drives</option>
+          {calls.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.callNumber} — {c.title.substring(0, 30)}
+            </option>
+          ))}
+        </select>
 
-        <div>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
-          >
-            <option value="ALL">All Application Statuses</option>
-            <option value="Submitted">Submitted</option>
-            <option value="Under review">Under review</option>
-            <option value="More information requested">More information requested</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-          </select>
-        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+        >
+          <option value="ALL">All Application Statuses</option>
+          <option value="Submitted">Submitted</option>
+          <option value="Under review">Under review</option>
+          <option value="More information requested">More information requested</option>
+          <option value="Approved">Approved</option>
+          <option value="Rejected">Rejected</option>
+          <option value="Withdrawn">Withdrawn</option>
+        </select>
       </div>
 
-      {/* Split-View: Applications Table / Selector on Left (4 cols), Detail Checklist on Right (8 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Submissions Queue List (5 cols) */}
-        <div className="lg:col-span-5 space-y-3">
-          <h3 className="font-heading font-semibold text-sm text-[#10212E]">
-            Submissions ({filteredApps.length})
-          </h3>
+      {/* Split-View */}
+      {isLoadingApps ? (
+        <div className="p-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Loading application dossiers...</span>
+        </div>
+      ) : liveApplications.length === 0 ? (
+        <div className="p-12 bg-white border border-slate-200 rounded-2xl text-center text-xs text-slate-500">
+          No submitted applications found for your procuring organization yet.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column */}
+          <div className="lg:col-span-5 space-y-3">
+            <h3 className="font-heading font-semibold text-sm text-[#10212E]">
+              Submissions ({filteredApps.length})
+            </h3>
 
-          <div className="space-y-2.5 max-h-[700px] overflow-y-auto">
-            {filteredApps.map((app) => {
-              const isSelected = selectedApp?.id === app.id;
-              return (
-                <div
-                  key={app.id}
-                  onClick={() => setSelectedAppId(app.id)}
-                  className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-white border-[#1F5F99] ring-2 ring-[#1F5F99]/20 shadow-xs'
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-xs text-[#10212E] leading-snug">
-                      {app.supplierName}
-                    </span>
-                    <StatusChip status={app.status} />
-                  </div>
-
-                  <p className="text-[11px] text-slate-500 font-mono mt-1">
-                    {app.callNumber} · {app.callType}
-                  </p>
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
-                    <span>Submitted: {app.submittedAt}</span>
-                    {app.bid && (
-                      <span className="font-mono font-bold text-slate-800">
-                        BWP {app.bid.totalAmountBWP.toLocaleString()}
+            <div className="space-y-2.5 max-h-[700px] overflow-y-auto">
+              {filteredApps.map((app) => {
+                const isSelected = selectedApp?.id === app.id;
+                return (
+                  <div
+                    key={app.id}
+                    onClick={() => setSelectedAppId(app.id)}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-white border-[#1F5F99] ring-2 ring-[#1F5F99]/20 shadow-xs'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-semibold text-xs text-[#10212E] leading-snug">
+                        {app.supplierName}
                       </span>
+                      <StatusChip status={app.status} />
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 font-mono mt-1">
+                      {app.callNumber} · {app.callType}
+                    </p>
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                      <span>Submitted: {app.submittedAt || '—'}</span>
+                      {app.bid && app.bid.totalAmountBWP != null && (
+                        <span className="font-mono font-bold text-slate-800">
+                          BWP {Number(app.bid.totalAmountBWP).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Column */}
+          {selectedApp && (
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-2xs">
+              <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-[#1F5F99]">{selectedApp.callNumber}</span>
+                    <span className="text-xs text-slate-400">·</span>
+                    <span className="text-xs text-slate-600 font-medium">{selectedApp.callType}</span>
+                    {selectedApp.receiptNumber && (
+                      <span className="text-[11px] font-mono text-slate-400">· {selectedApp.receiptNumber}</span>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right Column: Split Detail View & Verification Actions (7 cols) */}
-        {selectedApp && (
-          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-2xs">
-            {/* Header with Title and Current Status */}
-            <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-slate-100">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-[#1F5F99]">{selectedApp.callNumber}</span>
-                  <span className="text-xs text-slate-400">·</span>
-                  <span className="text-xs text-slate-600 font-medium">{selectedApp.callType}</span>
-                </div>
-                <h3 className="font-heading font-bold text-lg text-[#10212E] mt-0.5">
-                  {selectedApp.supplierName}
-                </h3>
-                <span className="text-xs text-slate-500">
-                  Target Call: {selectedApp.callTitle}
-                </span>
-              </div>
-
-              <StatusChip status={selectedApp.status} />
-            </div>
-
-            {/* Candidate Company Profile Summary */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
-                <span>Verified CIPA & PPRA Profile</span>
-              </h4>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">CIPA UIN</span>
-                  <span className="font-mono font-bold text-slate-800">{appSupplier.cipaNumber}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">BURS TIN</span>
-                  <span className="font-mono font-bold text-slate-800">{appSupplier.tinNumber}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">CITIZEN SHAREHOLDING</span>
-                  <span className="font-bold text-[#2F8F5B]">{appSupplier.citizenOwnedPercentage}% Citizen</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">PRIMARY SUPPLY CATEGORY</span>
-                  <span className="font-medium text-slate-800">{appSupplier.ppraCode}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">PREMISES PLOT</span>
-                  <span className="text-slate-700 truncate block">{appSupplier.physicalAddress}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">EDD STATUS</span>
-                  <span className="font-bold text-[#1F5F99]">
-                    {appSupplier.eddCertified ? 'EDD Certified' : 'Standard'}
+                  <h3 className="font-heading font-bold text-lg text-[#10212E] mt-0.5">
+                    {selectedApp.supplierName}
+                  </h3>
+                  <span className="text-xs text-slate-500">
+                    Target Call: {selectedApp.callTitle}
                   </span>
                 </div>
+
+                <StatusChip status={selectedApp.status} />
               </div>
-            </div>
 
-            {/* Submitted Vault Documents Checklist */}
-            <div className="space-y-3 text-xs">
-              <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                Attached Vault Compliance Documents ({documents.length})
-              </h4>
+              {/* Consent-Scoped Company Profile Summary */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
+                    <span>Supplier Profile & Consent Scope</span>
+                  </h4>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${
+                      consentedSupplier?.consentStatus === 'active'
+                        ? 'bg-emerald-50 text-[#2F8F5B]'
+                        : 'bg-amber-50 text-amber-900'
+                    }`}
+                  >
+                    Consent: {consentedSupplier?.consentStatus || 'Submitted dossier only'}
+                  </span>
+                </div>
 
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-                {documents.map((doc) => (
-                  <div key={doc.id} className="p-3 bg-white flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-[#1F5F99] shrink-0" />
-                      <div>
-                        <span className="font-semibold text-slate-900 block">{doc.documentType}</span>
-                        <span className="text-[11px] text-slate-500 font-mono">
-                          Doc: {doc.documentNumber} · Exp: {doc.expiryDate}
-                        </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">CIPA UIN</span>
+                    <span className="font-mono font-bold text-slate-800">
+                      {consentedSupplier?.cipaNumber || '[Consent restricted]'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">BURS TIN</span>
+                    <span className="font-mono font-bold text-slate-800">
+                      {consentedSupplier?.tinNumber || '[Consent restricted]'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">CITIZEN SHAREHOLDING</span>
+                    <span className="font-bold text-[#2F8F5B]">
+                      {consentedSupplier?.citizenOwnedPercentage != null
+                        ? `${consentedSupplier.citizenOwnedPercentage}% Citizen`
+                        : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">CITY / ADDRESS</span>
+                    <span className="text-slate-700 truncate block">
+                      {consentedSupplier?.physicalAddress || consentedSupplier?.city || '[Consent restricted]'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">VERIFICATION STANDING</span>
+                    <span className="font-medium text-slate-800 capitalize">
+                      {consentedSupplier?.complianceStatus || 'Recorded on dossier'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">EDD STATUS</span>
+                    <span className="font-bold text-[#1F5F99]">
+                      {consentedSupplier?.eddCertified ? 'EDD Certified' : 'Standard'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pinned Submitted Dossier Documents */}
+              <div className="space-y-3 text-xs">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                  Pinned Dossier Compliance Documents ({attachedDocs.length})
+                </h4>
+
+                {attachedDocs.length === 0 ? (
+                  <div className="p-4 border border-slate-200 rounded-xl text-slate-500">
+                    No pinned compliance documents were attached to this application.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                    {attachedDocs.map((doc) => (
+                      <div key={doc.documentVersionId} className="p-3 bg-white flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FileText className="w-4 h-4 text-[#1F5F99] shrink-0" />
+                          <div className="min-w-0">
+                            <span className="font-semibold text-slate-900 block truncate">
+                              {doc.name} (v{doc.versionNo})
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-mono block truncate">
+                              Doc: {doc.documentNumber || '—'} · Exp: {doc.expiryDate ? String(doc.expiryDate).slice(0, 10) : 'None'} · SHA {String(doc.sha256 || '').slice(0, 10)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <StatusChip
+                            status={
+                              String(doc.verificationStatus || '').toUpperCase() === 'VERIFIED'
+                                ? 'Verified'
+                                : String(doc.verificationStatus || '').toUpperCase() === 'REJECTED'
+                                ? 'Rejected'
+                                : 'Pending'
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewSubmittedDoc(doc)}
+                            className="p-1.5 text-slate-500 hover:text-[#1F5F99] rounded hover:bg-slate-100 cursor-pointer"
+                            title="Preview pinned document"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    ))}
+                  </div>
+                )}
 
-                    <div className="flex items-center gap-2">
-                      <StatusChip status={doc.status} />
+                {(isPreviewLoading || previewError || previewDoc) && (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden mt-3">
+                    <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-800 truncate">
+                        {previewDoc ? `${previewDoc.title} — ${previewDoc.fileName}` : 'Loading document preview...'}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => handlePreviewDocument(doc)}
-                        className="p-1.5 text-slate-500 hover:text-[#1F5F99] rounded hover:bg-slate-100 cursor-pointer"
-                        title="Preview document"
+                        onClick={closePreview}
+                        className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                        title="Close preview"
                       >
-                        <Eye className="w-4 h-4" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
+                    <DocumentVaultPreview
+                      blob={previewDoc?.blob || null}
+                      objectUrl={previewDoc?.objectUrl || null}
+                      fileName={previewDoc?.fileName || 'document'}
+                      mimeType={previewDoc?.mimeType || ''}
+                      title={previewDoc?.title}
+                      isLoading={isPreviewLoading}
+                      error={previewError}
+                      maxHeightClass="h-[420px]"
+                    />
                   </div>
-                ))}
+                )}
               </div>
 
-              {(isPreviewLoading || previewError || previewDoc) && (
-                <div className="border border-slate-200 rounded-xl overflow-hidden mt-3">
-                  <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-800 truncate">
-                      {previewDoc ? `${previewDoc.title} — ${previewDoc.fileName}` : 'Loading document preview...'}
-                    </span>
+              {/* Information Request History */}
+              {selectedApp.informationRequest && (
+                <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1 text-xs">
+                  <span className="font-bold text-amber-900 block">Information Request Inquiry</span>
+                  <p className="text-amber-950">{selectedApp.informationRequest.message}</p>
+                  {selectedApp.informationRequest.responseNote && (
+                    <p className="text-emerald-900 pt-1 border-t border-amber-200">
+                      <strong>Supplier Response:</strong> {selectedApp.informationRequest.responseNote}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Questionnaire Responses */}
+              {selectedApp.responses.length > 0 && (
+                <div className="space-y-3 text-xs">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                    Questionnaire Responses
+                  </h4>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                    {selectedApp.responses.map((resp, idx) => (
+                      <div key={idx} className="pb-2 border-b border-slate-200/60 last:border-0 last:pb-0">
+                        <span className="font-semibold text-slate-700 block text-[11px]">{resp.label}</span>
+                        <span className="font-medium text-slate-900 block mt-0.5">
+                          {typeof resp.value === 'boolean'
+                            ? resp.value
+                              ? 'Yes'
+                              : 'No'
+                            : String(resp.value || 'N/A')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions Bar */}
+              <div className="pt-4 border-t border-slate-200 space-y-3">
+                <span className="text-xs font-bold text-slate-700 block">Evaluation Decision & Status Action:</span>
+
+                {isFinalized ? (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                    This application is in finalized status (<strong>{selectedApp.status}</strong>) and cannot transition further.
+                    {selectedApp.withdrawalReason ? ` Reason: ${selectedApp.withdrawalReason}` : ''}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2.5">
+                    {selectedApp.status !== 'Under review' && (
+                      <button
+                        type="button"
+                        disabled={isSubmittingDecision}
+                        onClick={() => recordDecision('Under review', 'Dossier opened for compliance & technical committee review.')}
+                        className="px-4 py-2 bg-[#EAF2FA] hover:bg-[#1F5F99] text-[#1F5F99] hover:text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <Clock className="w-4 h-4" />
+                        <span>Mark Under review</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={closePreview}
-                      className="text-slate-400 hover:text-slate-700 cursor-pointer"
-                      title="Close preview"
+                      disabled={isSubmittingDecision}
+                      onClick={() =>
+                        recordDecision(
+                          'Approved',
+                          'Verified compliance documents and questionnaire responses. Approved by procurement officer.'
+                        )
+                      }
+                      className="px-4 py-2 bg-[#2F8F5B] hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                     >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Approve & Admit to Roster</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSubmittingDecision}
+                      onClick={() => setIsRequestingInfo(true)}
+                      className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <AlertTriangle className="w-4 h-4 text-[#E8A33D]" />
+                      <span>Request More Information</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSubmittingDecision}
+                      onClick={() => setIsRejecting(true)}
+                      className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Reject</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {isRequestingInfo && (
+                <form onSubmit={handleRequestInfoSubmit} className="p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-900">Specify Missing or Clarification Requirements:</span>
+                    <button type="button" onClick={() => setIsRequestingInfo(false)} className="text-amber-800">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <DocumentVaultPreview
-                    blob={previewDoc?.blob || null}
-                    objectUrl={previewDoc?.objectUrl || null}
-                    fileName={previewDoc?.fileName || 'document'}
-                    mimeType={previewDoc?.mimeType || ''}
-                    title={previewDoc?.title}
-                    isLoading={isPreviewLoading}
-                    error={previewError}
-                    maxHeightClass="h-[420px]"
+
+                  <textarea
+                    rows={3}
+                    required
+                    value={infoRequestReason}
+                    onChange={(e) => setInfoRequestReason(e.target.value)}
+                    placeholder="e.g. Please provide updated bank rating certificate..."
+                    className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-slate-900"
                   />
-                </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRequestingInfo(false)}
+                      className="px-3 py-1.5 text-slate-600"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingDecision}
+                      className="px-4 py-1.5 bg-[#1F5F99] text-white font-semibold rounded-lg hover:bg-[#184a77]"
+                    >
+                      Send Inquiry to Supplier
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {isRejecting && (
+                <form onSubmit={handleRejectSubmit} className="p-4 bg-rose-50 border border-rose-300 rounded-xl space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-rose-900">Enter Statutory Reason for Rejection:</span>
+                    <button type="button" onClick={() => setIsRejecting(false)} className="text-rose-800">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    required
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="e.g. Non-compliance with mandatory technical qualification criteria..."
+                    className="w-full p-2.5 bg-white border border-rose-300 rounded-lg text-slate-900"
+                  />
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsRejecting(false)}
+                      className="px-3 py-1.5 text-slate-600"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingDecision}
+                      className="px-4 py-1.5 bg-[#C2412D] text-white font-semibold rounded-lg hover:bg-rose-800"
+                    >
+                      Confirm Rejection
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
-
-            {/* Questionnaire Responses (if any) */}
-            {selectedApp.responses.length > 0 && (
-              <div className="space-y-3 text-xs">
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                  Custom Questionnaire Responses
-                </h4>
-
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                  {selectedApp.responses.map((resp, idx) => (
-                    <div key={idx} className="pb-2 border-b border-slate-200/60 last:border-0 last:pb-0">
-                      <span className="font-semibold text-slate-700 block text-[11px]">{resp.label}</span>
-                      <span className="font-medium text-slate-900 block mt-0.5">
-                        {typeof resp.value === 'boolean'
-                          ? resp.value ? 'Yes' : 'No'
-                          : String(resp.value || 'N/A')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Procurement Officer Actions Bar */}
-            <div className="pt-4 border-t border-slate-200 space-y-3">
-              <span className="text-xs font-bold text-slate-700 block">Evaluation Decision & Status Action:</span>
-
-              <div className="flex flex-wrap gap-2.5">
-                <button
-                  onClick={handleApprove}
-                  className="px-4 py-2 bg-[#2F8F5B] hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-xs"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Approve & Admit to Roster</span>
-                </button>
-
-                <button
-                  onClick={() => setIsRequestingInfo(true)}
-                  className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors"
-                >
-                  <AlertTriangle className="w-4 h-4 text-[#E8A33D]" />
-                  <span>Request More Information</span>
-                </button>
-
-                <button
-                  onClick={() => setIsRejecting(true)}
-                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span>Reject</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Request Info Dialog */}
-            {isRequestingInfo && (
-              <form onSubmit={handleRequestInfoSubmit} className="p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-amber-900">Specify Missing or Clarification Requirements:</span>
-                  <button type="button" onClick={() => setIsRequestingInfo(false)} className="text-amber-800">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <textarea
-                  rows={3}
-                  required
-                  value={infoRequestReason}
-                  onChange={(e) => setInfoRequestReason(e.target.value)}
-                  placeholder="e.g. Please provide updated bank rating certificate from a commercial bank in Botswana..."
-                  className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-slate-900"
-                />
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsRequestingInfo(false)}
-                    className="px-3 py-1.5 text-slate-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-[#1F5F99] text-white font-semibold rounded-lg hover:bg-[#184a77]"
-                  >
-                    Send Inquiry to Supplier
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Reject Dialog */}
-            {isRejecting && (
-              <form onSubmit={handleRejectSubmit} className="p-4 bg-rose-50 border border-rose-300 rounded-xl space-y-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-rose-900">Enter Statutory Reason for Rejection:</span>
-                  <button type="button" onClick={() => setIsRejecting(false)} className="text-rose-800">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <textarea
-                  rows={3}
-                  required
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="e.g. Non-compliance with mandatory technical qualification criteria..."
-                  className="w-full p-2.5 bg-white border border-rose-300 rounded-lg text-slate-900"
-                />
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsRejecting(false)}
-                    className="px-3 py-1.5 text-slate-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-[#C2412D] text-white font-semibold rounded-lg hover:bg-rose-800"
-                  >
-                    Confirm Rejection
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

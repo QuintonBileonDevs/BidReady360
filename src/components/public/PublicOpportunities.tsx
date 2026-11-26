@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { supplierApi } from '../../services/api';
 import { Call } from '../../types';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
@@ -22,6 +23,7 @@ import {
   SlidersHorizontal,
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
+  MailCheck,
 } from 'lucide-react';
 
 interface PublicOpportunitiesProps {
@@ -29,7 +31,25 @@ interface PublicOpportunitiesProps {
 }
 
 export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSelectCall }) => {
-  const { calls, setSelectedCallId } = useApp();
+  const { calls, role, isAuthenticated } = useApp();
+  const [invitations, setInvitations] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    if (!isAuthenticated || role !== 'supplier') {
+      setInvitations([]);
+      return;
+    }
+    supplierApi
+      .listInvitations()
+      .then((rows) => {
+        if (active && Array.isArray(rows)) setInvitations(rows);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, role]);
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -229,6 +249,35 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
         {/* RESULTS COLUMN (8 columns on lg)                         */}
         {/* ======================================================== */}
         <div className="lg:col-span-8 space-y-4">
+          {invitations.length > 0 && (
+            <Card variant="surface" padding="sm" className="border-[#1F5F99]/30 bg-[#EAF2FA]/60 dark:bg-[#1E364A]/40 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
+                <MailCheck className="w-4 h-4" />
+                <span>You have {invitations.length} formal tender invitation{invitations.length === 1 ? '' : 's'}</span>
+              </div>
+              <div className="space-y-1.5">
+                {invitations.slice(0, 3).map((inv) => (
+                  <div
+                    key={inv.id || inv.callId}
+                    onClick={() => onSelectCall(inv.callId)}
+                    className="flex items-center justify-between gap-3 p-2 rounded-[6px] bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-xs cursor-pointer hover:border-[#1F5F99]"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-mono text-[11px] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold">
+                        {inv.referenceNo}
+                      </span>{' '}
+                      <span className="font-medium text-[#10212E] dark:text-white truncate">
+                        {inv.title}
+                      </span>
+                    </div>
+                    <span className="text-[#1F5F99] dark:text-[#6FAEE0] font-semibold shrink-0 flex items-center gap-1">
+                      Inspect <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
           {/* Top Control Bar: Search & Sort */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="relative flex-1">
@@ -406,7 +455,20 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                           </td>
 
                           <td className="py-3.5 px-4 text-[#43525F] dark:text-[#B2C3D2]">
-                            <span className="block truncate max-w-[160px]">{call.organizationName}</span>
+                            <div className="flex items-center gap-1.5 max-w-[180px]">
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{
+                                  backgroundColor:
+                                    call.orgBrandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(call.orgBrandPrimaryColor)
+                                      ? call.orgBrandPrimaryColor
+                                      : '#1F5F99',
+                                }}
+                              />
+                              <span className="block truncate font-medium text-[#10212E] dark:text-white">
+                                {call.organizationName}
+                              </span>
+                            </div>
                             <span className="text-[10px] text-[#6B7A87]">{call.category}</span>
                           </td>
 
@@ -476,7 +538,18 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                       <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] grid grid-cols-2 gap-2 text-xs">
                         <div>
                           <span className="text-[10px] text-[#6B7A87] block">Procuring Entity</span>
-                          <span className="text-[#10212E] dark:text-white truncate block">{call.organizationName}</span>
+                          <span className="text-[#10212E] dark:text-white truncate flex items-center gap-1.5">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{
+                                backgroundColor:
+                                  call.orgBrandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(call.orgBrandPrimaryColor)
+                                    ? call.orgBrandPrimaryColor
+                                    : '#1F5F99',
+                              }}
+                            />
+                            <span className="truncate">{call.organizationName}</span>
+                          </span>
                         </div>
                         <div>
                           <span className="text-[10px] text-[#6B7A87] block">Closing Date</span>

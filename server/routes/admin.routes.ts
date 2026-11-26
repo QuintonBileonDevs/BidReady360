@@ -6,6 +6,7 @@ import { auditRepository } from '../repositories/audit.repository';
 import { referenceRepository } from '../repositories/reference.repository';
 import { suppliersRepository } from '../repositories/suppliers.repository';
 import { documentsRepository } from '../repositories/documents.repository';
+import { notificationsRepository } from '../repositories/notifications.repository';
 import { translateDbError } from '../db/errors';
 import { validateOmang } from '../../shared/omang';
 
@@ -39,23 +40,19 @@ async function logAdminAudit(
     afterJson?: any;
   }
 ) {
-  try {
-    const actor = getActorInfo(req);
-    await auditRepository.logEvent({
-      ...actor,
-      organizationName: 'BidReady360 Platform Administration',
-      action: payload.action,
-      entityType: payload.entityType,
-      entityId: payload.entityId || null,
-      organizationId: payload.organizationId || null,
-      supplierId: payload.supplierId || null,
-      beforeJson: payload.beforeJson,
-      afterJson: payload.afterJson,
-      details: payload.details,
-    });
-  } catch (err: any) {
-    console.warn('[ADMIN AUDIT WARNING]:', err?.message || err);
-  }
+  const actor = getActorInfo(req);
+  await auditRepository.logEvent({
+    ...actor,
+    organizationName: 'BidReady360 Platform Administration',
+    action: payload.action,
+    entityType: payload.entityType,
+    entityId: payload.entityId || null,
+    organizationId: payload.organizationId || null,
+    supplierId: payload.supplierId || null,
+    beforeJson: payload.beforeJson,
+    afterJson: payload.afterJson,
+    details: payload.details,
+  });
 }
 
 async function hasPeopleGenderColumn(): Promise<boolean> {
@@ -327,6 +324,17 @@ router.post('/organizations/:id/approve', async (req: Request, res: Response) =>
       details: `Approved procuring organization "${before.name}" for live tender operations.`,
     });
 
+    await notificationsRepository
+      .notifyOrganizationMembers(id, {
+        eventType: 'organization_approved',
+        title: 'Your organization account is approved',
+        body: `${before.name} has been verified and approved. Open your workspace to publish tender calls and review supplier submissions.`,
+        linkUrl: 'overview',
+        priority: 'success',
+        data: { organizationId: id, organizationName: before.name },
+      })
+      .catch((notifErr) => console.warn('[ORG APPROVE NOTIFY WARNING]:', notifErr?.message || notifErr));
+
     res.json(updatedRes.rows[0]);
   } catch (err: any) {
     const safe = translateDbError(err);
@@ -374,6 +382,17 @@ router.post('/organizations/:id/reject', async (req: Request, res: Response) => 
       afterJson: { status: 'suspended', verificationStatus: 'rejected', rejectionReason: reason },
       details: `Rejected organization registration "${before.name}". Reason: ${reason}`,
     });
+
+    await notificationsRepository
+      .notifyOrganizationMembers(id, {
+        eventType: 'organization_rejected',
+        title: 'Organization verification needs attention',
+        body: `${before.name} was not approved. Reason: ${reason}. Review your organization details and contact platform support to resubmit.`,
+        linkUrl: 'settings',
+        priority: 'urgent',
+        data: { organizationId: id, organizationName: before.name, reason },
+      })
+      .catch((notifErr) => console.warn('[ORG REJECT NOTIFY WARNING]:', notifErr?.message || notifErr));
 
     res.json(updatedRes.rows[0]);
   } catch (err: any) {
@@ -1030,6 +1049,40 @@ router.post('/verification/documents/:versionId', async (req: Request, res: Resp
       details: `Set document "${existing.rows[0].title}" status to ${rawStatus}${rejectionReason ? ` (${rejectionReason})` : ''}`,
     });
 
+    if (rawStatus === 'VERIFIED') {
+      await notificationsRepository
+        .notifySupplierMembers(supplierId, {
+          eventType: 'document_verified',
+          title: `Document verified: ${existing.rows[0].title}`,
+          body: `Your ${existing.rows[0].title} has been verified. Open your document vault to check your bidding readiness.`,
+          linkUrl: 'vault',
+          priority: 'success',
+          data: {
+            documentId: existing.rows[0].documentId,
+            versionId,
+            documentTitle: existing.rows[0].title,
+          },
+        })
+        .catch((notifErr) => console.warn('[DOC VERIFY NOTIFY WARNING]:', notifErr?.message || notifErr));
+    } else if (rawStatus === 'REJECTED' || rawStatus === 'UNVERIFIABLE') {
+      const reasonText = rejectionReason || notes || 'Please upload a clearer, valid copy.';
+      await notificationsRepository
+        .notifySupplierMembers(supplierId, {
+          eventType: 'document_rejected',
+          title: `Document needs replacement: ${existing.rows[0].title}`,
+          body: `Your ${existing.rows[0].title} could not be accepted. Reason: ${reasonText}. Upload a clear replacement copy in your document vault.`,
+          linkUrl: 'vault',
+          priority: 'urgent',
+          data: {
+            documentId: existing.rows[0].documentId,
+            versionId,
+            documentTitle: existing.rows[0].title,
+            reason: reasonText,
+          },
+        })
+        .catch((notifErr) => console.warn('[DOC REJECT NOTIFY WARNING]:', notifErr?.message || notifErr));
+    }
+
     res.json(updatedRes.rows[0]);
   } catch (err: any) {
     const safe = translateDbError(err);
@@ -1683,8 +1736,42 @@ router.put('/billing/plans/:id', async (req: Request, res: Response) => {
 });
 
 // =========================================================================
-// 9. NOTIFICATION DELIVERIES
+// 9. IN-APP NOTIFICATIONS & DELIVERY LOGS
 // =========================================================================
+router.get('/notifications/in-app', async (_req: Request, res: Response) => {
+  try {
+    const resRows = await query(
+      `SELECT n.id,
+              n.event_type AS "eventType",
+              n.title,
+              n.body,
+              n.link_url AS "linkUrl",
+              n.priority,
+              (n.read_at IS NOT NULL) AS "isRead",
+              n.read_at AS "readAt",
+              n.created_at AS "createdAt",
+              COALESCE(u.full_name, u.email::text, 'Unknown user') AS "recipientName",
+              u.email::text AS "recipientEmail",
+              COALESCE(o.name, s.legal_name, 'Platform') AS "workspaceName",
+              CASE
+                WHEN n.organization_id IS NOT NULL THEN 'Buyer'
+                WHEN n.supplier_id IS NOT NULL THEN 'Supplier'
+                ELSE 'Platform'
+              END AS "workspaceType"
+       FROM notifications n
+       LEFT JOIN users u ON u.id = n.user_id
+       LEFT JOIN organizations o ON o.id = n.organization_id
+       LEFT JOIN suppliers s ON s.id = n.supplier_id
+       ORDER BY n.created_at DESC
+       LIMIT 150`
+    );
+    res.json(resRows.rows);
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
 router.get('/notifications', async (_req: Request, res: Response) => {
   try {
     const resRows = await query(
@@ -1768,6 +1855,16 @@ router.get('/audit-log', async (req: Request, res: Response) => {
           : '—',
       }))
     );
+  } catch (err: any) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+
+router.get('/audit-log/verify', async (_req: Request, res: Response) => {
+  try {
+    const result = await auditRepository.verifyChain();
+    res.json(result);
   } catch (err: any) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);

@@ -18,8 +18,9 @@ import {
   FormTemplate,
   Evaluator,
   AwardDecision,
+  BuyerBrandingConfig,
 } from '../types';
-import { ApiUser, ProfileSummary, authApi, callsApi, supplierApi, buyerApi } from '../services/api';
+import { ApiUser, ProfileSummary, authApi, callsApi, supplierApi, buyerApi, notificationsApi } from '../services/api';
 import { Language, TRANSLATIONS } from '../translations';
 import { calculateSupplierCompleteness, SupplierCompletenessResult } from '../utils/supplierOnboarding';
 
@@ -185,16 +186,22 @@ interface AppContextType {
   auditEvents: AuditEvent[];
   notifications: NotificationItem[];
   formTemplates: FormTemplate[];
+  buyerBranding: BuyerBrandingConfig | null;
+  setBuyerBranding: (branding: BuyerBrandingConfig | null) => void;
+  refreshCalls: () => Promise<void>;
 
   // Mutators
   updateSupplierProfile: (updates: Partial<Supplier>) => Promise<any> | void;
   uploadDocument: (doc: any) => void;
   replaceDocument: (docId: string, updates: Partial<SupplierDocument>) => void;
   deleteDocument: (docId: string) => void;
-  grantConsent: (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => void;
-  revokeConsent: (grantId: string) => void;
-  updateConsentScope: (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => void;
-  submitApplication: (applicationData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string }) => string;
+  grantConsent: (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => Promise<void>;
+  revokeConsent: (grantId: string, reason?: string) => Promise<void>;
+  updateConsentScope: (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => Promise<void>;
+  submitApplication: (
+    applicationData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string },
+    options?: { skipApiSync?: boolean }
+  ) => string;
   saveApplicationDraft: (draftData: {
     callId: string;
     callNumber: string;
@@ -212,8 +219,8 @@ interface AppContextType {
   }) => string;
   deleteApplicationDraft: (appId: string) => void;
   updateApplicationStatus: (appId: string, status: Application['status'], reason?: string, reviewer?: string) => void;
-  withdrawApplication: (appId: string, reason?: string) => void;
-  respondToInformationRequest: (appId: string, responseMessage: string) => void;
+  withdrawApplication: (appId: string, reason?: string, options?: { skipApiSync?: boolean }) => Promise<void>;
+  respondToInformationRequest: (appId: string, responseMessage: string) => Promise<void>;
   submitClarificationQuestion: (callId: string, question: string) => void;
   publishClarificationAnswer: (clarId: string, answer: string, answeredBy: string) => void;
   createCall: (newCall: Omit<Call, 'id' | 'documentsCount' | 'applicationsCount' | 'addenda'> & { id?: string }) => string;
@@ -222,7 +229,9 @@ interface AppContextType {
   saveScore: (scoreData: Omit<Score, 'id' | 'scoredAt'>) => void;
   signConflictDeclaration: (evaluatorId: string, details?: string) => void;
   updateAwardDecision: (updates: Partial<AwardDecision>) => void;
-  markNotificationRead: (id: string) => void;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
   addAuditEvent: (event: Omit<AuditEvent, 'id' | 'timestamp'>) => void;
 
   // Completeness & Onboarding
@@ -508,7 +517,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           });
 
-          const normApps = Array.isArray(data.applications) ? data.applications : [];
+          const normApps: Application[] = Array.isArray(data.applications)
+            ? data.applications.map((a: any) => {
+                const normalizedDocs = Array.isArray(a.documents) ? a.documents : [];
+                const ir = a.informationRequest;
+                const mappedInfoReq = ir
+                  ? {
+                      id: ir.id,
+                      requestedBy: 'Procurement Committee',
+                      requestedAt: ir.requestedAt ? new Date(ir.requestedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
+                      dueDate: ir.dueAt ? new Date(ir.dueAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—',
+                      message: ir.message,
+                      status: ir.respondedAt ? ('Responded' as const) : ('Pending response' as const),
+                      responseMessage: ir.responseNote || undefined,
+                      respondedAt: ir.respondedAt ? new Date(ir.respondedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : undefined,
+                      respondedBy: ir.respondedAt ? (a.supplierLegalName || 'Supplier') : undefined,
+                    }
+                  : undefined;
+
+                const mappedBid = a.bid
+                  ? {
+                      id: a.bid.id,
+                      applicationId: a.id,
+                      callId: a.callId,
+                      supplierId: a.supplierId,
+                      supplierName: a.supplierLegalName || a.supplierName || '',
+                      currency: 'BWP' as const,
+                      status: a.bid.status,
+                      pricingLineItems: Array.isArray(a.bid.pricingLineItems) ? a.bid.pricingLineItems : [],
+                      totalAmountBWP: a.bid.totalAmountBWP !== null && a.bid.totalAmountBWP !== undefined ? Number(a.bid.totalAmountBWP) : 0,
+                      technicalProposalFileName: 'Technical Proposal',
+                      financialProposalFileName: 'Financial Schedule',
+                      isSealed: String(a.bid.status || '').toLowerCase() !== 'opened',
+                      sealedHash: a.bid.sealedHash || '',
+                    }
+                  : undefined;
+
+                return {
+                  id: a.id,
+                  callId: a.callId,
+                  callNumber: a.callNumber || '',
+                  callTitle: a.callTitle || '',
+                  callType: a.callType === 'rfp' || a.callType === 'RFP' ? 'RFP' : a.callType === 'registration_drive' || a.callType === 'Registration drive' ? 'Registration drive' : 'EOI',
+                  closesAt: a.closesAt || null,
+                  organizationId: a.organizationId,
+                  organizationName: a.organizationName || '',
+                  supplierId: a.supplierId,
+                  supplierName: a.supplierLegalName || a.supplierName || '',
+                  submittedAt: a.submittedAt ? new Date(a.submittedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
+                  receiptNumber: a.receiptNumber || undefined,
+                  status: (a.status || 'Submitted') as Application['status'],
+                  statusReason: a.decisionNote || a.withdrawalReason || undefined,
+                  decisionNote: a.decisionNote || undefined,
+                  informationRequest: mappedInfoReq,
+                  withdrawnAt: a.withdrawnAt || undefined,
+                  withdrawalReason: a.withdrawalReason || null,
+                  sharedDocumentIds: normalizedDocs.map((d: any) => d.documentVersionId).filter(Boolean),
+                  documents: normalizedDocs,
+                  pinnedDocumentVersionIds: normalizedDocs.map((d: any) => d.documentVersionId).filter(Boolean),
+                  answers: a.answers || {},
+                  responses: Array.isArray(a.responses) ? a.responses : [],
+                  bid: mappedBid,
+                  timeline: Array.isArray(a.timeline)
+                    ? a.timeline.map((t: any) => ({
+                        stage: (t.stage || 'Submitted') as Application['status'],
+                        timestamp: t.createdAt ? new Date(t.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : (t.timestamp || ''),
+                        note: t.note || undefined,
+                      }))
+                    : [],
+                };
+              })
+            : [];
           const rawProfile = data.profile || {};
           const completenessScore = data.completeness?.score ?? rawProfile.profileCompleteness ?? rawProfile.profile_completeness ?? 0;
           const complianceStatus = data.completeness?.complianceStatus ?? rawProfile.complianceStatus ?? rawProfile.compliance_status ?? (completenessScore >= 80 ? 'Fully compliant' : 'Action required');
@@ -579,25 +658,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Hydrate consent grants strictly from live PostgreSQL bootstrap payload
           const mappedConsents: ConsentGrant[] = Array.isArray(data.consent)
-            ? data.consent.map((c: any) => ({
-                id: c.id,
-                supplierId: c.supplierId || normProfile.id,
-                organizationId: c.organizationId,
-                organizationName: c.organizationName || 'Procuring Organization',
-                grantedAt: c.grantedAt ? new Date(c.grantedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
-                status: String(c.status || '').toLowerCase() === 'revoked' ? 'Revoked' : 'Active',
-                scope: c.scope || {
-                  companyDetails: true,
-                  directorsOwners: true,
-                  pastProjects: true,
-                  selectedDocuments: true,
-                  taxCompliance: true,
-                  financialStatements: false,
-                  keyPersonnel: true,
-                  pastContracts: true,
-                  bankingDetails: false,
-                },
-                tiedApplicationNumbers: Array.isArray(c.tiedApplicationNumbers) ? c.tiedApplicationNumbers : [],
+            ? data.consent.map((c: any) => {
+                const statusLower = String(c.status || '').toLowerCase();
+                const mappedStatus: ConsentGrant['status'] =
+                  statusLower === 'revoked' ? 'Revoked' : statusLower === 'expired' ? 'Expired' : 'Active';
+                const selectedNames = Array.isArray(c.selectedDocumentNames) ? c.selectedDocumentNames : [];
+                return {
+                  id: c.id,
+                  supplierId: c.supplierId || normProfile.id,
+                  organizationId: c.organizationId,
+                  organizationName: c.organizationName || 'Procuring Organization',
+                  grantedAt: c.grantedAt ? new Date(c.grantedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+                  expiryDate: c.expiresAt ? String(c.expiresAt).slice(0, 10) : undefined,
+                  revokedAt: c.revokedAt ? new Date(c.revokedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : undefined,
+                  revocationReason: c.revocationReason || undefined,
+                  purpose: c.purpose || undefined,
+                  status: mappedStatus,
+                  scope: c.scope || {
+                    companyDetails: Boolean(c.shareCompanyDetails),
+                    directorsOwners: Boolean(c.shareDirectorsOwners),
+                    pastProjects: Boolean(c.sharePastProjects),
+                    selectedDocuments: selectedNames.length > 0 || Boolean(c.shareTaxCompliance || c.shareFinancialStatements),
+                    taxCompliance: Boolean(c.shareTaxCompliance),
+                    financialStatements: Boolean(c.shareFinancialStatements),
+                    keyPersonnel: Boolean(c.shareKeyPersonnel),
+                    pastContracts: Boolean(c.sharePastContracts),
+                    bankingDetails: Boolean(c.shareBankingDetails),
+                  },
+                  selectedDocumentIds: Array.isArray(c.selectedDocumentIds) ? c.selectedDocumentIds : [],
+                  selectedDocumentNames: selectedNames,
+                  tiedApplicationNumbers: Array.isArray(c.tiedApplicationNumbers) ? c.tiedApplicationNumbers : [],
+                  accessedCount: typeof c.accessCount === 'number' ? c.accessCount : 0,
+                  lastAccessedAt: c.lastAccessedAt
+                    ? new Date(c.lastAccessedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : undefined,
+                };
+              })
+            : [];
+
+          const mappedNotifications: NotificationItem[] = Array.isArray(data.notifications)
+            ? data.notifications.map((n: any) => ({
+                id: n.id,
+                recipientRole:
+                  n.recipientRole === 'Buyer' || currentSession.activeTenant?.tenantType === 'organization'
+                    ? 'Buyer'
+                    : 'Supplier',
+                recipientId: n.supplierId || n.organizationId || n.userId || '',
+                eventType: n.eventType || n.type || undefined,
+                title: n.title || 'Procurement notification',
+                message: n.body || n.message || '',
+                timestamp: n.createdAt || '',
+                read: typeof n.isRead === 'boolean' ? n.isRead : Boolean(n.readAt),
+                type: (['urgent', 'info', 'success', 'warning'].includes(n.priority) ? n.priority : 'info') as NotificationItem['type'],
+                actionLink: n.linkUrl || n.link || undefined,
+                data: n.data || null,
               }))
             : [];
 
@@ -611,6 +725,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setDocuments(mappedDocs);
           setApplications(normApps);
           setConsentGrants(mappedConsents);
+          setNotifications(mappedNotifications);
+          void refreshCalls();
 
           let resolvedRole: UserRole = 'supplier';
           if (currentSession.user.isPlatformAdmin) {
@@ -648,6 +764,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setRegisteredBuyerEmail(currentSession.user.email);
             if (derivedBuyerStatus === 'Approved') {
               setActiveNavState((prev) => (prev === 'buyer-pending' || prev === 'buyer-login' ? 'buyer-dashboard' : prev));
+              buyerApi
+                .listFormTemplates()
+                .then((tmpls) => {
+                  if (Array.isArray(tmpls)) setFormTemplates(tmpls);
+                })
+                .catch(() => {});
+              buyerApi
+                .getBranding()
+                .then((b) => {
+                  if (b) {
+                    setBuyerBranding(b);
+                    if (b.name) setRegisteredBuyerOrgName(b.name);
+                  }
+                })
+                .catch(() => {});
             } else {
               setActiveNavState('buyer-pending');
             }
@@ -801,9 +932,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
 
     setCurrentUser(null);
+    setBuyerBrandingState(null);
     setSupplier(EMPTY_SUPPLIER);
     setDocuments([]);
     setApplications([]);
+    setConsentGrants([]);
+    setNotifications([]);
     setRegisteredBuyerOrgName(null);
     setRegisteredBuyerEmail(null);
     setBuyerOrgStatus('Pending');
@@ -1143,82 +1277,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [calls, setCalls] = useState<Call[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadDatabaseCalls() {
-      try {
-        const fetchedCalls = await callsApi.listOpen();
-        if (isMounted && Array.isArray(fetchedCalls)) {
-          const mappedCalls: Call[] = fetchedCalls.map((c: any) => ({
-            id: c.id,
-            callNumber: c.referenceNo || `CALL-${c.id.substring(0, 6)}`,
-            organizationId: c.organizationId || '',
-            organizationName: c.organizationName || 'Procuring Organization',
-            organizationSlug: c.organizationSlug || '',
-            title: c.title,
-            summary: c.summary || c.description || '',
-            type: c.callType === 'rfp' ? 'RFP' : c.callType === 'registration_drive' ? 'Registration drive' : 'EOI',
-            category: (c.categories && c.categories[0]?.name) || 'General Procurement',
-            subcategories: (c.categories || []).map((cat: any) => cat.name || String(cat)),
-            location: 'Botswana',
-            openingDate: c.opensAt ? new Date(c.opensAt).toISOString().split('T')[0] : '',
-            clarificationDeadline: c.clarificationDeadline ? new Date(c.clarificationDeadline).toISOString().split('T')[0] : '',
-            closingDate: c.closesAt ? new Date(c.closesAt).toISOString().split('T')[0] : '',
-            closingTimeCAT: '12:00 PM',
-            status: c.status === 'published' || c.status === 'open' ? 'Open' : c.status === 'closed' ? 'Closed' : 'Under evaluation',
-            requiredDocumentTypes: [],
-            daysRemaining: typeof c.daysRemaining === 'number' ? Math.max(0, Math.floor(c.daysRemaining)) : 0,
-            isSealed: true,
-            documentsCount: c.documentsCount || 0,
-            applicationsCount: c.applicationsCount || 0,
-            estimatedBudgetBWP: Number(c.estimatedValue || 0),
-            addenda: [],
-          }));
-          setCalls(mappedCalls);
+  const refreshCalls = useCallback(async () => {
+    try {
+      const fetchedCalls = await callsApi.listOpen();
+      if (Array.isArray(fetchedCalls)) {
+        const mappedCalls: Call[] = fetchedCalls.map((c: any) => ({
+          id: c.id,
+          callNumber: c.referenceNo || `CALL-${c.id.substring(0, 6)}`,
+          organizationId: c.organizationId || '',
+          organizationName: c.organizationName || 'Procuring Organization',
+          orgBrandPrimaryColor: c.orgBrandPrimaryColor || '#1F5F99',
+          orgBrandSubtext: c.orgBrandSubtext || '',
+          orgCustomDomain: c.orgCustomDomain || '',
+          orgWelcomeNotice: c.orgWelcomeNotice || '',
+          title: c.title,
+          summary: c.summary || c.description || '',
+          type: c.callType === 'rfp' ? 'RFP' : c.callType === 'registration_drive' ? 'Registration drive' : 'EOI',
+          category: (c.categories && c.categories[0]?.name) || 'General Procurement',
+          subcategories: (c.categories || []).map((cat: any) => cat.name || String(cat)),
+          location: 'Botswana',
+          openingDate: c.opensAt ? new Date(c.opensAt).toISOString().split('T')[0] : '',
+          clarificationDeadline: c.clarificationDeadline ? new Date(c.clarificationDeadline).toISOString().split('T')[0] : '',
+          closingDate: c.closesAt ? new Date(c.closesAt).toISOString().split('T')[0] : '',
+          closingTimeCAT: '12:00 PM',
+          status: c.status === 'published' || c.status === 'open' ? 'Open' : c.status === 'closed' ? 'Closed' : 'Under evaluation',
+          visibility: c.visibility || 'open',
+          requiredDocumentTypes: [],
+          daysRemaining: typeof c.daysRemaining === 'number' ? Math.max(0, Math.floor(c.daysRemaining)) : 0,
+          isSealed: true,
+          documentsCount: c.documentsCount || 0,
+          applicationsCount: c.applicationsCount || 0,
+          estimatedBudgetBWP: Number(c.estimatedValue || 0),
+          addenda: [],
+        }));
+        setCalls(mappedCalls);
 
-          // Derive live active organizations directly from open database calls (no hardcoded mock orgs)
-          const orgMap = new Map<string, Organization>();
-          for (const mc of mappedCalls) {
-            if (!mc.organizationId) continue;
-            const existing = orgMap.get(mc.organizationId);
-            if (existing) {
-              existing.activeCallsCount += 1;
-            } else {
-              const initials = mc.organizationName
-                .split(/\s+/)
-                .filter(Boolean)
-                .map((w) => w[0])
-                .join('')
-                .slice(0, 4)
-                .toUpperCase();
-              orgMap.set(mc.organizationId, {
-                id: mc.organizationId,
-                name: mc.organizationName,
-                acronym: initials || 'ORG',
-                type: 'Procuring Entity',
-                district: 'Botswana',
-                city: 'Gaborone',
-                logoText: initials || 'ORG',
-                contactEmail: '',
-                contactPhone: '',
-                address: '',
-                activeCallsCount: 1,
-                suppliersRosterCount: 0,
-              });
-            }
+        // Derive live active organizations directly from open database calls
+        const orgMap = new Map<string, Organization>();
+        for (const mc of mappedCalls) {
+          if (!mc.organizationId) continue;
+          const existing = orgMap.get(mc.organizationId);
+          if (existing) {
+            existing.activeCallsCount += 1;
+          } else {
+            const initials = mc.organizationName
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((w) => w[0])
+              .join('')
+              .slice(0, 4)
+              .toUpperCase();
+            orgMap.set(mc.organizationId, {
+              id: mc.organizationId,
+              name: mc.organizationName,
+              acronym: initials || 'ORG',
+              type: 'Procuring Entity',
+              district: 'Botswana',
+              city: 'Gaborone',
+              logoText: initials || 'ORG',
+              contactEmail: '',
+              contactPhone: '',
+              address: '',
+              activeCallsCount: 1,
+              suppliersRosterCount: 0,
+            });
           }
-          setOrganizations(Array.from(orgMap.values()));
         }
-      } catch (err) {
-        console.warn('[APP CONTEXT] Database calls fetch notice:', err);
+        setOrganizations(Array.from(orgMap.values()));
       }
+    } catch (err) {
+      console.warn('[APP CONTEXT] Database calls fetch notice:', err);
     }
-
-    loadDatabaseCalls();
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    void refreshCalls();
+  }, [refreshCalls]);
 
   // Single source of truth: Profile snapshot is loaded atomically via runBootstrap (/api/bootstrap)
   // Page-level and context-level duplicate fetches have been removed to prevent post-gate data shifts.
@@ -1234,6 +1368,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
+  const [buyerBranding, setBuyerBrandingState] = useState<BuyerBrandingConfig | null>(null);
+
+  const setBuyerBranding = useCallback((branding: BuyerBrandingConfig | null) => {
+    setBuyerBrandingState(branding);
+    if (branding?.name) {
+      setRegisteredBuyerOrgName(branding.name);
+      setProfileSummary((prev) =>
+        prev && prev.tenantType === 'organization'
+          ? { ...prev, supplierOrOrgName: branding.name }
+          : prev
+      );
+    }
+  }, []);
 
   // Real-time completeness result computed from current memory state
   const completenessResult = calculateSupplierCompleteness(supplier, documents);
@@ -1554,7 +1701,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const grantConsent = (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => {
+  const grantConsent = async (newGrant: Omit<ConsentGrant, 'id' | 'grantedAt' | 'status'>) => {
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      const saved = await supplierApi.grantConsent({
+        organizationId: newGrant.organizationId,
+        scopes: {
+          companyDetails: Boolean(newGrant.scope?.companyDetails),
+          directorsOwners: Boolean(newGrant.scope?.directorsOwners),
+          pastProjects: Boolean(newGrant.scope?.pastProjects),
+          taxCompliance: Boolean(newGrant.scope?.taxCompliance),
+          financialStatements: Boolean(newGrant.scope?.financialStatements),
+          keyPersonnel: Boolean(newGrant.scope?.keyPersonnel),
+          pastContracts: Boolean(newGrant.scope?.pastContracts),
+          bankingDetails: Boolean(newGrant.scope?.bankingDetails),
+        },
+        selectedDocumentIds: newGrant.selectedDocumentIds || [],
+        selectedDocumentNames: newGrant.selectedDocumentNames || [],
+        expiresAt: newGrant.expiryDate || null,
+        purpose: newGrant.purpose,
+      });
+
+      const mapped: ConsentGrant = {
+        id: saved.id,
+        supplierId: saved.supplierId || supplier.id,
+        organizationId: saved.organizationId,
+        organizationName: saved.organizationName || newGrant.organizationName,
+        grantedAt: saved.grantedAt
+          ? new Date(saved.grantedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        expiryDate: saved.expiresAt ? String(saved.expiresAt).slice(0, 10) : newGrant.expiryDate,
+        purpose: saved.purpose || newGrant.purpose,
+        status: 'Active',
+        scope: {
+          companyDetails: Boolean(saved.shareCompanyDetails),
+          directorsOwners: Boolean(saved.shareDirectorsOwners),
+          pastProjects: Boolean(saved.sharePastProjects),
+          selectedDocuments:
+            (saved.selectedDocumentNames?.length || 0) > 0 ||
+            (saved.selectedDocumentIds?.length || 0) > 0 ||
+            Boolean(saved.shareTaxCompliance || saved.shareFinancialStatements),
+          taxCompliance: Boolean(saved.shareTaxCompliance),
+          financialStatements: Boolean(saved.shareFinancialStatements),
+          keyPersonnel: Boolean(saved.shareKeyPersonnel),
+          pastContracts: Boolean(saved.sharePastContracts),
+          bankingDetails: Boolean(saved.shareBankingDetails),
+        },
+        selectedDocumentIds: saved.selectedDocumentIds || newGrant.selectedDocumentIds || [],
+        selectedDocumentNames: saved.selectedDocumentNames || newGrant.selectedDocumentNames || [],
+        tiedApplicationNumbers: saved.tiedApplicationNumbers || [],
+        accessedCount: typeof saved.accessCount === 'number' ? saved.accessCount : 0,
+        lastAccessedAt: saved.lastAccessedAt
+          ? new Date(saved.lastAccessedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : undefined,
+      };
+      setConsentGrants((prev) => {
+        const filtered = prev.filter((g) => g.id !== mapped.id && g.organizationId !== mapped.organizationId);
+        return [mapped, ...filtered];
+      });
+      return;
+    }
+
     const grant: ConsentGrant = {
       ...newGrant,
       id: `cg-${Date.now()}`,
@@ -1562,33 +1769,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'Active',
     };
     setConsentGrants((prev) => [grant, ...prev]);
-    addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      action: 'Granted Data Sharing Access',
-      entityType: 'Consent',
-      entityId: grant.id,
-      details: `Authorized ${grant.organizationName} to inspect selected compliance credentials.`,
-    });
   };
 
-  const revokeConsent = (grantId: string) => {
-    const grant = consentGrants.find((g) => g.id === grantId);
-    setConsentGrants((prev) => prev.map((g) => (g.id === grantId ? { ...g, status: 'Revoked' as const } : g)));
-
-    addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      action: 'Revoked Data Sharing Consent',
-      entityType: 'Consent',
-      entityId: grantId,
-      details: `Revoked profile and document access for ${grant?.organizationName || 'buying organization'}.`,
-    });
+  const revokeConsent = async (grantId: string, reason?: string) => {
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      await supplierApi.revokeConsent(grantId, reason);
+    }
+    setConsentGrants((prev) =>
+      prev.map((g) =>
+        g.id === grantId
+          ? {
+              ...g,
+              status: 'Revoked' as const,
+              revocationReason: reason || g.revocationReason,
+              revokedAt: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            }
+          : g
+      )
+    );
   };
 
-  const updateConsentScope = (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => {
+  const updateConsentScope = async (grantId: string, scopeKey: keyof ConsentGrant['scope'], allowed: boolean) => {
+    const current = consentGrants.find((g) => g.id === grantId);
+    const nextScope = current ? { ...current.scope, [scopeKey]: allowed } : { [scopeKey]: allowed };
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      await supplierApi.updateConsentScope(grantId, {
+        scopes: {
+          companyDetails: Boolean(nextScope.companyDetails),
+          directorsOwners: Boolean(nextScope.directorsOwners),
+          pastProjects: Boolean(nextScope.pastProjects),
+          taxCompliance: Boolean(nextScope.taxCompliance),
+          financialStatements: Boolean(nextScope.financialStatements),
+          keyPersonnel: Boolean(nextScope.keyPersonnel),
+          pastContracts: Boolean(nextScope.pastContracts),
+          bankingDetails: Boolean(nextScope.bankingDetails),
+        },
+      });
+    }
     setConsentGrants((prev) =>
       prev.map((g) => {
         if (g.id === grantId) {
@@ -1687,7 +1906,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setApplications((prev) => prev.filter((a) => a.id !== appId));
   };
 
-  const submitApplication = (appData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string }): string => {
+  const submitApplication = (
+    appData: Omit<Application, 'id' | 'submittedAt' | 'timeline'> & { initialTimelineNote?: string },
+    options?: { skipApiSync?: boolean }
+  ): string => {
     const now = new Date().toISOString().replace('T', ' ').substring(0, 16);
     let assignedAppId = '';
 
@@ -1758,32 +1980,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((c) => (c.id === appData.callId ? { ...c, applicationsCount: c.applicationsCount + 1 } : c))
     );
 
-    // Auto add / update consent grant
-    const existingGrant = consentGrants.find((g) => g.organizationId === appData.organizationId);
-    if (!existingGrant) {
-      const newGrant: ConsentGrant = {
-        id: `cg-${Date.now()}`,
-        supplierId: supplier.id,
-        organizationId: appData.organizationId,
-        organizationName: appData.organizationName,
-        grantedAt: now,
-        status: 'Active',
-        scope: {
-          companyDetails: true,
-          directorsOwners: true,
-          pastProjects: true,
-          selectedDocuments: true,
-          taxCompliance: true,
-          financialStatements: true,
-          keyPersonnel: true,
-          pastContracts: true,
-          bankingDetails: false,
-        },
-        tiedApplicationNumbers: [appData.callNumber],
-      };
-      setConsentGrants((prev) => [newGrant, ...prev]);
-    }
-
     addAuditEvent({
       actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
       actorRole: 'Supplier',
@@ -1795,7 +1991,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     const token = localStorage.getItem('bidready_token');
-    if (token) {
+    if (token && !options?.skipApiSync) {
       supplierApi.submitApplication({
         callId: appData.callId,
         answers: appData.answers || {},
@@ -1846,8 +2042,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const withdrawApplication = (appId: string, reason?: string) => {
-    const targetApp = applications.find((a) => a.id === appId);
+  const withdrawApplication = async (
+    appId: string,
+    reason?: string,
+    options?: { skipApiSync?: boolean }
+  ) => {
+    const token = localStorage.getItem('bidready_token');
+    if (token && !options?.skipApiSync) {
+      await supplierApi.withdrawApplication(appId, reason);
+    }
+
     const now = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     setApplications((prev) =>
       prev.map((app) => {
@@ -1855,8 +2059,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...app,
             status: 'Withdrawn',
-            statusReason: reason || 'Application withdrawn by supplier prior to award.',
+            statusReason: reason || 'Application withdrawn by supplier prior to closing.',
             withdrawnAt: now,
+            withdrawalReason: reason || null,
             timeline: [
               ...app.timeline,
               {
@@ -1870,20 +2075,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return app;
       })
     );
-
-    addAuditEvent({
-      actorName: supplier.directors[0]?.fullName || supplier.teamMembers?.[0]?.name || supplier.legalName || 'Supplier Admin',
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      action: 'Withdrew Tender Application',
-      entityType: 'Application',
-      entityId: appId,
-      details: `Withdrew submission for ${targetApp?.callNumber || appId}: ${targetApp?.callTitle || ''}.`,
-    });
   };
 
-  const respondToInformationRequest = (appId: string, responseMessage: string) => {
-    const targetApp = applications.find((a) => a.id === appId);
+  const respondToInformationRequest = async (appId: string, responseMessage: string) => {
+    const token = localStorage.getItem('bidready_token');
+    if (token) {
+      await supplierApi.respondToInfoRequest(appId, responseMessage);
+    }
+
     const now = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ', ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const respondent = supplier.directors[0]?.fullName
       ? `${supplier.directors[0].fullName} (Supplier)`
@@ -1934,16 +2133,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return app;
       })
     );
-
-    addAuditEvent({
-      actorName: respondent,
-      actorRole: 'Supplier',
-      organizationName: supplier.legalName,
-      action: 'Responded to Information Request',
-      entityType: 'Application',
-      entityId: appId,
-      details: `Submitted requested information for ${targetApp?.callNumber || appId}: "${responseMessage}".`,
-    });
   };
 
   const submitClarificationQuestion = (callId: string, question: string) => {
@@ -2133,10 +2322,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const markNotificationRead = (id: string) => {
+  const refreshNotifications = useCallback(async () => {
+    if (!isAuthenticated) return;
+    try {
+      const rows = await notificationsApi.list(50);
+      if (!Array.isArray(rows)) return;
+      const mapped: NotificationItem[] = rows.map((n: any) => ({
+        id: n.id,
+        recipientRole:
+          n.recipientRole === 'Buyer' || role === 'buyer'
+            ? 'Buyer'
+            : 'Supplier',
+        recipientId: n.supplierId || n.organizationId || n.userId || '',
+        eventType: n.eventType || n.type || undefined,
+        title: n.title || 'Procurement notification',
+        message: n.body || n.message || '',
+        timestamp: n.createdAt || '',
+        read: typeof n.isRead === 'boolean' ? n.isRead : Boolean(n.readAt),
+        type: (['urgent', 'info', 'success', 'warning'].includes(n.priority) ? n.priority : 'info') as NotificationItem['type'],
+        actionLink: n.linkUrl || n.link || undefined,
+        data: n.data || null,
+      }));
+      setNotifications(mapped);
+    } catch {
+      // Keep current notifications on transient network error
+    }
+  }, [isAuthenticated, role]);
+
+  useEffect(() => {
+    if (!isAuthenticated || (role !== 'supplier' && role !== 'buyer')) return;
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshNotifications();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshNotifications();
+      }
+    }, 30000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [isAuthenticated, role, refreshNotifications]);
+
+  const markNotificationRead = async (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.markRead(id);
+    } catch {
+      await refreshNotifications();
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.markAllRead();
+    } catch {
+      await refreshNotifications();
+    }
   };
 
   return (
@@ -2196,6 +2449,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         auditEvents,
         notifications,
         formTemplates,
+        buyerBranding,
+        setBuyerBranding,
+        refreshCalls,
         updateSupplierProfile,
         uploadDocument,
         replaceDocument,
@@ -2218,6 +2474,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         signConflictDeclaration,
         updateAwardDecision,
         markNotificationRead,
+        markAllNotificationsRead,
+        refreshNotifications,
         addAuditEvent,
         completenessResult,
         profileSummary,

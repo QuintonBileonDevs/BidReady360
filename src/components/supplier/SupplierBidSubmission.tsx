@@ -84,6 +84,9 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   );
 
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   const completeness = calculateSupplierCompleteness(supplier, documents);
   if (completeness.score < 100) {
@@ -595,7 +598,7 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
           sealedHash,
         },
         initialTimelineNote: `Sealed commercial bid (BWP ${grandTotalBWP.toLocaleString()}) and statutory schedules submitted. Receipt #${generatedReceipt}.`,
-      });
+      }, { skipApiSync: true });
 
       addAuditEvent({
         actorName: supplier.directors[0]?.fullName || supplier.legalName || 'Supplier Administrator',
@@ -623,14 +626,24 @@ export const SupplierBidSubmission: React.FC<SupplierBidSubmissionProps> = ({
   };
 
   // Withdraw action
-  const handleConfirmWithdraw = () => {
+  const handleConfirmWithdraw = async () => {
     if (!existingSubmittedApp && !submittedReceipt) return;
-    const targetId = existingSubmittedApp?.id || submittedReceipt?.appId;
-    if (targetId) {
-      withdrawApplication(targetId, 'Withdrawn by supplier prior to tender closing deadline.');
+    const reason = withdrawReason.trim() || 'Withdrawn by supplier prior to tender closing deadline.';
+    setWithdrawError(null);
+    setIsWithdrawing(true);
+    try {
+      await supplierApi.withdrawBid(call.id, reason);
+      const targetId = existingSubmittedApp?.id || submittedReceipt?.appId;
+      if (targetId) {
+        await withdrawApplication(targetId, reason, { skipApiSync: true });
+      }
+      setIsWithdrawModalOpen(false);
+      onCancel();
+    } catch (err: any) {
+      setWithdrawError(err?.message || 'Failed to withdraw sealed bid.');
+    } finally {
+      setIsWithdrawing(false);
     }
-    setIsWithdrawModalOpen(false);
-    onCancel();
   };
 
   // Replace bid action: reset to step 1 to revise prices before closing
@@ -1847,20 +1860,43 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   Are you sure you want to withdraw your bid for <strong>{call.callNumber}</strong>? Your sealed proposal and pricing schedule will be permanently cancelled. You may resubmit prior to the closing deadline.
                 </p>
 
+                <div className="space-y-1.5">
+                  <label className="text-[13px] font-semibold text-[#10212E] dark:text-white block">
+                    Withdrawal reason (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={withdrawReason}
+                    onChange={(e) => setWithdrawReason(e.target.value)}
+                    placeholder="e.g. Updating schedule or operational capacity"
+                    className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  />
+                </div>
+
+                {withdrawError && (
+                  <div className="p-3 rounded-[6px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] text-[13px]">
+                    {withdrawError}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-end gap-3 pt-3">
                   <button
                     type="button"
-                    onClick={() => setIsWithdrawModalOpen(false)}
+                    onClick={() => {
+                      setWithdrawError(null);
+                      setIsWithdrawModalOpen(false);
+                    }}
                     className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] cursor-pointer"
                   >
                     Keep bid active
                   </button>
                   <button
                     type="button"
+                    disabled={isWithdrawing}
                     onClick={handleConfirmWithdraw}
-                    className="px-4 py-2 bg-[#DC2626] hover:bg-[#b91c1c] text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
+                    className="px-4 py-2 bg-[#DC2626] hover:bg-[#b91c1c] disabled:opacity-50 text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
                   >
-                    Confirm withdrawal
+                    {isWithdrawing ? 'Withdrawing...' : 'Confirm withdrawal'}
                   </button>
                 </div>
               </div>

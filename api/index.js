@@ -1403,59 +1403,166 @@ var usersRepository = new UsersRepository();
 
 // server/repositories/audit.repository.ts
 import crypto3 from "crypto";
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var GENESIS_HASH = "0".repeat(64);
+var AUDIT_CHAIN_LOCK_KEY = 72819401;
+function computeCanonicalRowHash(params) {
+  const payload = `${params.prevHash}|${params.occurredAtIso}|${params.actorName}|${params.actorRole}|${params.action}|${params.entityType}|${params.entityId || ""}|${params.details}`;
+  return crypto3.createHash("sha256").update(payload).digest("hex");
+}
 var AuditRepository = class {
   /**
-   * Appends an immutable audit event with a cryptographic hash chain.
+   * Appends an immutable audit event with a serialized cryptographic hash chain.
+   * Uses the exact ISO timestamp persisted to occurred_at so hashes can be deterministically re-verified.
    */
-  async logEvent(dto) {
-    const lastRowRes = await query(
-      `SELECT row_hash FROM audit_log ORDER BY occurred_at DESC, id DESC LIMIT 1`
-    );
-    const prevHash = lastRowRes.rows[0]?.row_hash || "0".repeat(64);
-    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
-    const payloadToHash = `${prevHash}|${timestamp}|${dto.actorName}|${dto.actorRole}|${dto.action}|${dto.entityType}|${dto.entityId || ""}|${dto.details}`;
-    const rowHash = crypto3.createHash("sha256").update(payloadToHash).digest("hex");
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const safeEntityId = dto.entityId && UUID_RE.test(dto.entityId) ? dto.entityId : null;
-    const safeActorUserId = dto.actorUserId && UUID_RE.test(dto.actorUserId) ? dto.actorUserId : null;
-    const safeOrgId = dto.organizationId && UUID_RE.test(dto.organizationId) ? dto.organizationId : null;
-    const safeSupplierId = dto.supplierId && UUID_RE.test(dto.supplierId) ? dto.supplierId : null;
-    const res = await query(
-      `INSERT INTO audit_log (
-        occurred_at, actor_type, actor_user_id, actor_name, actor_role,
-        organization_id, supplier_id, organization_name, action,
-        entity_type, entity_id, ip_address, user_agent,
-        before_json, after_json, details, prev_hash, row_hash
-      ) VALUES (
-        NOW(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
-      ) RETURNING 
-        id, occurred_at AS "occurredAt", actor_type AS "actorType", actor_user_id AS "actorUserId",
-        actor_name AS "actorName", actor_role AS "actorRole", organization_id AS "organizationId",
-        supplier_id AS "supplierId", organization_name AS "organizationName", action,
-        entity_type AS "entityType", entity_id AS "entityId", ip_address AS "ipAddress",
-        user_agent AS "userAgent", before_json AS "beforeJson", after_json AS "afterJson",
-        details, prev_hash AS "prevHash", row_hash AS "rowHash"`,
-      [
-        dto.actorType || "user",
-        safeActorUserId,
-        dto.actorName,
-        dto.actorRole,
-        safeOrgId,
-        safeSupplierId,
-        dto.organizationName || null,
-        dto.action,
-        dto.entityType,
-        safeEntityId,
-        dto.ipAddress || null,
-        dto.userAgent || null,
-        dto.beforeJson ? JSON.stringify(dto.beforeJson) : null,
-        dto.afterJson ? JSON.stringify(dto.afterJson) : null,
-        dto.details,
+  async logEvent(dto, externalClient) {
+    const appendWithClient = async (client) => {
+      await client.query(`SELECT pg_advisory_xact_lock(${AUDIT_CHAIN_LOCK_KEY})`);
+      const lastRowRes = await client.query(
+        `SELECT row_hash FROM audit_log ORDER BY occurred_at DESC, id DESC LIMIT 1`
+      );
+      const prevHash = (lastRowRes.rows[0]?.row_hash || GENESIS_HASH).trim();
+      const occurredAtIso = (/* @__PURE__ */ new Date()).toISOString();
+      const safeEntityId = dto.entityId && UUID_RE.test(dto.entityId) ? dto.entityId : null;
+      const safeActorUserId = dto.actorUserId && UUID_RE.test(dto.actorUserId) ? dto.actorUserId : null;
+      const safeOrgId = dto.organizationId && UUID_RE.test(dto.organizationId) ? dto.organizationId : null;
+      const safeSupplierId = dto.supplierId && UUID_RE.test(dto.supplierId) ? dto.supplierId : null;
+      const cleanActorName = String(dto.actorName || "System").slice(0, 200);
+      const cleanActorRole = String(dto.actorRole || "System").slice(0, 50);
+      const cleanAction = String(dto.action || "EVENT").slice(0, 100);
+      const cleanEntityType = String(dto.entityType || "Record").slice(0, 60);
+      const cleanDetails = String(dto.details || "");
+      const rowHash = computeCanonicalRowHash({
         prevHash,
-        rowHash
-      ]
+        occurredAtIso,
+        actorName: cleanActorName,
+        actorRole: cleanActorRole,
+        action: cleanAction,
+        entityType: cleanEntityType,
+        entityId: safeEntityId,
+        details: cleanDetails
+      });
+      const res = await client.query(
+        `INSERT INTO audit_log (
+          occurred_at, actor_type, actor_user_id, actor_name, actor_role,
+          organization_id, supplier_id, organization_name, action,
+          entity_type, entity_id, ip_address, user_agent,
+          before_json, after_json, details, prev_hash, row_hash
+        ) VALUES (
+          $1::timestamptz, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+        ) RETURNING 
+          id, occurred_at AS "occurredAt", actor_type AS "actorType", actor_user_id AS "actorUserId",
+          actor_name AS "actorName", actor_role AS "actorRole", organization_id AS "organizationId",
+          supplier_id AS "supplierId", organization_name AS "organizationName", action,
+          entity_type AS "entityType", entity_id AS "entityId", ip_address AS "ipAddress",
+          user_agent AS "userAgent", before_json AS "beforeJson", after_json AS "afterJson",
+          details, prev_hash AS "prevHash", row_hash AS "rowHash"`,
+        [
+          occurredAtIso,
+          dto.actorType || "user",
+          safeActorUserId,
+          cleanActorName,
+          cleanActorRole,
+          safeOrgId,
+          safeSupplierId,
+          dto.organizationName || null,
+          cleanAction,
+          cleanEntityType,
+          safeEntityId,
+          dto.ipAddress || null,
+          dto.userAgent || null,
+          dto.beforeJson ? JSON.stringify(dto.beforeJson) : null,
+          dto.afterJson ? JSON.stringify(dto.afterJson) : null,
+          cleanDetails,
+          prevHash,
+          rowHash
+        ]
+      );
+      return res.rows[0];
+    };
+    if (externalClient) {
+      return appendWithClient(externalClient);
+    }
+    return tx(appendWithClient);
+  }
+  /**
+   * Verifies the append-only hash chain across the global audit_log ledger.
+   */
+  async verifyChain(filters) {
+    const limit = Math.min(Math.max(Number(filters?.limit) || 1e3, 1), 5e3);
+    const res = await query(
+      `SELECT id,
+              occurred_at AS "occurredAt",
+              actor_name AS "actorName",
+              actor_role AS "actorRole",
+              organization_id AS "organizationId",
+              supplier_id AS "supplierId",
+              action,
+              entity_type AS "entityType",
+              entity_id AS "entityId",
+              details,
+              prev_hash AS "prevHash",
+              row_hash AS "rowHash"
+       FROM audit_log
+       ORDER BY occurred_at ASC, id ASC
+       LIMIT $1`,
+      [limit]
     );
-    return res.rows[0];
+    let brokenLinks = 0;
+    let hashMismatches = 0;
+    let firstBrokenEventId = null;
+    let firstBrokenReason = null;
+    let expectedPrevHash = GENESIS_HASH;
+    let latestHash = null;
+    let scopedChecked = 0;
+    for (let i = 0; i < res.rows.length; i++) {
+      const row = res.rows[i];
+      const storedPrev = (row.prevHash || "").trim();
+      const storedHash = (row.rowHash || "").trim();
+      const inScope = (!filters?.organizationId || row.organizationId === filters.organizationId) && (!filters?.supplierId || row.supplierId === filters.supplierId);
+      if (inScope) {
+        scopedChecked++;
+      }
+      if (storedPrev !== expectedPrevHash) {
+        brokenLinks++;
+        if (!firstBrokenEventId) {
+          firstBrokenEventId = row.id;
+          firstBrokenReason = "Previous hash pointer mismatch detected in audit chain.";
+        }
+      }
+      const recomputed = computeCanonicalRowHash({
+        prevHash: storedPrev || GENESIS_HASH,
+        occurredAtIso: new Date(row.occurredAt).toISOString(),
+        actorName: row.actorName || "",
+        actorRole: row.actorRole || "",
+        action: row.action,
+        entityType: row.entityType || "",
+        entityId: row.entityId,
+        details: row.details || ""
+      });
+      if (!storedHash || storedHash !== recomputed) {
+        hashMismatches++;
+        if (!firstBrokenEventId) {
+          firstBrokenEventId = row.id;
+          firstBrokenReason = "Row SHA-256 checksum does not match canonical ledger payload.";
+        }
+      }
+      if (storedHash) {
+        expectedPrevHash = storedHash;
+        latestHash = storedHash;
+      }
+    }
+    return {
+      valid: brokenLinks === 0 && hashMismatches === 0,
+      chainLinkValid: brokenLinks === 0,
+      totalChecked: filters?.organizationId || filters?.supplierId ? scopedChecked : res.rows.length,
+      brokenLinks,
+      hashMismatches,
+      latestHash,
+      firstBrokenEventId,
+      firstBrokenReason,
+      checkedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
   }
   async listEvents(filters) {
     const conditions = [];
@@ -1505,7 +1612,7 @@ var AuditRepository = class {
         details, prev_hash AS "prevHash", row_hash AS "rowHash"
        FROM audit_log
        ${whereClause}
-       ORDER BY occurred_at DESC
+       ORDER BY occurred_at DESC, id DESC
        LIMIT $${params.length}`,
       params
     );
@@ -2797,7 +2904,7 @@ var AuthService = class {
     const cleanIp = sanitizeIp(dto.ip);
     const invRes = await query(
       `SELECT id, email::text AS email, organization_id, supplier_id, role_id,
-              department, job_title, invited_by_user_id, expires_at, accepted_at, revoked_at
+              department, job_title, approval_limit_bwp, invited_by_user_id, expires_at, accepted_at, revoked_at
        FROM invitations
        WHERE token_hash = $1
        LIMIT 1`,
@@ -2867,18 +2974,42 @@ var AuthService = class {
       }
     }
     if (inv.organization_id) {
-      await query(
-        `INSERT INTO organization_members (
-           organization_id, user_id, role_id, is_owner, status, department, job_title,
-           mfa_enforced, invited_by_user_id, invited_at, joined_at
-         ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, FALSE, $6, NOW(), NOW())
-         ON CONFLICT (organization_id, user_id) DO UPDATE
-         SET role_id = EXCLUDED.role_id,
-             status = 'active',
-             joined_at = COALESCE(organization_members.joined_at, NOW()),
-             updated_at = NOW()`,
-        [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.invited_by_user_id]
-      );
+      const hasLimitRes = await query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'approval_limit_bwp'
+         ) AS exists`
+      ).catch(() => ({ rows: [{ exists: false }] }));
+      if (hasLimitRes.rows[0]?.exists) {
+        await query(
+          `INSERT INTO organization_members (
+             organization_id, user_id, role_id, is_owner, status, department, job_title,
+             approval_limit_bwp, mfa_enforced, invited_by_user_id, invited_at, joined_at
+           ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, $6, TRUE, $7, NOW(), NOW())
+           ON CONFLICT (organization_id, user_id) DO UPDATE
+           SET role_id = EXCLUDED.role_id,
+               department = COALESCE(EXCLUDED.department, organization_members.department),
+               job_title = COALESCE(EXCLUDED.job_title, organization_members.job_title),
+               approval_limit_bwp = COALESCE(EXCLUDED.approval_limit_bwp, organization_members.approval_limit_bwp),
+               status = 'active',
+               joined_at = COALESCE(organization_members.joined_at, NOW()),
+               updated_at = NOW()`,
+          [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.approval_limit_bwp, inv.invited_by_user_id]
+        );
+      } else {
+        await query(
+          `INSERT INTO organization_members (
+             organization_id, user_id, role_id, is_owner, status, department, job_title,
+             mfa_enforced, invited_by_user_id, invited_at, joined_at
+           ) VALUES ($1, $2, $3, FALSE, 'active', $4, $5, TRUE, $6, NOW(), NOW())
+           ON CONFLICT (organization_id, user_id) DO UPDATE
+           SET role_id = EXCLUDED.role_id,
+               status = 'active',
+               joined_at = COALESCE(organization_members.joined_at, NOW()),
+               updated_at = NOW()`,
+          [inv.organization_id, userId, inv.role_id, inv.department, inv.job_title, inv.invited_by_user_id]
+        );
+      }
     } else if (inv.supplier_id) {
       await query(
         `INSERT INTO supplier_members (
@@ -3007,6 +3138,13 @@ function translateDbError(err) {
         status: 503,
         message: "The system encountered high concurrency. Please retry your request.",
         code: "DEADLOCK_DETECTED"
+      };
+    }
+    case "42501": {
+      return {
+        status: 403,
+        message: err.message || "Operation blocked by immutability or access control rules.",
+        code: "IMMUTABLE_OR_FORBIDDEN"
       };
     }
     case "P0001": {
@@ -5524,19 +5662,24 @@ var DocumentsRepository = class {
               f.size_bytes AS "sizeBytes",
               COALESCE(f.sha256, v.sha256) AS sha256,
               v.id AS "versionId",
-              d.id AS "documentId"
+              d.id AS "documentId",
+              d.supplier_id AS "supplierId",
+              dt.name AS "documentTypeName"
        FROM document_files f
        JOIN supplier_document_versions v ON v.id = f.document_version_id
        JOIN supplier_documents d ON d.id = v.document_id
+       LEFT JOIN document_types dt ON dt.id = d.document_type_id
        WHERE d.status != 'deleted'
          AND (v.id = $1 OR d.id = $1 OR f.id = $1)
          AND (
            EXISTS (
              SELECT 1
-             FROM applications a
-             JOIN calls c ON c.id = a.call_id
-             WHERE a.supplier_id = d.supplier_id
-               AND c.organization_id = $2
+             FROM application_documents ad
+             JOIN applications a ON a.id = ad.application_id
+             WHERE (ad.document_version_id = v.id OR ad.document_type_id = d.document_type_id)
+               AND a.supplier_id = d.supplier_id
+               AND a.organization_id = $2
+               AND a.status <> 'Draft'
            )
            OR EXISTS (
              SELECT 1
@@ -5544,6 +5687,7 @@ var DocumentsRepository = class {
              WHERE cg.supplier_id = d.supplier_id
                AND cg.organization_id = $2
                AND cg.status = 'active'
+               AND (cg.expires_at IS NULL OR cg.expires_at > NOW())
            )
          )
        ORDER BY (v.id = $1) DESC, (v.id = d.current_version_id) DESC, v.version_no DESC
@@ -5562,7 +5706,9 @@ var DocumentsRepository = class {
       sizeBytes: buf.length,
       sha256: row.sha256 ? row.sha256.trim() : null,
       versionId: row.versionId,
-      documentId: row.documentId
+      documentId: row.documentId,
+      supplierId: row.supplierId,
+      documentTypeName: row.documentTypeName || void 0
     };
   }
   /**
@@ -5580,77 +5726,842 @@ var DocumentsRepository = class {
 var documentsRepository = new DocumentsRepository();
 
 // server/repositories/consent.repository.ts
+var UUID_REGEX2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function hasSelectedDocNamesColumn() {
+  const res = await query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'consent_grants'
+         AND column_name = 'selected_document_names'
+     ) AS exists`
+  ).catch(() => ({ rows: [{ exists: false }] }));
+  return Boolean(res.rows[0]?.exists);
+}
+function buildGrantSelectSql(includeDocNames) {
+  return `
+  SELECT cg.id, cg.supplier_id AS "supplierId", cg.organization_id AS "organizationId",
+         o.name AS "organizationName", cg.share_company_details AS "shareCompanyDetails",
+         cg.share_directors_owners AS "shareDirectorsOwners", cg.share_past_projects AS "sharePastProjects",
+         cg.share_tax_compliance AS "shareTaxCompliance", cg.share_financial_statements AS "shareFinancialStatements",
+         cg.share_key_personnel AS "shareKeyPersonnel", cg.share_past_contracts AS "sharePastContracts",
+         cg.share_banking_details AS "shareBankingDetails",
+         COALESCE(
+           (SELECT array_agg(cgd.document_id::text ORDER BY cgd.attached_at ASC)
+            FROM consent_grant_documents cgd
+            WHERE cgd.consent_grant_id = cg.id),
+           '{}'::text[]
+         ) AS "selectedDocumentIds",
+         COALESCE(
+           NULLIF(
+             (SELECT array_agg(DISTINCT dt.name)
+              FROM consent_grant_documents cgd
+              JOIN supplier_documents sd ON sd.id = cgd.document_id
+              JOIN document_types dt ON dt.id = sd.document_type_id
+              WHERE cgd.consent_grant_id = cg.id),
+             '{}'::text[]
+           ),
+           ${includeDocNames ? `COALESCE(cg.selected_document_names, '{}'::text[])` : `'{}'::text[]`}
+         ) AS "selectedDocumentNames",
+         COALESCE(
+           (SELECT array_agg(c.reference_no ORDER BY a.submitted_at DESC)
+            FROM applications a
+            JOIN calls c ON c.id = a.call_id
+            WHERE a.supplier_id = cg.supplier_id
+              AND a.organization_id = cg.organization_id
+              AND a.status <> 'Draft'),
+           '{}'::text[]
+         ) AS "tiedApplicationNumbers",
+         cg.purpose,
+         CASE
+           WHEN cg.status = 'active' AND cg.expires_at IS NOT NULL AND cg.expires_at <= NOW() THEN 'expired'
+           ELSE cg.status
+         END AS status,
+         cg.granted_at AS "grantedAt", cg.expires_at AS "expiresAt",
+         cg.revoked_at AS "revokedAt", cg.revocation_reason AS "revocationReason",
+         cg.last_accessed_at AS "lastAccessedAt",
+         cg.access_count AS "accessCount"
+  FROM consent_grants cg
+  JOIN organizations o ON o.id = cg.organization_id
+`;
+}
+async function syncConsentGrantDocuments(client, grantId, supplierId, selectedDocumentIds, selectedDocumentNames) {
+  if (selectedDocumentIds === void 0 && selectedDocumentNames === void 0) return;
+  await client.query(`DELETE FROM consent_grant_documents WHERE consent_grant_id = $1`, [grantId]);
+  const validDocIds = Array.isArray(selectedDocumentIds) ? selectedDocumentIds.filter((id) => UUID_REGEX2.test(String(id))) : [];
+  if (validDocIds.length > 0) {
+    await client.query(
+      `INSERT INTO consent_grant_documents (consent_grant_id, document_id, attached_at)
+       SELECT $1, sd.id, NOW()
+       FROM supplier_documents sd
+       WHERE sd.supplier_id = $2
+         AND sd.status != 'deleted'
+         AND (sd.id = ANY($3::uuid[]) OR sd.current_version_id = ANY($3::uuid[]))
+       ON CONFLICT DO NOTHING`,
+      [grantId, supplierId, validDocIds]
+    );
+    return;
+  }
+  const cleanNames = Array.isArray(selectedDocumentNames) ? selectedDocumentNames.map((n) => String(n).trim()).filter(Boolean) : [];
+  if (cleanNames.length > 0) {
+    await client.query(
+      `INSERT INTO consent_grant_documents (consent_grant_id, document_id, attached_at)
+       SELECT $1, sd.id, NOW()
+       FROM supplier_documents sd
+       JOIN document_types dt ON dt.id = sd.document_type_id
+       WHERE sd.supplier_id = $2
+         AND sd.status != 'deleted'
+         AND dt.name = ANY($3::text[])
+       ON CONFLICT DO NOTHING`,
+      [grantId, supplierId, cleanNames]
+    );
+  }
+}
 var ConsentRepository = class {
   async listBySupplier(supplierId) {
+    const hasCol = await hasSelectedDocNamesColumn();
     const res = await query(
-      `SELECT cg.id, cg.supplier_id AS "supplierId", cg.organization_id AS "organizationId",
-              o.name AS "organizationName", cg.share_company_details AS "shareCompanyDetails",
-              cg.share_directors_owners AS "shareDirectorsOwners", cg.share_past_projects AS "sharePastProjects",
-              cg.share_tax_compliance AS "shareTaxCompliance", cg.share_financial_statements AS "shareFinancialStatements",
-              cg.share_key_personnel AS "shareKeyPersonnel", cg.share_past_contracts AS "sharePastContracts",
-              cg.share_banking_details AS "shareBankingDetails", cg.purpose, cg.status,
-              cg.granted_at AS "grantedAt", cg.expires_at AS "expiresAt",
-              cg.revoked_at AS "revokedAt", cg.revocation_reason AS "revocationReason",
-              cg.access_count AS "accessCount"
-       FROM consent_grants cg
-       JOIN organizations o ON o.id = cg.organization_id
+      `${buildGrantSelectSql(hasCol)}
        WHERE cg.supplier_id = $1
        ORDER BY cg.granted_at DESC`,
       [supplierId]
     );
     return res.rows;
   }
-  async grantConsent(data) {
-    await query(
-      `INSERT INTO consent_grants (
-        supplier_id, organization_id, granted_by_user_id, status, purpose,
-        share_company_details, share_directors_owners, share_past_projects,
-        share_tax_compliance, share_financial_statements, share_key_personnel,
-        share_past_contracts, share_banking_details, granted_at
-      ) VALUES (
-        $1, $2, $3, 'active', $4,
-        $5, $6, $7, $8, $9, $10, $11, $12, NOW()
-      )
-      ON CONFLICT DO NOTHING`,
-      [
-        data.supplierId,
-        data.organizationId,
-        data.userId,
-        data.purpose || "Statutory Tender Application Evaluation",
-        data.scopes?.shareCompanyDetails ?? true,
-        data.scopes?.shareDirectorsOwners ?? true,
-        data.scopes?.sharePastProjects ?? true,
-        data.scopes?.shareTaxCompliance ?? true,
-        data.scopes?.shareFinancialStatements ?? false,
-        data.scopes?.shareKeyPersonnel ?? true,
-        data.scopes?.sharePastContracts ?? true,
-        data.scopes?.shareBankingDetails ?? false
-      ]
+  async listAccessLogsBySupplier(supplierId, limit = 50) {
+    if (!UUID_REGEX2.test(supplierId)) return [];
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const res = await query(
+      `SELECT l.id,
+              l.organization_id AS "organizationId",
+              o.name AS "organizationName",
+              l.supplier_id AS "supplierId",
+              l.consent_grant_id AS "consentGrantId",
+              l.accessed_by_user_id AS "accessedByUserId",
+              COALESCE(u.full_name, u.email::text, 'Authorized Officer') AS "accessedByName",
+              l.accessed_data_scope AS "accessedDataScope",
+              host(l.ip_address) AS "ipAddress",
+              l.accessed_at AS "accessedAt"
+       FROM organization_data_access_logs l
+       JOIN organizations o ON o.id = l.organization_id
+       LEFT JOIN users u ON u.id = l.accessed_by_user_id
+       WHERE l.supplier_id = $1
+       ORDER BY l.accessed_at DESC
+       LIMIT $2`,
+      [supplierId, safeLimit]
     );
+    return res.rows;
   }
-  async revokeConsent(grantId, supplierId, userId, reason) {
-    await query(
-      `UPDATE consent_grants
-       SET status = 'revoked',
-           revoked_by_user_id = $3,
-           revoked_at = NOW(),
-           revocation_reason = $4,
-           updated_at = NOW()
-       WHERE id = $1 AND supplier_id = $2`,
-      [grantId, supplierId, userId, reason]
+  /**
+   * Persist an immutable access record in organization_data_access_logs whenever buyer staff
+   * inspect a supplier profile or view/download a supplier document.
+   */
+  async logDataAccess(input) {
+    if (!UUID_REGEX2.test(input.organizationId) || !UUID_REGEX2.test(input.supplierId) || !UUID_REGEX2.test(input.accessedByUserId)) {
+      return;
+    }
+    const scopes = Array.from(
+      new Set((input.accessedDataScope || []).map((s) => String(s).trim()).filter(Boolean))
     );
+    if (!scopes.length) scopes.push("profile_summary");
+    let grantId = input.consentGrantId && UUID_REGEX2.test(input.consentGrantId) ? input.consentGrantId : null;
+    if (!grantId) {
+      const activeGrant = await query(
+        `SELECT id
+         FROM consent_grants
+         WHERE supplier_id = $1
+           AND organization_id = $2
+           AND status = 'active'
+           AND (expires_at IS NULL OR expires_at > NOW())
+         ORDER BY granted_at DESC
+         LIMIT 1`,
+        [input.supplierId, input.organizationId]
+      );
+      grantId = activeGrant.rows[0]?.id || null;
+    }
+    const safeIp = input.ipAddress && /^[0-9a-fA-F:.]{3,45}$/.test(input.ipAddress) ? input.ipAddress : null;
+    const safeUa = input.userAgent ? String(input.userAgent).slice(0, 290) : null;
+    await query(
+      `INSERT INTO organization_data_access_logs (
+         organization_id, supplier_id, consent_grant_id, accessed_by_user_id,
+         accessed_data_scope, ip_address, user_agent, accessed_at
+       ) VALUES ($1, $2, $3, $4, $5::text[], $6::inet, $7, NOW())`,
+      [input.organizationId, input.supplierId, grantId, input.accessedByUserId, scopes, safeIp, safeUa]
+    );
+    if (grantId) {
+      await query(
+        `UPDATE consent_grants
+         SET access_count = COALESCE(access_count, 0) + 1,
+             last_accessed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [grantId]
+      );
+    }
+  }
+  async grantConsent(data) {
+    const hasCol = await hasSelectedDocNamesColumn();
+    return tx(async (client) => {
+      const orgRes = await client.query(
+        `SELECT id, name FROM organizations WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+        [data.organizationId]
+      );
+      if (!orgRes.rows.length) {
+        const err = new Error("Target procuring organization was not found.");
+        err.status = 404;
+        err.code = "ORGANIZATION_NOT_FOUND";
+        throw err;
+      }
+      const existing = await client.query(
+        `SELECT id, status
+         FROM consent_grants
+         WHERE supplier_id = $1 AND organization_id = $2
+         ORDER BY created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [data.supplierId, data.organizationId]
+      );
+      const s = data.scopes || {};
+      const selectedDocs = Array.isArray(data.selectedDocumentNames) ? data.selectedDocumentNames : [];
+      const purpose = data.purpose || "Statutory Tender Application Evaluation";
+      const expiresAt = data.expiresAt || null;
+      let grantId;
+      if (existing.rows.length > 0) {
+        grantId = existing.rows[0].id;
+        await client.query(
+          `UPDATE consent_grants
+           SET status = 'active',
+               granted_by_user_id = $2,
+               granted_at = NOW(),
+               expires_at = $3,
+               purpose = $4,
+               share_company_details = $5,
+               share_directors_owners = $6,
+               share_past_projects = $7,
+               share_tax_compliance = $8,
+               share_financial_statements = $9,
+               share_key_personnel = $10,
+               share_past_contracts = $11,
+               share_banking_details = $12,
+               ${hasCol ? "selected_document_names = $13," : ""}
+               revoked_by_user_id = NULL,
+               revoked_at = NULL,
+               revocation_reason = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          hasCol ? [
+            grantId,
+            data.userId,
+            expiresAt,
+            purpose,
+            s.shareCompanyDetails ?? true,
+            s.shareDirectorsOwners ?? true,
+            s.sharePastProjects ?? true,
+            s.shareTaxCompliance ?? true,
+            s.shareFinancialStatements ?? false,
+            s.shareKeyPersonnel ?? true,
+            s.sharePastContracts ?? true,
+            s.shareBankingDetails ?? false,
+            selectedDocs
+          ] : [
+            grantId,
+            data.userId,
+            expiresAt,
+            purpose,
+            s.shareCompanyDetails ?? true,
+            s.shareDirectorsOwners ?? true,
+            s.sharePastProjects ?? true,
+            s.shareTaxCompliance ?? true,
+            s.shareFinancialStatements ?? false,
+            s.shareKeyPersonnel ?? true,
+            s.sharePastContracts ?? true,
+            s.shareBankingDetails ?? false
+          ]
+        );
+      } else {
+        const ins = await client.query(
+          hasCol ? `INSERT INTO consent_grants (
+                supplier_id, organization_id, granted_by_user_id, status, purpose, expires_at,
+                share_company_details, share_directors_owners, share_past_projects,
+                share_tax_compliance, share_financial_statements, share_key_personnel,
+                share_past_contracts, share_banking_details, selected_document_names, granted_at
+              ) VALUES (
+                $1, $2, $3, 'active', $4, $5,
+                $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
+              ) RETURNING id` : `INSERT INTO consent_grants (
+                supplier_id, organization_id, granted_by_user_id, status, purpose, expires_at,
+                share_company_details, share_directors_owners, share_past_projects,
+                share_tax_compliance, share_financial_statements, share_key_personnel,
+                share_past_contracts, share_banking_details, granted_at
+              ) VALUES (
+                $1, $2, $3, 'active', $4, $5,
+                $6, $7, $8, $9, $10, $11, $12, $13, NOW()
+              ) RETURNING id`,
+          hasCol ? [
+            data.supplierId,
+            data.organizationId,
+            data.userId,
+            purpose,
+            expiresAt,
+            s.shareCompanyDetails ?? true,
+            s.shareDirectorsOwners ?? true,
+            s.sharePastProjects ?? true,
+            s.shareTaxCompliance ?? true,
+            s.shareFinancialStatements ?? false,
+            s.shareKeyPersonnel ?? true,
+            s.sharePastContracts ?? true,
+            s.shareBankingDetails ?? false,
+            selectedDocs
+          ] : [
+            data.supplierId,
+            data.organizationId,
+            data.userId,
+            purpose,
+            expiresAt,
+            s.shareCompanyDetails ?? true,
+            s.shareDirectorsOwners ?? true,
+            s.sharePastProjects ?? true,
+            s.shareTaxCompliance ?? true,
+            s.shareFinancialStatements ?? false,
+            s.shareKeyPersonnel ?? true,
+            s.sharePastContracts ?? true,
+            s.shareBankingDetails ?? false
+          ]
+        );
+        grantId = ins.rows[0].id;
+      }
+      await syncConsentGrantDocuments(
+        client,
+        grantId,
+        data.supplierId,
+        data.selectedDocumentIds,
+        selectedDocs
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName || "Supplier Administrator",
+          actorRole: data.actorRole || "Supplier Admin",
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: data.organizationId,
+          organizationName: orgRes.rows[0].name,
+          action: "Consent Grant Issued",
+          entityType: "ConsentGrant",
+          entityId: grantId,
+          ipAddress: data.ipAddress,
+          details: `Granted scoped data access to ${orgRes.rows[0].name} (Tax: ${s.shareTaxCompliance ?? true}, Directors: ${s.shareDirectorsOwners ?? true}, Financials: ${s.shareFinancialStatements ?? false}, Banking: ${s.shareBankingDetails ?? false}${expiresAt ? `, Expires: ${expiresAt}` : ""}).`
+        },
+        client
+      );
+      const out = await client.query(`${buildGrantSelectSql(hasCol)} WHERE cg.id = $1`, [grantId]);
+      return out.rows[0];
+    });
+  }
+  async updateConsentScope(grantId, supplierId, userId, updates, auditMeta) {
+    const hasCol = await hasSelectedDocNamesColumn();
+    return tx(async (client) => {
+      const existing = await client.query(
+        `SELECT id, organization_id, status
+         FROM consent_grants
+         WHERE id = $1 AND supplier_id = $2
+         FOR UPDATE`,
+        [grantId, supplierId]
+      );
+      if (!existing.rows.length) {
+        const err = new Error("Consent grant record not found.");
+        err.status = 404;
+        err.code = "CONSENT_NOT_FOUND";
+        throw err;
+      }
+      if (existing.rows[0].status !== "active") {
+        const err = new Error("Revoked or expired consent grants cannot be modified. Issue a new grant if re-sharing is required.");
+        err.status = 400;
+        err.code = "CONSENT_NOT_ACTIVE";
+        throw err;
+      }
+      const s = updates.scopes || {};
+      if (hasCol) {
+        await client.query(
+          `UPDATE consent_grants
+           SET share_company_details = COALESCE($3, share_company_details),
+               share_directors_owners = COALESCE($4, share_directors_owners),
+               share_past_projects = COALESCE($5, share_past_projects),
+               share_tax_compliance = COALESCE($6, share_tax_compliance),
+               share_financial_statements = COALESCE($7, share_financial_statements),
+               share_key_personnel = COALESCE($8, share_key_personnel),
+               share_past_contracts = COALESCE($9, share_past_contracts),
+               share_banking_details = COALESCE($10, share_banking_details),
+               selected_document_names = COALESCE($11, selected_document_names),
+               expires_at = CASE WHEN $12::boolean THEN $13::timestamptz ELSE expires_at END,
+               updated_at = NOW()
+           WHERE id = $1 AND supplier_id = $2 AND status = 'active'`,
+          [
+            grantId,
+            supplierId,
+            s.shareCompanyDetails ?? null,
+            s.shareDirectorsOwners ?? null,
+            s.sharePastProjects ?? null,
+            s.shareTaxCompliance ?? null,
+            s.shareFinancialStatements ?? null,
+            s.shareKeyPersonnel ?? null,
+            s.sharePastContracts ?? null,
+            s.shareBankingDetails ?? null,
+            updates.selectedDocumentNames !== void 0 ? updates.selectedDocumentNames : null,
+            updates.expiresAt !== void 0,
+            updates.expiresAt ?? null
+          ]
+        );
+      } else {
+        await client.query(
+          `UPDATE consent_grants
+           SET share_company_details = COALESCE($3, share_company_details),
+               share_directors_owners = COALESCE($4, share_directors_owners),
+               share_past_projects = COALESCE($5, share_past_projects),
+               share_tax_compliance = COALESCE($6, share_tax_compliance),
+               share_financial_statements = COALESCE($7, share_financial_statements),
+               share_key_personnel = COALESCE($8, share_key_personnel),
+               share_past_contracts = COALESCE($9, share_past_contracts),
+               share_banking_details = COALESCE($10, share_banking_details),
+               expires_at = CASE WHEN $11::boolean THEN $12::timestamptz ELSE expires_at END,
+               updated_at = NOW()
+           WHERE id = $1 AND supplier_id = $2 AND status = 'active'`,
+          [
+            grantId,
+            supplierId,
+            s.shareCompanyDetails ?? null,
+            s.shareDirectorsOwners ?? null,
+            s.sharePastProjects ?? null,
+            s.shareTaxCompliance ?? null,
+            s.shareFinancialStatements ?? null,
+            s.shareKeyPersonnel ?? null,
+            s.sharePastContracts ?? null,
+            s.shareBankingDetails ?? null,
+            updates.expiresAt !== void 0,
+            updates.expiresAt ?? null
+          ]
+        );
+      }
+      await syncConsentGrantDocuments(
+        client,
+        grantId,
+        supplierId,
+        updates.selectedDocumentIds,
+        updates.selectedDocumentNames
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: auditMeta?.actorName || "Supplier Administrator",
+          actorRole: auditMeta?.actorRole || "Supplier Admin",
+          actorUserId: userId,
+          supplierId,
+          organizationId: existing.rows[0].organization_id,
+          action: "Consent Scope Updated",
+          entityType: "ConsentGrant",
+          entityId: grantId,
+          ipAddress: auditMeta?.ipAddress,
+          details: `Updated data sharing scope permissions for consent grant ${grantId}.`
+        },
+        client
+      );
+      const out = await client.query(`${buildGrantSelectSql(hasCol)} WHERE cg.id = $1`, [grantId]);
+      return out.rows[0];
+    });
+  }
+  async revokeConsent(grantId, supplierId, userId, reason, auditMeta) {
+    await tx(async (client) => {
+      const check = await client.query(
+        `SELECT id, organization_id, status
+         FROM consent_grants
+         WHERE id = $1 AND supplier_id = $2
+         FOR UPDATE`,
+        [grantId, supplierId]
+      );
+      if (!check.rows.length) {
+        const err = new Error("Consent grant record not found.");
+        err.status = 404;
+        err.code = "CONSENT_NOT_FOUND";
+        throw err;
+      }
+      if (check.rows[0].status === "revoked") {
+        const err = new Error("Consent grant has already been revoked.");
+        err.status = 400;
+        err.code = "CONSENT_ALREADY_REVOKED";
+        throw err;
+      }
+      const cleanReason = (reason || "Revoked by supplier administrator").trim();
+      await client.query(
+        `UPDATE consent_grants
+         SET status = 'revoked',
+             revoked_by_user_id = $3,
+             revoked_at = NOW(),
+             revocation_reason = $4,
+             updated_at = NOW()
+         WHERE id = $1 AND supplier_id = $2`,
+        [grantId, supplierId, userId, cleanReason]
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: auditMeta?.actorName || "Supplier Administrator",
+          actorRole: auditMeta?.actorRole || "Supplier Admin",
+          actorUserId: userId,
+          supplierId,
+          organizationId: check.rows[0].organization_id,
+          action: "Consent Grant Revoked",
+          entityType: "ConsentGrant",
+          entityId: grantId,
+          ipAddress: auditMeta?.ipAddress,
+          details: `Data sharing consent revoked. Reason: ${cleanReason}. Previously submitted tender dossiers remain legally archived for the buyer.`
+        },
+        client
+      );
+    });
   }
 };
 var consentRepository = new ConsentRepository();
 
+// server/repositories/notifications.repository.ts
+var UUID_REGEX3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function execQuery(sql, params, client) {
+  if (client) {
+    const res2 = await client.query(sql, params);
+    return { rows: res2.rows, rowCount: res2.rowCount };
+  }
+  const res = await query(sql, params);
+  return { rows: res.rows, rowCount: res.rowCount };
+}
+function interpolateTemplate(template, vars) {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
+    const val = vars[key];
+    if (val === void 0 || val === null) return "";
+    return String(val);
+  });
+}
+var NotificationsRepository = class {
+  /**
+   * Look up an active notification_templates record (organization override first, then platform default)
+   * and safely interpolate {{variable}} placeholders.
+   */
+  async renderTemplate(code, channel, vars, organizationId, client) {
+    if (!code) return null;
+    const safeOrgId = organizationId && UUID_REGEX3.test(organizationId) ? organizationId : null;
+    try {
+      const res = await execQuery(
+        `SELECT code, subject, body
+         FROM notification_templates
+         WHERE code = $1
+           AND channel = $2
+           AND is_active = TRUE
+           AND (organization_id = $3 OR organization_id IS NULL)
+         ORDER BY (organization_id IS NOT NULL) DESC, created_at DESC
+         LIMIT 1`,
+        [code.slice(0, 100), channel, safeOrgId],
+        client
+      );
+      if (!res.rows.length) return null;
+      const tpl = res.rows[0];
+      return {
+        code: tpl.code,
+        subject: tpl.subject ? interpolateTemplate(tpl.subject, vars).trim() : null,
+        body: interpolateTemplate(tpl.body, vars).trim()
+      };
+    } catch {
+      return null;
+    }
+  }
+  /**
+   * Queue an email delivery row in message_deliveries using notification_templates when available.
+   */
+  async queueEmailDelivery(input, client) {
+    const cleanRecipient = String(input.recipientEmail || "").trim().toLowerCase().slice(0, 255);
+    if (!cleanRecipient || !cleanRecipient.includes("@")) return;
+    const safeUserId = input.userId && UUID_REGEX3.test(input.userId) ? input.userId : null;
+    const safeNotificationId = input.notificationId && UUID_REGEX3.test(input.notificationId) ? input.notificationId : null;
+    const safeCode = String(input.templateCode || "system_notification").slice(0, 100);
+    const rendered = await this.renderTemplate(
+      safeCode,
+      "email",
+      input.vars || {},
+      input.organizationId || null,
+      client
+    );
+    const providerRef = rendered ? `tpl:${rendered.code}` : null;
+    await execQuery(
+      `INSERT INTO message_deliveries (
+         notification_id, user_id, channel, recipient, template_code, status, provider_ref, queued_at
+       ) VALUES ($1, $2, 'email', $3, $4, 'queued', $5, NOW())`,
+      [safeNotificationId, safeUserId, cleanRecipient, safeCode, providerRef],
+      client
+    );
+  }
+  async listForUser(userId, activeTenantType, limit = 50) {
+    if (!UUID_REGEX3.test(userId)) return [];
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const res = await query(
+      `SELECT id,
+              user_id AS "userId",
+              organization_id AS "organizationId",
+              supplier_id AS "supplierId",
+              event_type AS "eventType",
+              title,
+              body,
+              link_url AS "linkUrl",
+              data,
+              priority,
+              read_at AS "readAt",
+              created_at AS "createdAt"
+       FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, safeLimit]
+    );
+    return res.rows.map((r) => ({
+      ...r,
+      recipientRole: r.supplierId && (!r.organizationId || activeTenantType === "supplier") ? "Supplier" : r.organizationId ? "Buyer" : activeTenantType === "organization" ? "Buyer" : "Supplier"
+    }));
+  }
+  async markRead(notificationId, userId) {
+    if (!UUID_REGEX3.test(notificationId) || !UUID_REGEX3.test(userId)) return false;
+    const res = await query(
+      `UPDATE notifications
+       SET read_at = COALESCE(read_at, NOW())
+       WHERE id = $1 AND user_id = $2`,
+      [notificationId, userId]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+  async markAllRead(userId) {
+    if (!UUID_REGEX3.test(userId)) return 0;
+    const res = await query(
+      `UPDATE notifications
+       SET read_at = NOW()
+       WHERE user_id = $1 AND read_at IS NULL`,
+      [userId]
+    );
+    return res.rowCount || 0;
+  }
+  async notifyUsers(input, client) {
+    const uniqueUsers = Array.from(new Set((input.userIds || []).filter((id) => UUID_REGEX3.test(String(id)))));
+    if (!uniqueUsers.length) return;
+    const safeOrgId = input.organizationId && UUID_REGEX3.test(input.organizationId) ? input.organizationId : null;
+    const safeSupId = input.supplierId && UUID_REGEX3.test(input.supplierId) ? input.supplierId : null;
+    const eventCode = input.eventType.slice(0, 100);
+    const priority = input.priority || "info";
+    const templateVars = input.data && typeof input.data === "object" ? input.data : {};
+    const inAppTemplate = Object.keys(templateVars).length > 0 ? await this.renderTemplate(eventCode, "in_app", templateVars, safeOrgId, client) : null;
+    const resolvedTitle = ((inAppTemplate?.subject && !inAppTemplate.subject.includes("{{") ? inAppTemplate.subject : "") || input.title).trim().slice(0, 250);
+    const resolvedBody = ((inAppTemplate?.body && inAppTemplate.body.length > 0 && !inAppTemplate.body.includes("{{") ? inAppTemplate.body : "") || input.body).trim().slice(0, 990);
+    const emailsRes = await execQuery(
+      `SELECT id, email::text AS email FROM users WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+      [uniqueUsers],
+      client
+    );
+    const emailByUser = new Map(emailsRes.rows.map((u) => [u.id, u.email]));
+    for (const userId of uniqueUsers) {
+      const ins = await execQuery(
+        `INSERT INTO notifications (
+          user_id, organization_id, supplier_id, event_type, title, body, link_url, data, priority, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+        RETURNING id`,
+        [
+          userId,
+          safeOrgId,
+          safeSupId,
+          eventCode,
+          resolvedTitle,
+          resolvedBody,
+          input.linkUrl || null,
+          input.data ? JSON.stringify(input.data) : null,
+          priority
+        ],
+        client
+      );
+      const userEmail = emailByUser.get(userId);
+      if (input.queueEmail !== false && userEmail) {
+        await this.queueEmailDelivery(
+          {
+            userId,
+            recipientEmail: userEmail,
+            templateCode: eventCode,
+            vars: { ...templateVars, title: resolvedTitle, body: resolvedBody },
+            organizationId: safeOrgId,
+            notificationId: ins.rows[0]?.id || null
+          },
+          client
+        );
+      }
+    }
+  }
+  async notifySupplierMembers(supplierId, payload, client) {
+    if (!UUID_REGEX3.test(supplierId)) return;
+    const memRes = await execQuery(
+      `SELECT user_id FROM supplier_members WHERE supplier_id = $1 AND status = 'active'`,
+      [supplierId],
+      client
+    );
+    const userIds = memRes.rows.map((r) => r.user_id);
+    if (!userIds.length) return;
+    await this.notifyUsers(
+      {
+        userIds,
+        supplierId,
+        organizationId: payload.organizationId || null,
+        eventType: payload.eventType,
+        title: payload.title,
+        body: payload.body,
+        linkUrl: payload.linkUrl,
+        data: payload.data,
+        priority: payload.priority,
+        queueEmail: payload.queueEmail
+      },
+      client
+    );
+  }
+  async notifyOrganizationMembers(organizationId, payload, client) {
+    if (!UUID_REGEX3.test(organizationId)) return;
+    const memRes = payload.permissionCode ? await execQuery(
+      `SELECT DISTINCT om.user_id
+           FROM organization_members om
+           JOIN role_permissions rp ON rp.role_id = om.role_id
+           JOIN permissions p ON p.id = rp.permission_id
+           WHERE om.organization_id = $1
+             AND om.status = 'active'
+             AND p.code = $2`,
+      [organizationId, payload.permissionCode],
+      client
+    ) : await execQuery(
+      `SELECT user_id FROM organization_members WHERE organization_id = $1 AND status = 'active'`,
+      [organizationId],
+      client
+    );
+    const userIds = memRes.rows.map((r) => r.user_id);
+    if (!userIds.length) return;
+    await this.notifyUsers(
+      {
+        userIds,
+        organizationId,
+        supplierId: payload.supplierId || null,
+        eventType: payload.eventType,
+        title: payload.title,
+        body: payload.body,
+        linkUrl: payload.linkUrl,
+        data: payload.data,
+        priority: payload.priority,
+        queueEmail: payload.queueEmail
+      },
+      client
+    );
+  }
+};
+var notificationsRepository = new NotificationsRepository();
+
 // server/repositories/applications.repository.ts
+var UUID_REGEX4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var ApplicationsRepository = class {
+  async hydrateApplications(rows, includeSupplierBidPrice) {
+    if (!rows.length) return [];
+    const appIds = rows.map((r) => r.id);
+    const callSupplierPairs = rows.map((r) => ({ callId: r.callId, supplierId: r.supplierId }));
+    const [docsRes, timelineRes, infoRes, bidsRes] = await Promise.all([
+      query(
+        `SELECT ad.application_id AS "applicationId",
+                ad.document_type_id AS "documentTypeId",
+                ad.document_version_id AS "documentVersionId",
+                dt.code,
+                dt.name,
+                ad.pinned_version_no AS "versionNo",
+                ad.pinned_sha256 AS "sha256",
+                sdv.storage_key AS "storageKey",
+                COALESCE(ad.document_number_snapshot, sdv.document_number) AS "documentNumber",
+                COALESCE(ad.expiry_date_snapshot, sdv.expiry_date) AS "expiryDate",
+                sdv.verification_status AS "verificationStatus"
+         FROM application_documents ad
+         JOIN document_types dt ON dt.id = ad.document_type_id
+         LEFT JOIN supplier_document_versions sdv ON sdv.id = ad.document_version_id
+         WHERE ad.application_id = ANY($1::uuid[])
+         ORDER BY dt.sort_order ASC, ad.attached_at ASC`,
+        [appIds]
+      ),
+      query(
+        `SELECT application_id AS "applicationId", stage, note, created_at AS "createdAt"
+         FROM application_timeline
+         WHERE application_id = ANY($1::uuid[])
+         ORDER BY created_at ASC`,
+        [appIds]
+      ),
+      query(
+        `SELECT id, application_id AS "applicationId", message, requested_at AS "requestedAt",
+                due_at AS "dueAt", responded_at AS "respondedAt", response_note AS "responseNote"
+         FROM application_info_requests
+         WHERE application_id = ANY($1::uuid[])
+         ORDER BY requested_at DESC`,
+        [appIds]
+      ),
+      query(
+        `SELECT id, call_id AS "callId", supplier_id AS "supplierId", status,
+                receipt_number AS "receiptNumber", payload_sha256 AS "sealedHash",
+                ${includeSupplierBidPrice ? "total_price" : `CASE WHEN status = 'opened' THEN total_price ELSE NULL END`} AS "totalPrice"
+         FROM bids
+         WHERE call_id = ANY($1::uuid[]) AND supplier_id = ANY($2::uuid[])`,
+        [
+          Array.from(new Set(callSupplierPairs.map((p) => p.callId))),
+          Array.from(new Set(callSupplierPairs.map((p) => p.supplierId)))
+        ]
+      )
+    ]);
+    const docsByApp = /* @__PURE__ */ new Map();
+    for (const d of docsRes.rows) {
+      const list = docsByApp.get(d.applicationId) || [];
+      list.push(d);
+      docsByApp.set(d.applicationId, list);
+    }
+    const timelineByApp = /* @__PURE__ */ new Map();
+    for (const t of timelineRes.rows) {
+      const list = timelineByApp.get(t.applicationId) || [];
+      list.push({ stage: t.stage, note: t.note, createdAt: t.createdAt });
+      timelineByApp.set(t.applicationId, list);
+    }
+    const latestInfoByApp = /* @__PURE__ */ new Map();
+    for (const ir of infoRes.rows) {
+      if (!latestInfoByApp.has(ir.applicationId)) {
+        latestInfoByApp.set(ir.applicationId, {
+          id: ir.id,
+          message: ir.message,
+          requestedAt: ir.requestedAt,
+          dueAt: ir.dueAt,
+          respondedAt: ir.respondedAt,
+          responseNote: ir.responseNote
+        });
+      }
+    }
+    const bidByPair = /* @__PURE__ */ new Map();
+    for (const b of bidsRes.rows) {
+      bidByPair.set(`${b.callId}|${b.supplierId}`, {
+        id: b.id,
+        status: b.status,
+        receiptNumber: b.receiptNumber,
+        sealedHash: b.sealedHash,
+        totalAmountBWP: b.totalPrice !== null && b.totalPrice !== void 0 ? Number(b.totalPrice) : null
+      });
+    }
+    return rows.map((row) => ({
+      ...row,
+      documents: docsByApp.get(row.id) || [],
+      timeline: timelineByApp.get(row.id) || [],
+      informationRequest: latestInfoByApp.get(row.id) || null,
+      bid: bidByPair.get(`${row.callId}|${row.supplierId}`) || null
+    }));
+  }
   async getByCallAndSupplier(callId, supplierId) {
     const res = await query(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              c.call_type AS "callType", c.closes_at AS "closesAt",
               a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
               a.organization_id AS "organizationId", o.name AS "organizationName",
-              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+              a.consent_grant_id AS "consentGrantId",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt",
+              a.withdrawn_at AS "withdrawnAt", a.withdrawal_reason AS "withdrawalReason",
+              a.decision_note AS "decisionNote", a.answers
        FROM applications a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
@@ -5659,54 +6570,39 @@ var ApplicationsRepository = class {
       [callId, supplierId]
     );
     if (!res.rows.length) return null;
-    const base = res.rows[0];
-    const [docsRes, timelineRes] = await Promise.all([
-      query(
-        `SELECT ad.document_type_id AS "documentTypeId", dt.code, dt.name,
-                ad.pinned_version_no AS "versionNo", ad.pinned_sha256 AS "sha256",
-                sdv.storage_key AS "storageKey"
-         FROM application_documents ad
-         JOIN document_types dt ON dt.id = ad.document_type_id
-         LEFT JOIN supplier_document_versions sdv ON sdv.id = ad.document_version_id
-         WHERE ad.application_id = $1`,
-        [base.id]
-      ),
-      query(
-        `SELECT stage, note, created_at AS "createdAt"
-         FROM application_timeline
-         WHERE application_id = $1
-         ORDER BY created_at ASC`,
-        [base.id]
-      )
-    ]);
-    return {
-      ...base,
-      documents: docsRes.rows,
-      timeline: timelineRes.rows
-    };
+    const hydrated = await this.hydrateApplications(res.rows, true);
+    return hydrated[0];
   }
   async listByOrganization(orgId) {
     const res = await query(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              c.call_type AS "callType", c.closes_at AS "closesAt",
               a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
               a.organization_id AS "organizationId", o.name AS "organizationName",
-              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+              a.consent_grant_id AS "consentGrantId",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt",
+              a.withdrawn_at AS "withdrawnAt", a.withdrawal_reason AS "withdrawalReason",
+              a.decision_note AS "decisionNote", a.answers
        FROM applications a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
        JOIN organizations o ON o.id = a.organization_id
-       WHERE a.organization_id = $1
+       WHERE a.organization_id = $1 AND a.status <> 'Draft'
        ORDER BY a.submitted_at DESC NULLS LAST, a.created_at DESC`,
       [orgId]
     );
-    return res.rows;
+    return this.hydrateApplications(res.rows, false);
   }
   async listBySupplier(supplierId) {
     const res = await query(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              c.call_type AS "callType", c.closes_at AS "closesAt",
               a.supplier_id AS "supplierId", s.legal_name AS "supplierLegalName", s.cipa_uin AS "cipaUin",
               a.organization_id AS "organizationId", o.name AS "organizationName",
-              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt", a.answers
+              a.consent_grant_id AS "consentGrantId",
+              a.status, a.receipt_number AS "receiptNumber", a.submitted_at AS "submittedAt",
+              a.withdrawn_at AS "withdrawnAt", a.withdrawal_reason AS "withdrawalReason",
+              a.decision_note AS "decisionNote", a.answers
        FROM applications a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
@@ -5715,10 +6611,11 @@ var ApplicationsRepository = class {
        ORDER BY a.submitted_at DESC NULLS LAST, a.created_at DESC`,
       [supplierId]
     );
-    return res.rows;
+    return this.hydrateApplications(res.rows, true);
   }
   /**
    * Submit an application with strict mandatory document verification.
+   * Respects existing finalized states and never reactivates revoked consent grants.
    */
   async submitApplication(data) {
     const callRes = await query(
@@ -5754,7 +6651,7 @@ var ApplicationsRepository = class {
       throw err;
     }
     const supRes = await query(
-      `SELECT status, verification_status FROM suppliers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
+      `SELECT status, verification_status, legal_name FROM suppliers WHERE id = $1 AND deleted_at IS NULL LIMIT 1`,
       [data.supplierId]
     );
     if (!supRes.rows.length) {
@@ -5810,9 +6707,7 @@ var ApplicationsRepository = class {
     );
     let attachedVersions = [];
     if (data.attachedDocumentVersionIds.length > 0) {
-      const validUuids = data.attachedDocumentVersionIds.filter(
-        (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))
-      );
+      const validUuids = data.attachedDocumentVersionIds.filter((id) => UUID_REGEX4.test(String(id)));
       if (validUuids.length > 0) {
         const vRes = await query(
           `SELECT sdv.id, sd.document_type_id, sdv.version_no, sdv.sha256,
@@ -5842,24 +6737,66 @@ var ApplicationsRepository = class {
     }
     const receiptNumber = `APP-${call.reference_no.replace(/[^a-zA-Z0-9]/g, "")}-${Date.now().toString().slice(-6)}`;
     return tx(async (client) => {
+      const existingApp = await client.query(
+        `SELECT id, status FROM applications WHERE call_id = $1 AND supplier_id = $2 FOR UPDATE`,
+        [data.callId, data.supplierId]
+      );
+      if (existingApp.rows.length > 0 && ["Approved", "Rejected"].includes(existingApp.rows[0].status)) {
+        const err = new Error(
+          `This application has already been finalized (${existingApp.rows[0].status}) and cannot be overwritten.`
+        );
+        err.status = 400;
+        err.code = "APPLICATION_FINALIZED";
+        throw err;
+      }
+      const activeGrantRes = await client.query(
+        `SELECT id
+         FROM consent_grants
+         WHERE supplier_id = $1
+           AND organization_id = $2
+           AND status = 'active'
+           AND (expires_at IS NULL OR expires_at > NOW())
+         ORDER BY granted_at DESC
+         LIMIT 1`,
+        [data.supplierId, call.organization_id]
+      );
+      const consentGrantId = activeGrantRes.rows[0]?.id || null;
       const appRes = await client.query(
         `INSERT INTO applications (
-          call_id, supplier_id, organization_id, status, answers, receipt_number,
-          submitted_by_user_id, submitted_at, updated_at
+          call_id, supplier_id, organization_id, consent_grant_id, status, answers, receipt_number,
+          submitted_by_user_id, submitted_at, withdrawn_at, withdrawal_reason, updated_at
         ) VALUES (
-          $1, $2, $3, 'Submitted', $4, $5, $6, NOW(), NOW()
+          $1, $2, $3, $4, 'Submitted', $5, $6, $7, NOW(), NULL, NULL, NOW()
         )
         ON CONFLICT (call_id, supplier_id) DO UPDATE
         SET status = 'Submitted',
+            consent_grant_id = COALESCE(EXCLUDED.consent_grant_id, applications.consent_grant_id),
             answers = EXCLUDED.answers,
             receipt_number = EXCLUDED.receipt_number,
             submitted_by_user_id = EXCLUDED.submitted_by_user_id,
             submitted_at = NOW(),
+            withdrawn_at = NULL,
+            withdrawal_reason = NULL,
             updated_at = NOW()
         RETURNING id`,
-        [data.callId, data.supplierId, call.organization_id, JSON.stringify(data.answers), receiptNumber, data.userId]
+        [
+          data.callId,
+          data.supplierId,
+          call.organization_id,
+          consentGrantId,
+          JSON.stringify(data.answers),
+          receiptNumber,
+          data.userId
+        ]
       );
       const appId = appRes.rows[0].id;
+      if (consentGrantId) {
+        await client.query(
+          `INSERT INTO consent_grant_applications (consent_grant_id, application_id, attached_at)
+           VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING`,
+          [consentGrantId, appId]
+        );
+      }
       await client.query(`DELETE FROM application_documents WHERE application_id = $1`, [appId]);
       for (const v of attachedVersions) {
         await client.query(
@@ -5872,26 +6809,264 @@ var ApplicationsRepository = class {
       }
       await client.query(
         `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
-         VALUES ($1, 'Submitted', 'Formal bid package submitted with statutory checksum receipt.', $2, NOW())`,
+         VALUES ($1, 'Submitted', 'Formal dossier submitted with pinned vault document checksums.', $2, NOW())`,
         [appId, data.userId]
       );
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        supplierId: data.supplierId,
-        organizationId: call.organization_id,
-        action: "Application Submitted",
-        entityType: "Application",
-        entityId: appId,
-        ipAddress: data.ipAddress,
-        details: `Application submitted for call ${call.reference_no} (Receipt: ${receiptNumber}). Attached ${attachedVersions.length} pinned document versions.`
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: call.organization_id,
+          action: "Application Submitted",
+          entityType: "Application",
+          entityId: appId,
+          ipAddress: data.ipAddress,
+          details: `Application submitted for call ${call.reference_no} (Receipt: ${receiptNumber}). Attached ${attachedVersions.length} pinned document versions.`
+        },
+        client
+      );
+      await notificationsRepository.notifyOrganizationMembers(
+        call.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: "application_submitted",
+          title: `New Application Received (${call.reference_no})`,
+          body: `${sup.legal_name} submitted a compliance dossier (Receipt ${receiptNumber}).`,
+          linkUrl: "review-queue",
+          priority: "info",
+          permissionCode: "applications.view",
+          data: { applicationId: appId, callId: data.callId, receiptNumber }
+        },
+        client
+      );
       return { applicationId: appId, receiptNumber };
     });
   }
-  async recordReviewDecision(data) {
+  /**
+   * Withdraw a submitted application prior to closing deadline.
+   */
+  async withdrawApplication(data) {
+    if (!UUID_REGEX4.test(data.applicationIdOrCallId)) {
+      const err = new Error("Invalid application identifier.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const appRes = await client.query(
+        `SELECT a.id, a.call_id, a.organization_id, a.status, c.reference_no, c.title, c.closes_at
+         FROM applications a
+         JOIN calls c ON c.id = a.call_id
+         WHERE (a.id = $1 OR a.call_id = $1) AND a.supplier_id = $2
+         FOR UPDATE OF a`,
+        [data.applicationIdOrCallId, data.supplierId]
+      );
+      if (!appRes.rows.length) {
+        const err = new Error("Application not found.");
+        err.status = 404;
+        err.code = "APPLICATION_NOT_FOUND";
+        throw err;
+      }
+      const app2 = appRes.rows[0];
+      if (!["Submitted", "Under review", "More information requested"].includes(app2.status)) {
+        const err = new Error(`Applications in "${app2.status}" status cannot be withdrawn.`);
+        err.status = 400;
+        err.code = "INVALID_STATE_TRANSITION";
+        throw err;
+      }
+      if (app2.closes_at && /* @__PURE__ */ new Date() > new Date(app2.closes_at)) {
+        const err = new Error("Closing deadline has passed; applications can no longer be withdrawn.");
+        err.status = 400;
+        err.code = "CALL_CLOSED";
+        throw err;
+      }
+      const cleanReason = (data.reason || "Withdrawn by supplier prior to closing deadline").trim();
+      await client.query(
+        `UPDATE applications
+         SET status = 'Withdrawn',
+             withdrawn_at = NOW(),
+             withdrawal_reason = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [app2.id, cleanReason]
+      );
+      await client.query(
+        `UPDATE bids
+         SET status = 'withdrawn', updated_at = NOW()
+         WHERE call_id = $1 AND supplier_id = $2 AND status IN ('draft', 'submitted')`,
+        [app2.call_id, data.supplierId]
+      );
+      await client.query(
+        `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
+         VALUES ($1, 'Withdrawn', $2, $3, NOW())`,
+        [app2.id, cleanReason, data.userId]
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: app2.organization_id,
+          action: "Application Withdrawn",
+          entityType: "Application",
+          entityId: app2.id,
+          ipAddress: data.ipAddress,
+          details: `Supplier withdrew application for ${app2.reference_no}. Reason: ${cleanReason}`
+        },
+        client
+      );
+      await notificationsRepository.notifyOrganizationMembers(
+        app2.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: "application_withdrawn",
+          title: `Application Withdrawn (${app2.reference_no})`,
+          body: `A supplier withdrew their application for ${app2.title} prior to closing.`,
+          linkUrl: "review-queue",
+          priority: "warning",
+          permissionCode: "applications.view",
+          data: { applicationId: app2.id, callId: app2.call_id }
+        },
+        client
+      );
+      return { applicationId: app2.id, callId: app2.call_id, withdrawnAt: (/* @__PURE__ */ new Date()).toISOString() };
+    });
+  }
+  /**
+   * Supplier response to an open "More information requested" review cycle.
+   */
+  async respondToInfoRequest(data) {
+    const cleanMsg = String(data.responseMessage || "").trim();
+    if (!cleanMsg) {
+      const err = new Error("Response message is required.");
+      err.status = 400;
+      throw err;
+    }
     await tx(async (client) => {
+      const appRes = await client.query(
+        `SELECT a.id, a.call_id, a.organization_id, a.status, c.reference_no
+         FROM applications a
+         JOIN calls c ON c.id = a.call_id
+         WHERE a.id = $1 AND a.supplier_id = $2
+         FOR UPDATE OF a`,
+        [data.applicationId, data.supplierId]
+      );
+      if (!appRes.rows.length) {
+        const err = new Error("Application not found.");
+        err.status = 404;
+        throw err;
+      }
+      const app2 = appRes.rows[0];
+      if (app2.status !== "More information requested") {
+        const err = new Error("This application is not currently awaiting additional information.");
+        err.status = 400;
+        err.code = "INVALID_STATE_TRANSITION";
+        throw err;
+      }
+      await client.query(
+        `UPDATE application_info_requests
+         SET responded_at = NOW(),
+             response_note = $2,
+             responded_by_user_id = $3
+         WHERE id = (
+           SELECT id FROM application_info_requests
+           WHERE application_id = $1 AND responded_at IS NULL
+           ORDER BY requested_at DESC
+           LIMIT 1
+         )`,
+        [app2.id, cleanMsg.slice(0, 1990), data.userId]
+      );
+      await client.query(
+        `INSERT INTO application_reviewer_messages (application_id, sender_user_id, sender_name, sender_role, message, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [app2.id, data.userId, data.actorName, data.actorRole, cleanMsg]
+      );
+      await client.query(
+        `UPDATE applications SET status = 'Under review', updated_at = NOW() WHERE id = $1`,
+        [app2.id]
+      );
+      await client.query(
+        `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
+         VALUES ($1, 'Under review', $2, $3, NOW())`,
+        [app2.id, `Supplier submitted clarification: ${cleanMsg.slice(0, 450)}`, data.userId]
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: app2.organization_id,
+          action: "Application Information Submitted",
+          entityType: "Application",
+          entityId: app2.id,
+          ipAddress: data.ipAddress,
+          details: `Supplier responded to information request on ${app2.reference_no} and returned dossier to Under review.`
+        },
+        client
+      );
+      await notificationsRepository.notifyOrganizationMembers(
+        app2.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: "application_info_responded",
+          title: `Clarification Submitted (${app2.reference_no})`,
+          body: `${data.actorName} responded to the additional information request.`,
+          linkUrl: "review-queue",
+          priority: "info",
+          permissionCode: "applications.review",
+          data: { applicationId: app2.id, callId: app2.call_id }
+        },
+        client
+      );
+    });
+  }
+  /**
+   * Record buyer application review decision enforcing valid state machine,
+   * review trail rows, info requests, approved supplier roster sync, audit & notification.
+   */
+  async recordReviewDecision(data) {
+    const allowedDecisions = ["Under review", "Approved", "Rejected", "More information requested"];
+    if (!allowedDecisions.includes(data.decision)) {
+      const err = new Error("Unsupported review decision.");
+      err.status = 400;
+      throw err;
+    }
+    const cleanComment = (data.comment || "").trim();
+    if (data.decision === "More information requested" && !cleanComment) {
+      const err = new Error("Please specify what additional information is requested from the supplier.");
+      err.status = 400;
+      throw err;
+    }
+    if (data.decision === "Rejected" && !cleanComment) {
+      const err = new Error("Please provide a statutory reason when rejecting an application.");
+      err.status = 400;
+      throw err;
+    }
+    await tx(async (client) => {
+      const appRes = await client.query(
+        `SELECT a.id, a.call_id, a.supplier_id, a.status, c.reference_no, c.title
+         FROM applications a
+         JOIN calls c ON c.id = a.call_id
+         WHERE a.id = $1 AND a.organization_id = $2
+         FOR UPDATE OF a`,
+        [data.applicationId, data.orgId]
+      );
+      if (!appRes.rows.length) {
+        const err = new Error("Application not found for your organization.");
+        err.status = 404;
+        err.code = "APPLICATION_NOT_FOUND";
+        throw err;
+      }
+      const app2 = appRes.rows[0];
+      if (["Draft", "Withdrawn", "Approved", "Rejected"].includes(app2.status)) {
+        const err = new Error(`Cannot record review decision: application is in "${app2.status}" state.`);
+        err.status = 400;
+        err.code = "INVALID_STATE_TRANSITION";
+        throw err;
+      }
       await client.query(
         `UPDATE applications
          SET status = $2,
@@ -5900,24 +7075,65 @@ var ApplicationsRepository = class {
              decision_note = $4,
              updated_at = NOW()
          WHERE id = $1 AND organization_id = $5`,
-        [data.applicationId, data.decision, data.userId, data.comment || null, data.orgId]
+        [data.applicationId, data.decision, data.userId, cleanComment || null, data.orgId]
       );
+      const reviewDecisionEnum = data.decision === "Approved" ? "approved" : data.decision === "Rejected" ? "rejected" : data.decision === "More information requested" ? "info_requested" : "comment";
+      await client.query(
+        `INSERT INTO application_reviews (application_id, reviewer_user_id, decision, comment, decided_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [data.applicationId, data.userId, reviewDecisionEnum, cleanComment || `Status transitioned to ${data.decision}`]
+      );
+      if (data.decision === "More information requested") {
+        await client.query(
+          `INSERT INTO application_info_requests (application_id, requested_by_user_id, message, requested_at)
+           VALUES ($1, $2, $3, NOW())`,
+          [data.applicationId, data.userId, cleanComment.slice(0, 1990)]
+        );
+      }
+      if (data.decision === "Approved") {
+        await client.query(
+          `INSERT INTO approved_suppliers (organization_id, supplier_id, source_application_id, status, valid_from, approved_at, last_reviewed_at)
+           VALUES ($1, $2, $3, 'active', CURRENT_DATE, NOW(), NOW())
+           ON CONFLICT (organization_id, supplier_id) DO UPDATE
+           SET status = 'active',
+               source_application_id = EXCLUDED.source_application_id,
+               last_reviewed_at = NOW()`,
+          [data.orgId, app2.supplier_id, data.applicationId]
+        );
+      }
       await client.query(
         `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
          VALUES ($1, $2, $3, $4, NOW())`,
-        [data.applicationId, data.decision, data.comment || `Review decision recorded: ${data.decision}`, data.userId]
+        [data.applicationId, data.decision, cleanComment || `Review decision recorded: ${data.decision}`, data.userId]
       );
-      await auditRepository.logEvent({
-        actorName: data.reviewerName,
-        actorRole: data.reviewerRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: `Application ${data.decision}`,
-        entityType: "Application",
-        entityId: data.applicationId,
-        ipAddress: data.ipAddress,
-        details: `Official review decision recorded: ${data.decision}. Note: ${data.comment || "None"}`
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.reviewerName,
+          actorRole: data.reviewerRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          supplierId: app2.supplier_id,
+          action: `Application ${data.decision}`,
+          entityType: "Application",
+          entityId: data.applicationId,
+          ipAddress: data.ipAddress,
+          details: `Official review decision recorded for ${app2.reference_no}: ${data.decision}. Note: ${cleanComment || "None"}`
+        },
+        client
+      );
+      await notificationsRepository.notifySupplierMembers(
+        app2.supplier_id,
+        {
+          organizationId: data.orgId,
+          eventType: "application_status_changed",
+          title: `Application Update: ${data.decision} (${app2.reference_no})`,
+          body: cleanComment ? `${app2.title}: ${cleanComment}` : `Your application for ${app2.title} has moved to "${data.decision}".`,
+          linkUrl: "applications",
+          priority: data.decision === "More information requested" ? "urgent" : data.decision === "Approved" ? "success" : "warning",
+          data: { applicationId: data.applicationId, callId: app2.call_id, status: data.decision }
+        },
+        client
+      );
     });
   }
 };
@@ -5925,6 +7141,18 @@ var applicationsRepository = new ApplicationsRepository();
 
 // server/repositories/bids.repository.ts
 import crypto6 from "crypto";
+var UUID_REGEX5 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function hasWitnessSummaryColumn() {
+  const res = await query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'bid_opening_sessions'
+         AND column_name = 'witness_summary'
+     ) AS exists`
+  ).catch(() => ({ rows: [{ exists: false }] }));
+  return Boolean(res.rows[0]?.exists);
+}
 var BidsRepository = class {
   async getByCallAndSupplier(callId, supplierId) {
     const res = await query(
@@ -5975,9 +7203,69 @@ var BidsRepository = class {
     );
     return res.rows;
   }
+  async getOpeningSession(callId, orgId) {
+    const hasSummary = await hasWitnessSummaryColumn();
+    const res = await query(
+      `SELECT bos.id, bos.call_id AS "callId", bos.opened_at AS "openedAt",
+              bos.conducted_by_user_id AS "conductedByUserId",
+              u.full_name AS "conductedByName",
+              bos.session_status AS "sessionStatus",
+              bos.protocol_type AS "protocolType",
+              bos.quorum_verified AS "quorumVerified",
+              bos.register_sha256 AS "registerSha256",
+              bos.notes,
+              ${hasSummary ? "bos.witness_summary" : "NULL::jsonb"} AS "witnessSummary"
+       FROM bid_opening_sessions bos
+       JOIN calls c ON c.id = bos.call_id
+       JOIN users u ON u.id = bos.conducted_by_user_id
+       WHERE bos.call_id = $1 AND c.organization_id = $2
+       ORDER BY bos.opened_at DESC
+       LIMIT 1`,
+      [callId, orgId]
+    );
+    if (!res.rows.length) return null;
+    const row = res.rows[0];
+    const witRes = await query(
+      `SELECT bow.user_id AS "userId", u.full_name AS name, bow.witness_role AS "witnessRole",
+              bow.signed_at AS "signedAt", bow.digital_signature_hash AS "signatureHash"
+       FROM bid_opening_witnesses bow
+       JOIN users u ON u.id = bow.user_id
+       WHERE bow.session_id = $1
+       ORDER BY bow.signed_at ASC NULLS LAST`,
+      [row.id]
+    );
+    let witnesses = witRes.rows;
+    if (Array.isArray(row.witnessSummary) && row.witnessSummary.length > 0) {
+      const seenUserIds = new Set(witnesses.map((w) => w.userId).filter(Boolean));
+      for (const extra of row.witnessSummary) {
+        if (extra && (!extra.userId || !seenUserIds.has(extra.userId))) {
+          witnesses.push({
+            userId: extra.userId || null,
+            name: extra.name || "Co-Witness",
+            witnessRole: extra.witnessRole || "External Witness",
+            signedAt: extra.signedAt || row.openedAt,
+            signatureHash: extra.signatureHash || null
+          });
+        }
+      }
+    }
+    return {
+      id: row.id,
+      callId: row.callId,
+      openedAt: row.openedAt,
+      conductedByUserId: row.conductedByUserId,
+      conductedByName: row.conductedByName,
+      sessionStatus: row.sessionStatus,
+      protocolType: row.protocolType,
+      quorumVerified: row.quorumVerified,
+      registerSha256: row.registerSha256,
+      notes: row.notes,
+      witnesses
+    };
+  }
   /**
    * Seals and submits a bid envelope.
-   * Server validates closing deadline and computes cryptographic SHA-256 seal.
+   * Server validates closing deadline, existing lock state, and computes cryptographic SHA-256 seal.
    */
   async sealAndSubmitBid(data) {
     const callRes = await query(
@@ -6082,6 +7370,16 @@ var BidsRepository = class {
     const sealedHash = crypto6.createHash("sha256").update(payloadStr).digest("hex");
     const receiptNumber = `BID-${call.reference_no.replace(/[^a-zA-Z0-9]/g, "")}-${Date.now().toString().slice(-6)}`;
     return tx(async (client) => {
+      const existingBid = await client.query(
+        `SELECT id, status FROM bids WHERE call_id = $1 AND supplier_id = $2 FOR UPDATE`,
+        [data.callId, data.supplierId]
+      );
+      if (existingBid.rows.length > 0 && ["opened", "disqualified"].includes(existingBid.rows[0].status)) {
+        const err = new Error("This bid envelope has already been opened or disqualified and cannot be modified.");
+        err.status = 400;
+        err.code = "BID_LOCKED";
+        throw err;
+      }
       const bidRes = await client.query(
         `INSERT INTO bids (
           call_id, supplier_id, status, receipt_number, sealed_payload_key,
@@ -6122,55 +7420,289 @@ var BidsRepository = class {
          VALUES ($1, $2, $3, $4, NOW())`,
         [bidId, receiptNumber, sealedHash, JSON.stringify([{ role: "financial_schedule", sha256: sealedHash }])]
       );
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        supplierId: data.supplierId,
-        organizationId: call.organization_id,
-        action: "Bid Sealed & Submitted",
-        entityType: "Bid",
-        entityId: bidId,
-        ipAddress: data.ipAddress,
-        details: `Sealed electronic bid envelope submitted for ${call.reference_no} (Receipt: ${receiptNumber}, SHA-256: ${sealedHash}).`
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: call.organization_id,
+          action: "Bid Sealed & Submitted",
+          entityType: "Bid",
+          entityId: bidId,
+          ipAddress: data.ipAddress,
+          details: `Sealed electronic bid envelope submitted for ${call.reference_no} (Receipt: ${receiptNumber}, SHA-256: ${sealedHash}).`
+        },
+        client
+      );
+      await notificationsRepository.notifyOrganizationMembers(
+        call.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: "bid_submitted",
+          title: `Sealed Bid Envelope Received (${call.reference_no})`,
+          body: `${sup.legal_name} sealed a tender bid envelope (Receipt ${receiptNumber}). Commercial pricing remains encrypted until official opening.`,
+          linkUrl: "bids-opening",
+          priority: "info",
+          permissionCode: "bids.view",
+          data: { callId: data.callId, bidId, receiptNumber }
+        },
+        client
+      );
       return { bidId, receiptNumber, sealedHash };
     });
   }
   /**
-   * Conducts bid opening session. Trigger blocks unsealing if closing deadline has not passed.
+   * Pre-closing withdrawal of a submitted sealed bid (also withdraws linked active application).
    */
-  async conductOpeningSession(data) {
-    const callRes = await query(
-      `SELECT id, reference_no, closes_at FROM calls WHERE id = $1 AND organization_id = $2`,
-      [data.callId, data.orgId]
-    );
-    if (!callRes.rows.length) throw new Error("Tender call not found for your organization.");
-    const call = callRes.rows[0];
-    if (!call.closes_at || /* @__PURE__ */ new Date() < new Date(call.closes_at)) {
-      throw new Error("Bids cannot be opened before the closing time. The statutory sealing protocol remains active.");
-    }
+  async withdrawBid(data) {
     return tx(async (client) => {
-      const sessionRes = await client.query(
-        `INSERT INTO bid_opening_sessions (
-          call_id, conducted_by_user_id, session_status, protocol_type, quorum_verified, opened_at
-        ) VALUES ($1, $2, 'completed', 'dual_key_statutory_quorum', TRUE, NOW())
-        RETURNING id`,
-        [data.callId, data.userId]
-      );
-      const sessionId = sessionRes.rows[0].id;
-      for (const w of data.witnesses) {
-        const sigHash = crypto6.createHash("sha256").update(`${sessionId}|${w.userId}|${Date.now()}`).digest("hex");
-        await client.query(
-          `INSERT INTO bid_opening_witnesses (session_id, user_id, witness_role, digital_signature_hash, signed_at)
-           VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT DO NOTHING`,
-          [sessionId, w.userId, w.witnessRole, sigHash]
-        );
-      }
-      const bidsRes = await client.query(
-        `SELECT id FROM bids WHERE call_id = $1 AND status = 'submitted'`,
+      const callRes = await client.query(
+        `SELECT id, organization_id, reference_no, closes_at FROM calls WHERE id = $1 FOR UPDATE`,
         [data.callId]
       );
+      if (!callRes.rows.length) {
+        const err = new Error("Tender call does not exist.");
+        err.status = 404;
+        err.code = "CALL_NOT_FOUND";
+        throw err;
+      }
+      const call = callRes.rows[0];
+      if (call.closes_at && /* @__PURE__ */ new Date() > new Date(call.closes_at)) {
+        const err = new Error("The tender closing deadline has passed; sealed bids can no longer be withdrawn.");
+        err.status = 400;
+        err.code = "CALL_CLOSED";
+        throw err;
+      }
+      const bidRes = await client.query(
+        `SELECT id, status, receipt_number FROM bids WHERE call_id = $1 AND supplier_id = $2 FOR UPDATE`,
+        [data.callId, data.supplierId]
+      );
+      if (!bidRes.rows.length) {
+        const err = new Error("No submitted bid was found for this tender call.");
+        err.status = 404;
+        err.code = "BID_NOT_FOUND";
+        throw err;
+      }
+      const bid = bidRes.rows[0];
+      if (["opened", "disqualified"].includes(bid.status)) {
+        const err = new Error("Already opened or disqualified bids cannot be withdrawn.");
+        err.status = 400;
+        err.code = "BID_LOCKED";
+        throw err;
+      }
+      if (bid.status === "withdrawn") {
+        const err = new Error("This bid has already been withdrawn.");
+        err.status = 400;
+        err.code = "BID_ALREADY_WITHDRAWN";
+        throw err;
+      }
+      const cleanReason = (data.reason || "Withdrawn by supplier prior to tender closing deadline").trim();
+      await client.query(`UPDATE bids SET status = 'withdrawn', updated_at = NOW() WHERE id = $1`, [bid.id]);
+      const appSync = await client.query(
+        `UPDATE applications
+         SET status = 'Withdrawn',
+             withdrawn_at = NOW(),
+             withdrawal_reason = $3,
+             updated_at = NOW()
+         WHERE call_id = $1
+           AND supplier_id = $2
+           AND status IN ('Submitted', 'Under review', 'More information requested')
+         RETURNING id`,
+        [data.callId, data.supplierId, cleanReason]
+      );
+      if (appSync.rows.length > 0) {
+        await client.query(
+          `INSERT INTO application_timeline (application_id, stage, note, created_by_user_id, created_at)
+           VALUES ($1, 'Withdrawn', $2, $3, NOW())`,
+          [appSync.rows[0].id, cleanReason, data.userId]
+        );
+      }
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: call.organization_id,
+          action: "Bid Withdrawn",
+          entityType: "Bid",
+          entityId: bid.id,
+          ipAddress: data.ipAddress,
+          details: `Withdrew sealed bid ${bid.receipt_number || bid.id} for ${call.reference_no} prior to closing. Reason: ${cleanReason}`
+        },
+        client
+      );
+      await notificationsRepository.notifyOrganizationMembers(
+        call.organization_id,
+        {
+          supplierId: data.supplierId,
+          eventType: "bid_withdrawn",
+          title: `Bid Withdrawn (${call.reference_no})`,
+          body: `A supplier withdrew sealed bid ${bid.receipt_number || ""} prior to the tender closing deadline.`,
+          linkUrl: "bids-opening",
+          priority: "warning",
+          permissionCode: "bids.view",
+          data: { callId: data.callId, bidId: bid.id }
+        },
+        client
+      );
+      return { bidId: bid.id, withdrawnAt: (/* @__PURE__ */ new Date()).toISOString() };
+    });
+  }
+  /**
+   * Conducts controlled bid opening session with strict closing deadline, duplicate-session,
+   * submitted-bid existence, >=2 witness quorum, register SHA-256, and atomic audit/notifications.
+   */
+  async conductOpeningSession(data) {
+    const hasSummary = await hasWitnessSummaryColumn();
+    return tx(async (client) => {
+      const callRes = await client.query(
+        `SELECT id, reference_no, title, closes_at FROM calls WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [data.callId, data.orgId]
+      );
+      if (!callRes.rows.length) {
+        const err = new Error("Tender call not found for your organization.");
+        err.status = 404;
+        err.code = "CALL_NOT_FOUND";
+        throw err;
+      }
+      const call = callRes.rows[0];
+      if (!call.closes_at || /* @__PURE__ */ new Date() < new Date(call.closes_at)) {
+        const err = new Error("Bids cannot be opened before the closing time. The statutory sealing protocol remains active.");
+        err.status = 400;
+        err.code = "BEFORE_CLOSING_DEADLINE";
+        throw err;
+      }
+      const existingSession = await client.query(
+        `SELECT id FROM bid_opening_sessions WHERE call_id = $1 AND session_status = 'completed' LIMIT 1`,
+        [data.callId]
+      );
+      if (existingSession.rows.length > 0) {
+        const err = new Error("An official bid opening session has already been completed for this tender call.");
+        err.status = 409;
+        err.code = "ALREADY_OPENED";
+        throw err;
+      }
+      const bidsRes = await client.query(
+        `SELECT b.id, b.supplier_id, s.legal_name AS supplier_name, b.receipt_number, b.payload_sha256
+         FROM bids b
+         JOIN suppliers s ON s.id = b.supplier_id
+         WHERE b.call_id = $1 AND b.status = 'submitted'
+         ORDER BY b.submitted_at ASC
+         FOR UPDATE OF b`,
+        [data.callId]
+      );
+      if (!bidsRes.rows.length) {
+        const err = new Error("Cannot conduct an opening ceremony: there are no submitted sealed bids awaiting unsealing.");
+        err.status = 400;
+        err.code = "NO_SUBMITTED_BIDS";
+        throw err;
+      }
+      const membersRes = await client.query(
+        `SELECT om.user_id AS "userId", u.full_name AS "fullName", u.email, r.name AS "roleName"
+         FROM organization_members om
+         JOIN users u ON u.id = om.user_id AND u.deleted_at IS NULL
+         JOIN roles r ON r.id = om.role_id
+         WHERE om.organization_id = $1 AND om.status = 'active'`,
+        [data.orgId]
+      );
+      const memberMap = new Map(membersRes.rows.map((m) => [m.userId, m]));
+      const orgWitnesses = /* @__PURE__ */ new Map();
+      const presidingMember = memberMap.get(data.userId);
+      if (presidingMember) {
+        orgWitnesses.set(data.userId, {
+          userId: data.userId,
+          name: presidingMember.fullName,
+          witnessRole: "Presiding Officer"
+        });
+      }
+      const externalWitnesses = [];
+      const suppliedList = Array.isArray(data.witnesses) ? data.witnesses : [];
+      for (const w of suppliedList) {
+        if (!w) continue;
+        if (w.userId) {
+          if (!UUID_REGEX5.test(w.userId)) {
+            const err = new Error("Invalid witness user identifier provided.");
+            err.status = 400;
+            err.code = "INVALID_WITNESS";
+            throw err;
+          }
+          const member = memberMap.get(w.userId);
+          if (!member) {
+            const err = new Error("Selected witness is not an active member of your procuring organization.");
+            err.status = 400;
+            err.code = "INVALID_WITNESS";
+            throw err;
+          }
+          orgWitnesses.set(member.userId, {
+            userId: member.userId,
+            name: member.fullName,
+            witnessRole: (w.witnessRole || member.roleName || "Witness").trim().slice(0, 50)
+          });
+        } else if (w.name && w.name.trim().length >= 2) {
+          externalWitnesses.push({
+            userId: null,
+            name: w.name.trim().slice(0, 150),
+            witnessRole: (w.witnessRole || "External Co-Witness").trim().slice(0, 50)
+          });
+        }
+      }
+      if (membersRes.rows.length >= 2 && orgWitnesses.size < 2) {
+        const err = new Error(
+          "Quorum not met: Statutory bid opening requires at least 2 distinct organization officers/witnesses to co-sign."
+        );
+        err.status = 400;
+        err.code = "QUORUM_NOT_MET";
+        throw err;
+      }
+      const totalWitnessCount = orgWitnesses.size + (presidingMember ? 0 : 1) + externalWitnesses.length;
+      if (totalWitnessCount < 2) {
+        const err = new Error(
+          "Quorum not met: At least 2 witnesses (a presiding officer plus a co-witness or external witness) must be recorded."
+        );
+        err.status = 400;
+        err.code = "QUORUM_NOT_MET";
+        throw err;
+      }
+      const openedAtIso = (/* @__PURE__ */ new Date()).toISOString();
+      const witnessRoster = [
+        ...Array.from(orgWitnesses.values()).map((w) => ({
+          userId: w.userId,
+          name: w.name,
+          witnessRole: w.witnessRole,
+          signedAt: openedAtIso,
+          signatureHash: crypto6.createHash("sha256").update(`${data.callId}|${w.userId}|${openedAtIso}`).digest("hex")
+        })),
+        ...externalWitnesses.map((w) => ({
+          userId: null,
+          name: w.name,
+          witnessRole: w.witnessRole,
+          signedAt: openedAtIso,
+          signatureHash: crypto6.createHash("sha256").update(`${data.callId}|${w.name}|${openedAtIso}`).digest("hex")
+        }))
+      ];
+      const summaryNote = `Presiding: ${data.actorName}. Witnesses: ${witnessRoster.map((w) => `${w.name} (${w.witnessRole})`).join("; ")}.`;
+      const sessionRes = await client.query(
+        hasSummary ? `INSERT INTO bid_opening_sessions (
+              call_id, conducted_by_user_id, session_status, protocol_type, quorum_verified, notes, witness_summary, opened_at
+            ) VALUES ($1, $2, 'completed', 'dual_key_statutory_quorum', TRUE, $3, $4::jsonb, $5::timestamptz)
+            RETURNING id` : `INSERT INTO bid_opening_sessions (
+              call_id, conducted_by_user_id, session_status, protocol_type, quorum_verified, notes, opened_at
+            ) VALUES ($1, $2, 'completed', 'dual_key_statutory_quorum', TRUE, $3, $4::timestamptz)
+            RETURNING id`,
+        hasSummary ? [data.callId, data.userId, summaryNote, JSON.stringify(witnessRoster), openedAtIso] : [data.callId, data.userId, summaryNote, openedAtIso]
+      );
+      const sessionId = sessionRes.rows[0].id;
+      for (const w of witnessRoster) {
+        if (!w.userId) continue;
+        await client.query(
+          `INSERT INTO bid_opening_witnesses (session_id, user_id, witness_role, digital_signature_hash, ip_address, signed_at)
+           VALUES ($1, $2, $3, $4, $5, $6::timestamptz) ON CONFLICT DO NOTHING`,
+          [sessionId, w.userId, w.witnessRole, w.signatureHash, data.ipAddress || null, openedAtIso]
+        );
+      }
+      const openedBidsSummary = [];
       for (const b of bidsRes.rows) {
         const sumRes = await client.query(
           `SELECT COALESCE(SUM(quantity * unit_price), 0) AS sum FROM bid_price_items WHERE bid_id = $1`,
@@ -6182,30 +7714,875 @@ var BidsRepository = class {
            SET status = 'opened',
                total_price = $2,
                opened_in_session_id = $3,
-               opened_at = NOW(),
+               opened_at = $5::timestamptz,
                unsealed_by_user_id = $4,
                updated_at = NOW()
            WHERE id = $1`,
-          [b.id, totalPrice, sessionId, data.userId]
+          [b.id, totalPrice, sessionId, data.userId, openedAtIso]
+        );
+        openedBidsSummary.push({
+          bidId: b.id,
+          supplierId: b.supplier_id,
+          supplierName: b.supplier_name,
+          receiptNumber: b.receipt_number,
+          payloadSha256: b.payload_sha256,
+          totalPrice
+        });
+      }
+      const registerSha256 = crypto6.createHash("sha256").update(
+        JSON.stringify({
+          sessionId,
+          callId: data.callId,
+          referenceNo: call.reference_no,
+          openedAt: openedAtIso,
+          witnesses: witnessRoster.map((w) => ({ userId: w.userId, name: w.name, role: w.witnessRole })),
+          bids: openedBidsSummary
+        })
+      ).digest("hex");
+      await client.query(
+        `UPDATE bid_opening_sessions SET register_sha256 = $2 WHERE id = $1`,
+        [sessionId, registerSha256]
+      );
+      await client.query(`UPDATE calls SET status = 'evaluating', updated_at = NOW() WHERE id = $1`, [data.callId]);
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          action: "Bids Unsealed in Opening Session",
+          entityType: "Call",
+          entityId: data.callId,
+          ipAddress: data.ipAddress,
+          afterJson: { sessionId, registerSha256, witnessCount: witnessRoster.length, openedBidsCount: bidsRes.rows.length },
+          details: `Official opening session conducted for ${call.reference_no}. Unsealed ${bidsRes.rows.length} bids with ${witnessRoster.length} witnesses (Register SHA-256: ${registerSha256.slice(0, 16)}...).`
+        },
+        client
+      );
+      for (const ob of openedBidsSummary) {
+        await notificationsRepository.notifySupplierMembers(
+          ob.supplierId,
+          {
+            organizationId: data.orgId,
+            eventType: "bid_opened",
+            title: `Tender Envelope Unsealed (${call.reference_no})`,
+            body: `Your sealed bid (${ob.receiptNumber || ob.bidId}) for ${call.title} was officially unsealed during the witnessed opening ceremony.`,
+            linkUrl: "applications",
+            priority: "info",
+            data: { callId: data.callId, sessionId, registerSha256 }
+          },
+          client
         );
       }
-      await client.query(`UPDATE calls SET status = 'evaluating', updated_at = NOW() WHERE id = $1`, [data.callId]);
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: "Bids Unsealed in Opening Session",
-        entityType: "Call",
-        entityId: data.callId,
-        ipAddress: data.ipAddress,
-        details: `Official opening session conducted for ${call.reference_no}. Unsealed ${bidsRes.rows.length} bids with verified witness quorum.`
-      });
-      return { sessionId, openedBidsCount: bidsRes.rows.length };
+      return {
+        sessionId,
+        openedBidsCount: bidsRes.rows.length,
+        registerSha256,
+        witnesses: witnessRoster
+      };
     });
   }
 };
 var bidsRepository = new BidsRepository();
+
+// server/repositories/calls.repository.ts
+var UUID_REGEX6 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var CallsRepository = class {
+  /**
+   * Reads open tenders/EOIs respecting call visibility rules:
+   * - 'open' & 'category_restricted': publicly discoverable
+   * - 'invite_only': visible only if the supplier has a row in call_invitations
+   * - 'approved_suppliers': visible only if the supplier is active in approved_suppliers for that org
+   */
+  async listOpen(filters) {
+    const validSupplierId = filters?.supplierId && UUID_REGEX6.test(filters.supplierId) ? filters.supplierId : null;
+    const params = [validSupplierId];
+    let sql = `
+      SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
+             c.summary, c.description, c.status, c.visibility,
+             c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
+             c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
+             o.id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
+             COALESCE(o.brand_primary_color, '#1F5F99') AS "orgBrandPrimaryColor",
+             COALESCE(o.brand_subtext, '') AS "orgBrandSubtext",
+             COALESCE(o.custom_domain, '') AS "orgCustomDomain",
+             COALESCE(o.settings->>'welcomeNotice', '') AS "orgWelcomeNotice",
+             CASE WHEN c.closes_at IS NOT NULL THEN EXTRACT(DAY FROM (c.closes_at - NOW())) ELSE NULL END AS "daysRemaining",
+             COALESCE(
+               (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
+                FROM call_categories cc
+                JOIN categories cat ON cat.id = cc.category_id
+                WHERE cc.call_id = c.id),
+               '[]'::json
+             ) AS categories
+      FROM calls c
+      JOIN organizations o ON o.id = c.organization_id
+      WHERE c.status IN ('open', 'published')
+        AND o.status = 'active'
+        AND o.deleted_at IS NULL
+        AND (
+          c.visibility IN ('open', 'category_restricted')
+          OR (
+            $1::uuid IS NOT NULL
+            AND (
+              (c.visibility = 'invite_only' AND EXISTS (
+                SELECT 1 FROM call_invitations ci WHERE ci.call_id = c.id AND ci.supplier_id = $1::uuid
+              ))
+              OR (c.visibility = 'approved_suppliers' AND EXISTS (
+                SELECT 1 FROM approved_suppliers ap
+                WHERE ap.supplier_id = $1::uuid AND ap.organization_id = c.organization_id AND ap.status = 'active'
+              ))
+            )
+          )
+        )
+    `;
+    if (filters?.callType && filters.callType !== "all") {
+      params.push(filters.callType);
+      sql += ` AND c.call_type = $${params.length}`;
+    }
+    if (filters?.query) {
+      params.push(`%${filters.query}%`);
+      sql += ` AND (c.title ILIKE $${params.length} OR c.reference_no ILIKE $${params.length} OR c.summary ILIKE $${params.length})`;
+    }
+    sql += ` ORDER BY c.closes_at ASC NULLS LAST, c.created_at DESC`;
+    const res = await query(sql, params);
+    return res.rows;
+  }
+  async getById(callId, access) {
+    const callRes = await query(
+      `SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
+              c.summary, c.description, c.status, c.visibility,
+              c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
+              c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
+              o.id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
+              COALESCE(o.brand_primary_color, '#1F5F99') AS "orgBrandPrimaryColor",
+              COALESCE(o.brand_subtext, '') AS "orgBrandSubtext",
+              COALESCE(o.custom_domain, '') AS "orgCustomDomain",
+              COALESCE(o.settings->>'welcomeNotice', '') AS "orgWelcomeNotice",
+              CASE WHEN c.closes_at IS NOT NULL THEN EXTRACT(DAY FROM (c.closes_at - NOW())) ELSE NULL END AS "daysRemaining",
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
+                 FROM call_categories cc
+                 JOIN categories cat ON cat.id = cc.category_id
+                 WHERE cc.call_id = c.id),
+                '[]'::json
+              ) AS categories
+       FROM calls c
+       JOIN organizations o ON o.id = c.organization_id
+       WHERE c.id = $1`,
+      [callId]
+    );
+    if (!callRes.rows.length) return null;
+    const base = callRes.rows[0];
+    const isOwnerOrg = Boolean(access?.organizationId && access.organizationId === base.organizationId);
+    const validSupplierId = access?.supplierId && UUID_REGEX6.test(access.supplierId) ? access.supplierId : null;
+    if (!access?.isPlatformAdmin && !isOwnerOrg && base.visibility === "invite_only") {
+      if (!validSupplierId) return null;
+      const invRes = await query(
+        `SELECT TRUE AS ok FROM call_invitations WHERE call_id = $1 AND supplier_id = $2 LIMIT 1`,
+        [callId, validSupplierId]
+      );
+      if (!invRes.rows.length) return null;
+    }
+    if (!access?.isPlatformAdmin && !isOwnerOrg && base.visibility === "approved_suppliers") {
+      if (!validSupplierId) return null;
+      const apRes = await query(
+        `SELECT TRUE AS ok FROM approved_suppliers WHERE supplier_id = $1 AND organization_id = $2 AND status = 'active' LIMIT 1`,
+        [validSupplierId, base.organizationId]
+      );
+      if (!apRes.rows.length) return null;
+    }
+    const [docsRes, priceRes, addendaRes, clarCountRes] = await Promise.all([
+      query(
+        `SELECT crd.document_type_id AS "documentTypeId", dt.code, dt.name, crd.is_mandatory AS "isMandatory"
+         FROM call_required_documents crd
+         JOIN document_types dt ON dt.id = crd.document_type_id
+         WHERE crd.call_id = $1`,
+        [callId]
+      ),
+      query(
+        `SELECT id, line_no AS "lineNo", description, unit, quantity
+         FROM call_price_items
+         WHERE call_id = $1
+         ORDER BY line_no ASC`,
+        [callId]
+      ),
+      query(
+        `SELECT ca.id, ca.addendum_no AS "addendumNo", ca.title, ca.body,
+                ca.published_at AS "publishedAt", ca.new_closes_at AS "newClosesAt",
+                (SELECT COUNT(*)::int FROM call_addendum_acknowledgements caa WHERE caa.addendum_id = ca.id) AS "acknowledgementsCount",
+                CASE WHEN $2::uuid IS NOT NULL
+                  THEN EXISTS (SELECT 1 FROM call_addendum_acknowledgements caa WHERE caa.addendum_id = ca.id AND caa.supplier_id = $2::uuid)
+                  ELSE FALSE
+                END AS acknowledged
+         FROM call_addenda ca
+         WHERE ca.call_id = $1
+         ORDER BY ca.addendum_no ASC`,
+        [callId, validSupplierId]
+      ),
+      query(
+        `SELECT count(*) FROM clarifications WHERE call_id = $1 AND is_published = TRUE`,
+        [callId]
+      )
+    ]);
+    return {
+      ...base,
+      requiredDocuments: docsRes.rows,
+      priceItems: priceRes.rows,
+      addenda: addendaRes.rows,
+      clarificationsCount: parseInt(clarCountRes.rows[0]?.count || "0", 10)
+    };
+  }
+  async listClarifications(callId, supplierId) {
+    const validSupplierId = supplierId && UUID_REGEX6.test(supplierId) ? supplierId : null;
+    const res = await query(
+      `SELECT id, call_id AS "callId",
+              COALESCE(published_question, question) AS question,
+              published_question AS "publishedQuestion",
+              answer, responder_title AS "responderTitle", topic, status,
+              asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished",
+              (asked_by_supplier_id = $2::uuid) AS "isOwnQuestion"
+       FROM clarifications
+       WHERE call_id = $1
+         AND (is_published = TRUE OR ($2::uuid IS NOT NULL AND asked_by_supplier_id = $2::uuid))
+       ORDER BY asked_at DESC`,
+      [callId, validSupplierId]
+    );
+    return res.rows;
+  }
+  async listClarificationsByOrganization(orgId) {
+    const res = await query(
+      `SELECT cl.id, cl.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
+              cl.asked_by_supplier_id AS "supplierId",
+              COALESCE(s.legal_name, cl.supplier_name_snapshot, 'Prospective Bidder') AS "supplierName",
+              cl.question, cl.published_question AS "publishedQuestion",
+              cl.answer, cl.responder_title AS "responderTitle",
+              cl.topic, cl.status, cl.is_published AS "isPublished",
+              cl.asked_at AS "askedAt", cl.answered_at AS "answeredAt"
+       FROM clarifications cl
+       JOIN calls c ON c.id = cl.call_id
+       LEFT JOIN suppliers s ON s.id = cl.asked_by_supplier_id
+       WHERE c.organization_id = $1
+       ORDER BY cl.asked_at DESC`,
+      [orgId]
+    );
+    return res.rows;
+  }
+  async askClarification(data) {
+    if (!data.question || !data.question.trim()) {
+      const err = new Error("Clarification question text is required.");
+      err.status = 400;
+      throw err;
+    }
+    const call = await this.getById(data.callId, { supplierId: data.supplierId });
+    if (!call) {
+      const err = new Error("Call does not exist or is restricted to invited/approved suppliers.");
+      err.status = 404;
+      throw err;
+    }
+    if (!["open", "published"].includes(String(call.status || "").toLowerCase())) {
+      const err = new Error("Clarifications can only be submitted on open tender calls.");
+      err.status = 400;
+      throw err;
+    }
+    if (call.clarificationDeadline && /* @__PURE__ */ new Date() > new Date(call.clarificationDeadline)) {
+      const err = new Error("The clarification window for this tender has closed. Questions can no longer be submitted.");
+      err.status = 400;
+      throw err;
+    }
+    const supRes = await query(
+      `SELECT legal_name FROM suppliers WHERE id = $1 LIMIT 1`,
+      [data.supplierId]
+    );
+    const supplierSnapshot = supRes.rows[0]?.legal_name || null;
+    const res = await query(
+      `INSERT INTO clarifications (
+        call_id, asked_by_supplier_id, asked_by_user_id, supplier_name_snapshot, question, topic, is_published, status, asked_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, FALSE, 'Pending', NOW()
+      ) RETURNING id, call_id AS "callId", question, published_question AS "publishedQuestion",
+                  answer, responder_title AS "responderTitle", topic, status,
+                  asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished"`,
+      [data.callId, data.supplierId, data.userId, supplierSnapshot, data.question.trim(), data.topic || "General"]
+    );
+    await notificationsRepository.notifyOrganizationMembers(
+      call.organizationId,
+      {
+        supplierId: data.supplierId,
+        eventType: "clarification_asked",
+        title: `New Clarification Question (${call.referenceNo})`,
+        body: `${supplierSnapshot || "A prospective supplier"} submitted a clarification question under "${data.topic || "General"}".`,
+        linkUrl: "clarifications",
+        priority: "info",
+        permissionCode: "calls.manage",
+        data: { callId: data.callId, clarificationId: res.rows[0].id }
+      }
+    ).catch((e) => console.warn("[clarification notify warning]", e?.message || e));
+    return res.rows[0];
+  }
+  async answerClarification(clarificationId, answer, responderTitle, userId, orgId, actor) {
+    const cleanAnswer = answer ? String(answer).trim() : "";
+    if (!cleanAnswer) {
+      const err = new Error("Official clarification response cannot be empty.");
+      err.status = 400;
+      throw err;
+    }
+    await tx(async (client) => {
+      const res = await client.query(
+        `UPDATE clarifications cl
+         SET answer = $2,
+             responder_title = $3,
+             answered_by_user_id = $4,
+             answered_at = NOW(),
+             status = 'Answered',
+             is_published = TRUE,
+             published_question = COALESCE(cl.published_question, cl.question)
+         FROM calls c
+         WHERE cl.id = $1
+           AND cl.call_id = c.id
+           AND c.organization_id = $5
+         RETURNING cl.id, cl.call_id, cl.asked_by_supplier_id, c.reference_no, c.title`,
+        [clarificationId, cleanAnswer, responderTitle, userId, orgId]
+      );
+      if (res.rowCount === 0) {
+        const err = new Error("Clarification question not found for your organization.");
+        err.status = 404;
+        throw err;
+      }
+      const row = res.rows[0];
+      await auditRepository.logEvent(
+        {
+          actorName: actor?.actorName || responderTitle || "Procurement Officer",
+          actorRole: actor?.actorRole || "Buyer",
+          actorUserId: userId,
+          organizationId: orgId,
+          action: "Clarification Answer Published",
+          entityType: "Clarification",
+          entityId: row.id,
+          ipAddress: actor?.ipAddress,
+          details: `Published official clarification response for ${row.reference_no} (${row.title}).`
+        },
+        client
+      );
+      const supRes = await client.query(
+        `SELECT $2::uuid AS supplier_id
+         UNION
+         SELECT supplier_id FROM applications WHERE call_id = $1 AND status <> 'Draft'
+         UNION
+         SELECT supplier_id FROM call_invitations WHERE call_id = $1`,
+        [row.call_id, row.asked_by_supplier_id]
+      );
+      for (const s of supRes.rows) {
+        if (!s.supplier_id) continue;
+        await notificationsRepository.notifySupplierMembers(
+          s.supplier_id,
+          {
+            organizationId: orgId,
+            eventType: "clarification_answered",
+            title: `Clarification Published (${row.reference_no})`,
+            body: `An official clarification Q&A response has been published for ${row.title}.`,
+            linkUrl: "directory",
+            priority: "info",
+            data: { callId: row.call_id, clarificationId: row.id }
+          },
+          client
+        );
+      }
+    });
+  }
+  async listByOrganization(orgId) {
+    const res = await query(
+      `SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
+              c.summary, c.description, c.status, c.visibility,
+              c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
+              c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
+              c.sealed_bid_protocol_enforced AS "isSealed",
+              c.organization_id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
+              (SELECT count(*)::int FROM applications a WHERE a.call_id = c.id AND a.status <> 'Draft') AS "applicationsCount",
+              (SELECT count(*)::int FROM call_invitations ci WHERE ci.call_id = c.id) AS "invitationsCount",
+              COALESCE(
+                (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
+                 FROM call_categories cc
+                 JOIN categories cat ON cat.id = cc.category_id
+                 WHERE cc.call_id = c.id),
+                '[]'::json
+              ) AS categories,
+              COALESCE(
+                (SELECT json_agg(json_build_object('code', dt.code, 'name', dt.name))
+                 FROM call_required_documents crd
+                 JOIN document_types dt ON dt.id = crd.document_type_id
+                 WHERE crd.call_id = c.id),
+                '[]'::json
+              ) AS "requiredDocuments",
+              COALESCE(
+                (SELECT json_agg(json_build_object(
+                   'id', ca.id,
+                   'addendumNo', ca.addendum_no,
+                   'title', ca.title,
+                   'body', ca.body,
+                   'publishedAt', ca.published_at,
+                   'newClosesAt', ca.new_closes_at,
+                   'acknowledgementsCount', (SELECT count(*)::int FROM call_addendum_acknowledgements caa WHERE caa.addendum_id = ca.id)
+                 ) ORDER BY ca.addendum_no ASC)
+                 FROM call_addenda ca
+                 WHERE ca.call_id = c.id),
+                '[]'::json
+              ) AS addenda,
+              COALESCE(o.brand_primary_color, '#1F5F99') AS "orgBrandPrimaryColor",
+              COALESCE(o.brand_subtext, '') AS "orgBrandSubtext",
+              COALESCE(o.custom_domain, '') AS "orgCustomDomain",
+              COALESCE(o.settings->>'welcomeNotice', '') AS "orgWelcomeNotice"
+       FROM calls c
+       JOIN organizations o ON o.id = c.organization_id
+       WHERE c.organization_id = $1
+       ORDER BY c.created_at DESC`,
+      [orgId]
+    );
+    return res.rows;
+  }
+  /**
+   * Create a new Call / Tender with strict statutory criteria weighting validation (must sum to 100%).
+   */
+  async createCall(data) {
+    if (data.criteria && data.criteria.length > 0) {
+      const scored = data.criteria.filter((c) => c.criterionType === "scored" || c.criterionType === "price");
+      if (scored.length > 0) {
+        const totalWeight = scored.reduce((sum, c) => sum + Number(c.weight || 0), 0);
+        if (Math.abs(totalWeight - 100) > 0.01) {
+          throw new Error(`Criteria weight validation failed: Scored criteria weights must sum to exactly 100% (currently ${totalWeight}%).`);
+        }
+      }
+    }
+    const allowedStatuses = ["draft", "open"];
+    const resolvedStatus = allowedStatuses.includes(String(data.status || "").toLowerCase()) ? String(data.status).toLowerCase() : "open";
+    const allowedVisibilities = ["open", "approved_suppliers", "category_restricted", "invite_only"];
+    const resolvedVisibility = allowedVisibilities.includes(String(data.visibility || "").toLowerCase()) ? String(data.visibility).toLowerCase() : "open";
+    const isSealed = data.isSealed !== void 0 ? Boolean(data.isSealed) : true;
+    return tx(async (client) => {
+      const orgCheck = await client.query(
+        `SELECT status, verification_status, rejection_reason FROM organizations WHERE id = $1 AND deleted_at IS NULL`,
+        [data.organizationId]
+      );
+      const orgRow = orgCheck.rows[0];
+      if (!orgRow) {
+        const err = new Error("Procuring organization record not found.");
+        err.status = 403;
+        err.code = "ORGANIZATION_NOT_FOUND";
+        throw err;
+      }
+      if (orgRow.status === "pending" || orgRow.verification_status === "pending_review" || orgRow.verification_status === "pending") {
+        const err = new Error("Your organization is pending verification and approval. You cannot publish tender calls yet.");
+        err.status = 403;
+        err.code = "ORGANIZATION_PENDING_APPROVAL";
+        throw err;
+      }
+      if (orgRow.status !== "active" || orgRow.verification_status === "rejected") {
+        const code = orgRow.verification_status === "rejected" ? "ORGANIZATION_REJECTED" : "ORGANIZATION_SUSPENDED";
+        const err = new Error(
+          orgRow.rejection_reason ? `Your organization is currently ${orgRow.status} (${orgRow.rejection_reason}) and cannot publish tender calls.` : `Your organization is currently ${orgRow.status} and cannot publish tender calls.`
+        );
+        err.status = 403;
+        err.code = code;
+        throw err;
+      }
+      const callRes = await client.query(
+        `INSERT INTO calls (
+          organization_id, reference_no, title, call_type, summary, description,
+          status, visibility, sealed_bid_protocol_enforced,
+          opens_at, closes_at, clarification_deadline,
+          estimated_value, currency, created_by_user_id,
+          published_by_user_id, published_at, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9,
+          $10, $11, $12,
+          $13, $14, $15,
+          CASE WHEN $7 = 'open' THEN $15 ELSE NULL END,
+          CASE WHEN $7 = 'open' THEN NOW() ELSE NULL END,
+          NOW(), NOW()
+        ) RETURNING id`,
+        [
+          data.organizationId,
+          data.referenceNo.trim(),
+          data.title.trim(),
+          data.callType,
+          (data.summary || "").trim(),
+          (data.description || data.summary || "").trim(),
+          resolvedStatus,
+          resolvedVisibility,
+          isSealed,
+          data.opensAt,
+          data.closesAt,
+          data.clarificationDeadline || null,
+          data.estimatedValue || null,
+          data.currency || "BWP",
+          data.userId
+        ]
+      );
+      const callId = callRes.rows[0].id;
+      if (Array.isArray(data.categoryIds) && data.categoryIds.length > 0) {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        let idx = 0;
+        for (const catId of data.categoryIds) {
+          if (!uuidRegex.test(String(catId))) continue;
+          await client.query(
+            `INSERT INTO call_categories (call_id, category_id, is_primary)
+             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+            [callId, catId, idx === 0]
+          );
+          idx++;
+        }
+      }
+      if (data.requiredDocTypeCodes && data.requiredDocTypeCodes.length) {
+        for (const code of data.requiredDocTypeCodes) {
+          const docType = await client.query(
+            `SELECT id FROM document_types WHERE code = $1 OR LOWER(name) = LOWER($1) LIMIT 1`,
+            [code]
+          );
+          if (docType.rows.length) {
+            await client.query(
+              `INSERT INTO call_required_documents (call_id, document_type_id, is_mandatory)
+               VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING`,
+              [callId, docType.rows[0].id]
+            );
+          }
+        }
+      }
+      if (data.criteria && data.criteria.length) {
+        for (let i = 0; i < data.criteria.length; i++) {
+          const crit = data.criteria[i];
+          await client.query(
+            `INSERT INTO evaluation_criteria (
+              call_id, name, criterion_type, weight, max_score, is_mandatory_gate, sort_order
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [
+              callId,
+              crit.name,
+              crit.criterionType,
+              crit.weight || 0,
+              crit.maxScore || 100,
+              crit.isMandatoryGate || false,
+              i + 1
+            ]
+          );
+        }
+      }
+      if (data.priceItems && data.priceItems.length) {
+        for (let i = 0; i < data.priceItems.length; i++) {
+          const pi = data.priceItems[i];
+          await client.query(
+            `INSERT INTO call_price_items (call_id, line_no, description, unit, quantity)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [callId, i + 1, pi.description, pi.unit, pi.quantity]
+          );
+        }
+      }
+      return callId;
+    });
+  }
+  async updateCall(callId, orgId, userId, data) {
+    const sets = [];
+    const params = [callId, orgId];
+    if (data.status !== void 0) {
+      const allowed = ["draft", "open", "closed", "evaluating", "awarded", "cancelled"];
+      const cleanStatus = String(data.status).toLowerCase();
+      if (!allowed.includes(cleanStatus)) {
+        const err = new Error("Invalid call status.");
+        err.status = 400;
+        throw err;
+      }
+      params.push(cleanStatus);
+      sets.push(`status = $${params.length}`);
+      if (cleanStatus === "open") {
+        params.push(userId);
+        sets.push(`published_by_user_id = COALESCE(published_by_user_id, $${params.length})`);
+        sets.push(`published_at = COALESCE(published_at, NOW())`);
+      }
+    }
+    if (data.visibility !== void 0) {
+      const allowedVis = ["open", "approved_suppliers", "category_restricted", "invite_only"];
+      const cleanVis = String(data.visibility).toLowerCase();
+      if (!allowedVis.includes(cleanVis)) {
+        const err = new Error("Invalid call visibility.");
+        err.status = 400;
+        throw err;
+      }
+      params.push(cleanVis);
+      sets.push(`visibility = $${params.length}`);
+    }
+    if (data.closesAt !== void 0) {
+      params.push(data.closesAt);
+      sets.push(`closes_at = $${params.length}`);
+    }
+    if (data.clarificationDeadline !== void 0) {
+      params.push(data.clarificationDeadline || null);
+      sets.push(`clarification_deadline = $${params.length}`);
+    }
+    if (!sets.length) return;
+    sets.push(`updated_at = NOW()`);
+    const res = await query(
+      `UPDATE calls SET ${sets.join(", ")} WHERE id = $1 AND organization_id = $2`,
+      params
+    );
+    if (res.rowCount === 0) {
+      const err = new Error("Call not found for your organization.");
+      err.status = 404;
+      throw err;
+    }
+  }
+  async createAddendum(callId, orgId, userId, data, actor) {
+    const cleanBody = (data.body ?? data.summary ?? "").trim();
+    if (!data.title?.trim() || !cleanBody) {
+      const err = new Error("Addendum title and details are required.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const check = await client.query(
+        `SELECT id, reference_no, title FROM calls WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [callId, orgId]
+      );
+      if (!check.rows.length) {
+        const err = new Error("Tender call not found for your organization.");
+        err.status = 404;
+        throw err;
+      }
+      const callRow = check.rows[0];
+      const maxRes = await client.query(
+        `SELECT COALESCE(MAX(addendum_no), 0) + 1 AS next_no FROM call_addenda WHERE call_id = $1`,
+        [callId]
+      );
+      const addendumNo = maxRes.rows[0].next_no;
+      const ins = await client.query(
+        `INSERT INTO call_addenda (
+          call_id, addendum_no, title, body, new_closes_at, published_by_user_id, published_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, NOW()
+        ) RETURNING id, call_id AS "callId", addendum_no AS "addendumNo", title, body, new_closes_at AS "newClosesAt", published_at AS "publishedAt"`,
+        [callId, addendumNo, data.title.trim(), cleanBody, data.newClosesAt || null, userId]
+      );
+      const addendum = ins.rows[0];
+      if (data.newClosesAt) {
+        await client.query(
+          `UPDATE calls SET closes_at = $2, updated_at = NOW() WHERE id = $1 AND organization_id = $3`,
+          [callId, data.newClosesAt, orgId]
+        );
+      }
+      await auditRepository.logEvent(
+        {
+          actorName: actor?.actorName || "Procurement Officer",
+          actorRole: actor?.actorRole || "Buyer",
+          actorUserId: userId,
+          organizationId: orgId,
+          action: "Call Addendum Issued",
+          entityType: "CallAddendum",
+          entityId: addendum.id,
+          ipAddress: actor?.ipAddress,
+          afterJson: { callId, addendumNo, newClosesAt: data.newClosesAt || null },
+          details: `Issued Addendum #${addendumNo} ("${data.title.trim()}") for ${callRow.reference_no}${data.newClosesAt ? ` \u2014 closing extended to ${data.newClosesAt}` : ""}.`
+        },
+        client
+      );
+      const targetSuppliers = await client.query(
+        `SELECT supplier_id FROM applications WHERE call_id = $1 AND status <> 'Draft'
+         UNION
+         SELECT supplier_id FROM bids WHERE call_id = $1 AND status <> 'withdrawn'
+         UNION
+         SELECT supplier_id FROM call_invitations WHERE call_id = $1`,
+        [callId]
+      );
+      for (const sup of targetSuppliers.rows) {
+        await notificationsRepository.notifySupplierMembers(
+          sup.supplier_id,
+          {
+            organizationId: orgId,
+            eventType: "addendum_published",
+            title: `Addendum #${addendumNo} Issued (${callRow.reference_no})`,
+            body: `${data.title.trim()}: please review and formally acknowledge Addendum #${addendumNo} on ${callRow.title}.`,
+            linkUrl: "directory",
+            priority: "urgent",
+            data: { callId, addendumId: addendum.id, addendumNo }
+          },
+          client
+        );
+      }
+      return { ...addendum, acknowledgementsCount: 0 };
+    });
+  }
+  async acknowledgeAddendum(data) {
+    if (!UUID_REGEX6.test(data.callId) || !UUID_REGEX6.test(data.addendumId)) {
+      const err = new Error("Invalid call or addendum identifier.");
+      err.status = 400;
+      throw err;
+    }
+    const accessibleCall = await this.getById(data.callId, { supplierId: data.supplierId });
+    if (!accessibleCall) {
+      const err = new Error("Tender call not found or not accessible to your supplier account.");
+      err.status = 404;
+      throw err;
+    }
+    return tx(async (client) => {
+      const addRes = await client.query(
+        `SELECT id, addendum_no, title FROM call_addenda WHERE id = $1 AND call_id = $2 LIMIT 1`,
+        [data.addendumId, data.callId]
+      );
+      if (!addRes.rows.length) {
+        const err = new Error("Addendum not found for this tender call.");
+        err.status = 404;
+        throw err;
+      }
+      const addendum = addRes.rows[0];
+      await client.query(
+        `INSERT INTO call_addendum_acknowledgements (addendum_id, supplier_id, acknowledged_by_user_id, acknowledged_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (addendum_id, supplier_id) DO NOTHING`,
+        [data.addendumId, data.supplierId, data.userId]
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          supplierId: data.supplierId,
+          organizationId: accessibleCall.organizationId,
+          action: "Addendum Acknowledged",
+          entityType: "CallAddendum",
+          entityId: data.addendumId,
+          ipAddress: data.ipAddress,
+          details: `Supplier acknowledged Addendum #${addendum.addendum_no} ("${addendum.title}") on ${accessibleCall.referenceNo}.`
+        },
+        client
+      );
+      return { addendumId: data.addendumId, acknowledgedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    });
+  }
+  async listInvitations(callId, orgId) {
+    const ownCheck = await query(`SELECT id FROM calls WHERE id = $1 AND organization_id = $2 LIMIT 1`, [callId, orgId]);
+    if (!ownCheck.rows.length) {
+      const err = new Error("Tender call not found for your organization.");
+      err.status = 404;
+      throw err;
+    }
+    const res = await query(
+      `SELECT ci.call_id AS "callId",
+              ci.supplier_id AS "supplierId",
+              s.legal_name AS "supplierLegalName",
+              s.cipa_uin AS "cipaNumber",
+              s.email,
+              s.compliance_status AS "complianceStatus",
+              u.full_name AS "invitedByName",
+              ci.invited_at AS "invitedAt"
+       FROM call_invitations ci
+       JOIN suppliers s ON s.id = ci.supplier_id
+       JOIN users u ON u.id = ci.invited_by_user_id
+       WHERE ci.call_id = $1
+       ORDER BY ci.invited_at DESC`,
+      [callId]
+    );
+    return res.rows;
+  }
+  async inviteSuppliers(data) {
+    const cleanIds = Array.from(new Set((data.supplierIds || []).filter((id) => UUID_REGEX6.test(String(id)))));
+    if (!cleanIds.length) {
+      const err = new Error("Select at least one valid supplier to invite.");
+      err.status = 400;
+      throw err;
+    }
+    await tx(async (client) => {
+      const callRes = await client.query(
+        `SELECT c.id, c.reference_no, c.title, o.name AS org_name
+         FROM calls c
+         JOIN organizations o ON o.id = c.organization_id
+         WHERE c.id = $1 AND c.organization_id = $2
+         LIMIT 1`,
+        [data.callId, data.orgId]
+      );
+      if (!callRes.rows.length) {
+        const err = new Error("Tender call not found for your organization.");
+        err.status = 404;
+        throw err;
+      }
+      const call = callRes.rows[0];
+      const supRes = await client.query(
+        `SELECT id, legal_name, email FROM suppliers WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+        [cleanIds]
+      );
+      for (const sup of supRes.rows) {
+        const ins = await client.query(
+          `INSERT INTO call_invitations (call_id, supplier_id, invited_by_user_id, invited_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (call_id, supplier_id) DO NOTHING
+           RETURNING supplier_id`,
+          [data.callId, sup.id, data.userId]
+        );
+        if ((ins.rowCount || 0) > 0) {
+          await notificationsRepository.notifySupplierMembers(
+            sup.id,
+            {
+              organizationId: data.orgId,
+              eventType: "call_invitation",
+              title: `Tender Invitation: ${call.reference_no}`,
+              body: `${call.org_name} has formally invited your company to participate in "${call.title}".`,
+              linkUrl: "directory",
+              priority: "urgent",
+              data: { callId: data.callId, referenceNo: call.reference_no }
+            },
+            client
+          );
+          if (sup.email) {
+            await client.query(
+              `INSERT INTO message_deliveries (channel, recipient, template_code, status, queued_at, sent_at)
+               VALUES ('email', $1, 'call_invitation', 'sent', NOW(), NOW())`,
+              [sup.email]
+            );
+          }
+        }
+      }
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          action: "Suppliers Invited to Tender",
+          entityType: "Call",
+          entityId: data.callId,
+          ipAddress: data.ipAddress,
+          afterJson: { invitedSupplierIds: supRes.rows.map((s) => s.id) },
+          details: `Issued formal tender invitations on ${call.reference_no} to ${supRes.rows.map((s) => s.legal_name).join(", ")}.`
+        },
+        client
+      );
+    });
+    const invitations = await this.listInvitations(data.callId, data.orgId);
+    return { invitedCount: cleanIds.length, invitations };
+  }
+  async listSupplierInvitations(supplierId) {
+    if (!UUID_REGEX6.test(supplierId)) return [];
+    const res = await query(
+      `SELECT ci.call_id AS "callId",
+              c.reference_no AS "referenceNo",
+              c.title,
+              c.call_type AS "callType",
+              c.status,
+              c.visibility,
+              c.closes_at AS "closesAt",
+              o.id AS "organizationId",
+              o.name AS "organizationName",
+              u.full_name AS "invitedByName",
+              ci.invited_at AS "invitedAt"
+       FROM call_invitations ci
+       JOIN calls c ON c.id = ci.call_id
+       JOIN organizations o ON o.id = c.organization_id
+       JOIN users u ON u.id = ci.invited_by_user_id
+       WHERE ci.supplier_id = $1 AND o.status = 'active' AND o.deleted_at IS NULL
+       ORDER BY ci.invited_at DESC`,
+      [supplierId]
+    );
+    return res.rows;
+  }
+};
+var callsRepository = new CallsRepository();
 
 // server/routes/supplier.routes.ts
 var upload = multer({
@@ -6346,44 +8723,14 @@ async function getSupplierIdForUser(client, userId, activeTenantId) {
   );
   return res.rows[0]?.supplier_id || null;
 }
-function writeAuditLogSafely(req, action, entityId, t0) {
-  (async () => {
-    try {
-      const actorName = req.user?.fullName || req.user?.email || "Supplier Administrator";
-      const actorRole = req.activeTenant?.roleName || (req.user?.isPlatformAdmin ? "Super Admin" : "Supplier");
-      const supplierId = req.activeTenant?.tenantId || null;
-      await auditRepository.logEvent({
-        actorName,
-        actorRole,
-        supplierId,
-        action,
-        entityType: "supplier_person",
-        entityId,
-        details: `Removed person record ${entityId}`
-      });
-      console.log("[remove-director] audit done", Math.round(performance.now() - t0));
-      if (supplierId) {
-        await suppliersRepository.calculateCompleteness(supplierId).catch(() => {
-        });
-      }
-    } catch (e) {
-      console.warn("[remove-director] audit log warning:", e.message);
-    }
-  })();
-}
 router3.delete("/people/:id", async (req, res) => {
-  const t0 = performance.now();
-  console.log("[remove-director] route entered", Math.round(performance.now() - t0));
   if (!req.user || !req.session) {
     return res.status(401).json({ error: "unauthorized", message: "You must be signed in." });
   }
-  console.log("[remove-director] session verified", Math.round(performance.now() - t0));
   let client;
   try {
     client = await getClient();
-    console.log("[remove-director] connection acquired", Math.round(performance.now() - t0));
     await client.query("BEGIN");
-    console.log("[remove-director] BEGIN", Math.round(performance.now() - t0));
     await client.query("SET LOCAL lock_timeout = '3s'");
     await client.query("SET LOCAL statement_timeout = '8s'");
     const supplierId = await getSupplierIdForUser(client, req.user.id, req.activeTenant?.tenantId);
@@ -6392,7 +8739,7 @@ router3.delete("/people/:id", async (req, res) => {
       return res.status(403).json({ error: "forbidden", message: "You do not have access." });
     }
     const r = await client.query(
-      "UPDATE supplier_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE RETURNING id",
+      "UPDATE supplier_people SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND supplier_id = $2 AND is_active = TRUE RETURNING id, full_name",
       [req.params.id, supplierId]
     );
     if (r.rowCount === 0) {
@@ -6406,12 +8753,26 @@ router3.delete("/people/:id", async (req, res) => {
       }
       return res.json({ ok: true, alreadyRemoved: true });
     }
-    console.log("[remove-director] UPDATE done", Math.round(performance.now() - t0));
+    const actorName = req.user?.fullName || req.user?.email || "Supplier Administrator";
+    const actorRole = req.activeTenant?.roleName || (req.user?.isPlatformAdmin ? "Super Admin" : "Supplier");
+    await auditRepository.logEvent(
+      {
+        actorName,
+        actorRole,
+        actorUserId: req.user.id,
+        supplierId,
+        action: "supplier_person.remove",
+        entityType: "supplier_person",
+        entityId: r.rows[0].id,
+        ipAddress: extractClientIp(req),
+        details: `Removed director/shareholder record ${r.rows[0].full_name || r.rows[0].id}.`
+      },
+      client
+    );
     await client.query("COMMIT");
-    console.log("[remove-director] COMMIT done", Math.round(performance.now() - t0));
+    await suppliersRepository.calculateCompleteness(supplierId).catch(() => {
+    });
     res.json({ ok: true, id: r.rows[0].id });
-    console.log("[remove-director] response sent", Math.round(performance.now() - t0));
-    writeAuditLogSafely(req, "supplier_person.remove", r.rows[0].id, t0);
   } catch (err) {
     try {
       if (client) await client.query("ROLLBACK");
@@ -6489,6 +8850,18 @@ router3.post("/team/invite", async (req, res) => {
       email,
       role,
       invitedByUserId: ctx.userId
+    });
+    const supProfile = await suppliersRepository.getById(ctx.tenantId).catch(() => null);
+    await notificationsRepository.queueEmailDelivery({
+      recipientEmail: invite.email,
+      templateCode: "team_invitation",
+      vars: {
+        tenantName: supProfile?.legalName || "Supplier Workspace",
+        inviterName: req.user?.fullName || "Supplier Admin",
+        roleName: invite.role,
+        expiresAt: String(invite.expiresAt || "").slice(0, 10)
+      }
+    }).catch(() => {
     });
     res.status(201).json(invite);
   } catch (err) {
@@ -6806,14 +9179,83 @@ router3.get("/consent", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router3.get("/consent/access-logs", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const logs = await consentRepository.listAccessLogsBySupplier(ctx.tenantId, limit);
+    res.json(logs);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.post("/consent", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { organizationId, scopes, selectedDocumentIds, selectedDocumentNames, expiresAt, purpose } = req.body || {};
+    if (!organizationId) {
+      return res.status(400).json({ error: "MISSING_ORG", message: "Procuring organization ID is required." });
+    }
+    const grant = await consentRepository.grantConsent({
+      supplierId: ctx.tenantId,
+      organizationId,
+      userId: ctx.userId,
+      scopes,
+      selectedDocumentIds,
+      selectedDocumentNames,
+      expiresAt,
+      purpose,
+      actorName: req.user.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.status(201).json(grant);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.patch("/consent/:id", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { scopes, selectedDocumentIds, selectedDocumentNames, expiresAt } = req.body || {};
+    const updated = await consentRepository.updateConsentScope(
+      req.params.id,
+      ctx.tenantId,
+      ctx.userId,
+      { scopes, selectedDocumentIds, selectedDocumentNames, expiresAt },
+      {
+        actorName: req.user.fullName,
+        actorRole: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      }
+    );
+    res.json(updated);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
 router3.post("/consent/:id/revoke", async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
-    const { reason } = req.body;
-    await consentRepository.revokeConsent(req.params.id, ctx.tenantId, ctx.userId, reason || "Revoked by supplier administrator");
+    const { reason } = req.body || {};
+    await consentRepository.revokeConsent(
+      req.params.id,
+      ctx.tenantId,
+      ctx.userId,
+      reason || "Revoked by supplier administrator",
+      {
+        actorName: req.user.fullName,
+        actorRole: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      }
+    );
     res.json({ success: true, message: "Data sharing access revoked." });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
   }
 });
 router3.get("/applications", async (req, res) => {
@@ -6858,6 +9300,54 @@ router3.post("/applications/submit", async (req, res) => {
     res.status(safe.status).json(safe);
   }
 });
+router3.post("/applications/:id/withdraw", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { reason } = req.body || {};
+    const result = await applicationsRepository.withdrawApplication({
+      applicationIdOrCallId: req.params.id,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      reason,
+      actorName: req.user.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.post("/applications/:id/respond", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { responseMessage } = req.body || {};
+    await applicationsRepository.respondToInfoRequest({
+      applicationId: req.params.id,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      responseMessage,
+      actorName: req.user.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true, message: "Additional information submitted to procuring organization." });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.get("/bids/:callId", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const bid = await bidsRepository.getByCallAndSupplier(req.params.callId, ctx.tenantId);
+    res.json(bid);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
 router3.post("/bids/seal", async (req, res) => {
   try {
     const ctx = getSupplierContext(req);
@@ -6890,482 +9380,48 @@ router3.post("/bids/seal", async (req, res) => {
     res.status(safe.status).json(safe);
   }
 });
+router3.post("/bids/:callId/withdraw", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const { reason } = req.body || {};
+    const result = await bidsRepository.withdrawBid({
+      callId: req.params.callId,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      reason,
+      actorName: req.user.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router3.get("/invitations", async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const invitations = await callsRepository.listSupplierInvitations(ctx.tenantId);
+    res.json(invitations);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
 var supplierRouter = router3;
 
 // server/routes/calls.routes.ts
 import { Router as Router4 } from "express";
-
-// server/repositories/calls.repository.ts
-var CallsRepository = class {
-  /**
-   * Reads public open tenders and EOIs live from the database / view.
-   */
-  async listOpen(filters) {
-    let sql = `
-      SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
-             c.summary, c.description, c.status, c.visibility,
-             c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
-             c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
-             o.id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
-             CASE WHEN c.closes_at IS NOT NULL THEN EXTRACT(DAY FROM (c.closes_at - NOW())) ELSE NULL END AS "daysRemaining",
-             COALESCE(
-               (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
-                FROM call_categories cc
-                JOIN categories cat ON cat.id = cc.category_id
-                WHERE cc.call_id = c.id),
-               '[]'::json
-             ) AS categories
-      FROM calls c
-      JOIN organizations o ON o.id = c.organization_id
-      WHERE c.status IN ('open', 'published')
-        AND c.visibility = 'open'
-        AND o.status = 'active'
-        AND o.deleted_at IS NULL
-    `;
-    const params = [];
-    if (filters?.callType && filters.callType !== "all") {
-      params.push(filters.callType);
-      sql += ` AND c.call_type = $${params.length}`;
-    }
-    if (filters?.query) {
-      params.push(`%${filters.query}%`);
-      sql += ` AND (c.title ILIKE $${params.length} OR c.reference_no ILIKE $${params.length} OR c.summary ILIKE $${params.length})`;
-    }
-    sql += ` ORDER BY c.closes_at ASC NULLS LAST, c.created_at DESC`;
-    const res = await query(sql, params);
-    return res.rows;
-  }
-  async getById(callId) {
-    const callRes = await query(
-      `SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
-              c.summary, c.description, c.status, c.visibility,
-              c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
-              c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
-              o.id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
-              CASE WHEN c.closes_at IS NOT NULL THEN EXTRACT(DAY FROM (c.closes_at - NOW())) ELSE NULL END AS "daysRemaining",
-              COALESCE(
-                (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
-                 FROM call_categories cc
-                 JOIN categories cat ON cat.id = cc.category_id
-                 WHERE cc.call_id = c.id),
-                '[]'::json
-              ) AS categories
-       FROM calls c
-       JOIN organizations o ON o.id = c.organization_id
-       WHERE c.id = $1`,
-      [callId]
-    );
-    if (!callRes.rows.length) return null;
-    const base = callRes.rows[0];
-    const [docsRes, priceRes, addendaRes, clarCountRes] = await Promise.all([
-      query(
-        `SELECT crd.document_type_id AS "documentTypeId", dt.code, dt.name, crd.is_mandatory AS "isMandatory"
-         FROM call_required_documents crd
-         JOIN document_types dt ON dt.id = crd.document_type_id
-         WHERE crd.call_id = $1`,
-        [callId]
-      ),
-      query(
-        `SELECT id, line_no AS "lineNo", description, unit, quantity
-         FROM call_price_items
-         WHERE call_id = $1
-         ORDER BY line_no ASC`,
-        [callId]
-      ),
-      query(
-        `SELECT id, addendum_no AS "addendumNo", title, body, published_at AS "publishedAt", new_closes_at AS "newClosesAt"
-         FROM call_addenda
-         WHERE call_id = $1
-         ORDER BY addendum_no ASC`,
-        [callId]
-      ),
-      query(
-        `SELECT count(*) FROM clarifications WHERE call_id = $1 AND is_published = TRUE`,
-        [callId]
-      )
-    ]);
-    return {
-      ...base,
-      requiredDocuments: docsRes.rows,
-      priceItems: priceRes.rows,
-      addenda: addendaRes.rows,
-      clarificationsCount: parseInt(clarCountRes.rows[0]?.count || "0", 10)
-    };
-  }
-  async listClarifications(callId, supplierId) {
-    const validSupplierId = supplierId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(supplierId) ? supplierId : null;
-    const res = await query(
-      `SELECT id, call_id AS "callId",
-              COALESCE(published_question, question) AS question,
-              published_question AS "publishedQuestion",
-              answer, responder_title AS "responderTitle", topic, status,
-              asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished",
-              (asked_by_supplier_id = $2::uuid) AS "isOwnQuestion"
-       FROM clarifications
-       WHERE call_id = $1
-         AND (is_published = TRUE OR ($2::uuid IS NOT NULL AND asked_by_supplier_id = $2::uuid))
-       ORDER BY asked_at DESC`,
-      [callId, validSupplierId]
-    );
-    return res.rows;
-  }
-  async listClarificationsByOrganization(orgId) {
-    const res = await query(
-      `SELECT cl.id, cl.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
-              cl.asked_by_supplier_id AS "supplierId",
-              COALESCE(s.legal_name, cl.supplier_name_snapshot, 'Prospective Bidder') AS "supplierName",
-              cl.question, cl.published_question AS "publishedQuestion",
-              cl.answer, cl.responder_title AS "responderTitle",
-              cl.topic, cl.status, cl.is_published AS "isPublished",
-              cl.asked_at AS "askedAt", cl.answered_at AS "answeredAt"
-       FROM clarifications cl
-       JOIN calls c ON c.id = cl.call_id
-       LEFT JOIN suppliers s ON s.id = cl.asked_by_supplier_id
-       WHERE c.organization_id = $1
-       ORDER BY cl.asked_at DESC`,
-      [orgId]
-    );
-    return res.rows;
-  }
-  async askClarification(data) {
-    if (!data.question || !data.question.trim()) {
-      const err = new Error("Clarification question text is required.");
-      err.status = 400;
-      throw err;
-    }
-    const call = await this.getById(data.callId);
-    if (!call) {
-      const err = new Error("Call does not exist.");
-      err.status = 404;
-      throw err;
-    }
-    if (call.clarificationDeadline && /* @__PURE__ */ new Date() > new Date(call.clarificationDeadline)) {
-      const err = new Error("The clarification window for this tender has closed. Questions can no longer be submitted.");
-      err.status = 400;
-      throw err;
-    }
-    const supRes = await query(
-      `SELECT legal_name FROM suppliers WHERE id = $1 LIMIT 1`,
-      [data.supplierId]
-    );
-    const supplierSnapshot = supRes.rows[0]?.legal_name || null;
-    const res = await query(
-      `INSERT INTO clarifications (
-        call_id, asked_by_supplier_id, asked_by_user_id, supplier_name_snapshot, question, topic, is_published, status, asked_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, FALSE, 'Pending', NOW()
-      ) RETURNING id, call_id AS "callId", question, published_question AS "publishedQuestion",
-                  answer, responder_title AS "responderTitle", topic, status,
-                  asked_at AS "askedAt", answered_at AS "answeredAt", is_published AS "isPublished"`,
-      [data.callId, data.supplierId, data.userId, supplierSnapshot, data.question.trim(), data.topic || "General"]
-    );
-    return res.rows[0];
-  }
-  async answerClarification(clarificationId, answer, responderTitle, userId, orgId) {
-    const cleanAnswer = answer ? String(answer).trim() : "";
-    if (!cleanAnswer) {
-      const err = new Error("Official clarification response cannot be empty.");
-      err.status = 400;
-      throw err;
-    }
-    const res = await query(
-      `UPDATE clarifications cl
-       SET answer = $2,
-           responder_title = $3,
-           answered_by_user_id = $4,
-           answered_at = NOW(),
-           status = 'Answered',
-           is_published = TRUE,
-           published_question = COALESCE(cl.published_question, cl.question)
-       FROM calls c
-       WHERE cl.id = $1
-         AND cl.call_id = c.id
-         AND c.organization_id = $5`,
-      [clarificationId, cleanAnswer, responderTitle, userId, orgId]
-    );
-    if (res.rowCount === 0) {
-      const err = new Error("Clarification question not found for your organization.");
-      err.status = 404;
-      throw err;
-    }
-  }
-  async listByOrganization(orgId) {
-    const res = await query(
-      `SELECT c.id, c.reference_no AS "referenceNo", c.title, c.call_type AS "callType",
-              c.summary, c.description, c.status, c.visibility,
-              c.opens_at AS "opensAt", c.clarification_deadline AS "clarificationDeadline",
-              c.closes_at AS "closesAt", c.estimated_value AS "estimatedValue", c.currency,
-              c.sealed_bid_protocol_enforced AS "isSealed",
-              c.organization_id AS "organizationId", o.name AS "organizationName", o.slug AS "organizationSlug",
-              (SELECT count(*)::int FROM applications a WHERE a.call_id = c.id AND a.status <> 'Draft') AS "applicationsCount",
-              COALESCE(
-                (SELECT json_agg(json_build_object('id', cat.id, 'name', cat.name))
-                 FROM call_categories cc
-                 JOIN categories cat ON cat.id = cc.category_id
-                 WHERE cc.call_id = c.id),
-                '[]'::json
-              ) AS categories,
-              COALESCE(
-                (SELECT json_agg(json_build_object('code', dt.code, 'name', dt.name))
-                 FROM call_required_documents crd
-                 JOIN document_types dt ON dt.id = crd.document_type_id
-                 WHERE crd.call_id = c.id),
-                '[]'::json
-              ) AS "requiredDocuments",
-              COALESCE(
-                (SELECT json_agg(json_build_object('id', ca.id, 'addendumNo', ca.addendum_no, 'title', ca.title, 'body', ca.body, 'publishedAt', ca.published_at, 'newClosesAt', ca.new_closes_at) ORDER BY ca.addendum_no ASC)
-                 FROM call_addenda ca
-                 WHERE ca.call_id = c.id),
-                '[]'::json
-              ) AS addenda
-       FROM calls c
-       JOIN organizations o ON o.id = c.organization_id
-       WHERE c.organization_id = $1
-       ORDER BY c.created_at DESC`,
-      [orgId]
-    );
-    return res.rows;
-  }
-  /**
-   * Create a new Call / Tender with strict statutory criteria weighting validation (must sum to 100%).
-   */
-  async createCall(data) {
-    if (data.criteria && data.criteria.length > 0) {
-      const scored = data.criteria.filter((c) => c.criterionType === "scored" || c.criterionType === "price");
-      if (scored.length > 0) {
-        const totalWeight = scored.reduce((sum, c) => sum + Number(c.weight || 0), 0);
-        if (Math.abs(totalWeight - 100) > 0.01) {
-          throw new Error(`Criteria weight validation failed: Scored criteria weights must sum to exactly 100% (currently ${totalWeight}%).`);
-        }
-      }
-    }
-    const allowedStatuses = ["draft", "open"];
-    const resolvedStatus = allowedStatuses.includes(String(data.status || "").toLowerCase()) ? String(data.status).toLowerCase() : "open";
-    const allowedVisibilities = ["open", "approved_suppliers", "category_restricted", "invite_only"];
-    const resolvedVisibility = allowedVisibilities.includes(String(data.visibility || "").toLowerCase()) ? String(data.visibility).toLowerCase() : "open";
-    const isSealed = data.isSealed !== void 0 ? Boolean(data.isSealed) : true;
-    return tx(async (client) => {
-      const orgCheck = await client.query(
-        `SELECT status, verification_status, rejection_reason FROM organizations WHERE id = $1 AND deleted_at IS NULL`,
-        [data.organizationId]
-      );
-      const orgRow = orgCheck.rows[0];
-      if (!orgRow) {
-        const err = new Error("Procuring organization record not found.");
-        err.status = 403;
-        err.code = "ORGANIZATION_NOT_FOUND";
-        throw err;
-      }
-      if (orgRow.status === "pending" || orgRow.verification_status === "pending_review" || orgRow.verification_status === "pending") {
-        const err = new Error("Your organization is pending verification and approval. You cannot publish tender calls yet.");
-        err.status = 403;
-        err.code = "ORGANIZATION_PENDING_APPROVAL";
-        throw err;
-      }
-      if (orgRow.status !== "active" || orgRow.verification_status === "rejected") {
-        const code = orgRow.verification_status === "rejected" ? "ORGANIZATION_REJECTED" : "ORGANIZATION_SUSPENDED";
-        const err = new Error(
-          orgRow.rejection_reason ? `Your organization is currently ${orgRow.status} (${orgRow.rejection_reason}) and cannot publish tender calls.` : `Your organization is currently ${orgRow.status} and cannot publish tender calls.`
-        );
-        err.status = 403;
-        err.code = code;
-        throw err;
-      }
-      const callRes = await client.query(
-        `INSERT INTO calls (
-          organization_id, reference_no, title, call_type, summary, description,
-          status, visibility, sealed_bid_protocol_enforced,
-          opens_at, closes_at, clarification_deadline,
-          estimated_value, currency, created_by_user_id,
-          published_by_user_id, published_at, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9,
-          $10, $11, $12,
-          $13, $14, $15,
-          CASE WHEN $7 = 'open' THEN $15 ELSE NULL END,
-          CASE WHEN $7 = 'open' THEN NOW() ELSE NULL END,
-          NOW(), NOW()
-        ) RETURNING id`,
-        [
-          data.organizationId,
-          data.referenceNo.trim(),
-          data.title.trim(),
-          data.callType,
-          (data.summary || "").trim(),
-          (data.description || data.summary || "").trim(),
-          resolvedStatus,
-          resolvedVisibility,
-          isSealed,
-          data.opensAt,
-          data.closesAt,
-          data.clarificationDeadline || null,
-          data.estimatedValue || null,
-          data.currency || "BWP",
-          data.userId
-        ]
-      );
-      const callId = callRes.rows[0].id;
-      if (Array.isArray(data.categoryIds) && data.categoryIds.length > 0) {
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        let idx = 0;
-        for (const catId of data.categoryIds) {
-          if (!uuidRegex.test(String(catId))) continue;
-          await client.query(
-            `INSERT INTO call_categories (call_id, category_id, is_primary)
-             VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-            [callId, catId, idx === 0]
-          );
-          idx++;
-        }
-      }
-      if (data.requiredDocTypeCodes && data.requiredDocTypeCodes.length) {
-        for (const code of data.requiredDocTypeCodes) {
-          const docType = await client.query(
-            `SELECT id FROM document_types WHERE code = $1 OR LOWER(name) = LOWER($1) LIMIT 1`,
-            [code]
-          );
-          if (docType.rows.length) {
-            await client.query(
-              `INSERT INTO call_required_documents (call_id, document_type_id, is_mandatory)
-               VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING`,
-              [callId, docType.rows[0].id]
-            );
-          }
-        }
-      }
-      if (data.criteria && data.criteria.length) {
-        for (let i = 0; i < data.criteria.length; i++) {
-          const crit = data.criteria[i];
-          await client.query(
-            `INSERT INTO evaluation_criteria (
-              call_id, name, criterion_type, weight, max_score, is_mandatory_gate, sort_order
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [
-              callId,
-              crit.name,
-              crit.criterionType,
-              crit.weight || 0,
-              crit.maxScore || 100,
-              crit.isMandatoryGate || false,
-              i + 1
-            ]
-          );
-        }
-      }
-      if (data.priceItems && data.priceItems.length) {
-        for (let i = 0; i < data.priceItems.length; i++) {
-          const pi = data.priceItems[i];
-          await client.query(
-            `INSERT INTO call_price_items (call_id, line_no, description, unit, quantity)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [callId, i + 1, pi.description, pi.unit, pi.quantity]
-          );
-        }
-      }
-      return callId;
-    });
-  }
-  async updateCall(callId, orgId, userId, data) {
-    const sets = [];
-    const params = [callId, orgId];
-    if (data.status !== void 0) {
-      const allowed = ["draft", "open", "closed", "evaluating", "awarded", "cancelled"];
-      const cleanStatus = String(data.status).toLowerCase();
-      if (!allowed.includes(cleanStatus)) {
-        const err = new Error("Invalid call status.");
-        err.status = 400;
-        throw err;
-      }
-      params.push(cleanStatus);
-      sets.push(`status = $${params.length}`);
-      if (cleanStatus === "open") {
-        params.push(userId);
-        sets.push(`published_by_user_id = COALESCE(published_by_user_id, $${params.length})`);
-        sets.push(`published_at = COALESCE(published_at, NOW())`);
-      }
-    }
-    if (data.visibility !== void 0) {
-      const allowedVis = ["open", "approved_suppliers", "category_restricted", "invite_only"];
-      const cleanVis = String(data.visibility).toLowerCase();
-      if (!allowedVis.includes(cleanVis)) {
-        const err = new Error("Invalid call visibility.");
-        err.status = 400;
-        throw err;
-      }
-      params.push(cleanVis);
-      sets.push(`visibility = $${params.length}`);
-    }
-    if (data.closesAt !== void 0) {
-      params.push(data.closesAt);
-      sets.push(`closes_at = $${params.length}`);
-    }
-    if (data.clarificationDeadline !== void 0) {
-      params.push(data.clarificationDeadline || null);
-      sets.push(`clarification_deadline = $${params.length}`);
-    }
-    if (!sets.length) return;
-    sets.push(`updated_at = NOW()`);
-    const res = await query(
-      `UPDATE calls SET ${sets.join(", ")} WHERE id = $1 AND organization_id = $2`,
-      params
-    );
-    if (res.rowCount === 0) {
-      const err = new Error("Call not found for your organization.");
-      err.status = 404;
-      throw err;
-    }
-  }
-  async createAddendum(callId, orgId, userId, data) {
-    const cleanBody = (data.body ?? data.summary ?? "").trim();
-    if (!data.title?.trim() || !cleanBody) {
-      const err = new Error("Addendum title and details are required.");
-      err.status = 400;
-      throw err;
-    }
-    return tx(async (client) => {
-      const check = await client.query(
-        `SELECT id FROM calls WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
-        [callId, orgId]
-      );
-      if (!check.rows.length) {
-        const err = new Error("Tender call not found for your organization.");
-        err.status = 404;
-        throw err;
-      }
-      const maxRes = await client.query(
-        `SELECT COALESCE(MAX(addendum_no), 0) + 1 AS next_no FROM call_addenda WHERE call_id = $1`,
-        [callId]
-      );
-      const addendumNo = maxRes.rows[0].next_no;
-      const ins = await client.query(
-        `INSERT INTO call_addenda (
-          call_id, addendum_no, title, body, new_closes_at, published_by_user_id, published_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, NOW()
-        ) RETURNING id, call_id AS "callId", addendum_no AS "addendumNo", title, body, new_closes_at AS "newClosesAt", published_at AS "publishedAt"`,
-        [callId, addendumNo, data.title.trim(), cleanBody, data.newClosesAt || null, userId]
-      );
-      if (data.newClosesAt) {
-        await client.query(
-          `UPDATE calls SET closes_at = $2, updated_at = NOW() WHERE id = $1 AND organization_id = $3`,
-          [callId, data.newClosesAt, orgId]
-        );
-      }
-      return ins.rows[0];
-    });
-  }
-};
-var callsRepository = new CallsRepository();
-
-// server/routes/calls.routes.ts
 var router4 = Router4();
 router4.get("/", async (req, res) => {
   try {
     const { q, type } = req.query;
+    const supplierId = req.activeTenant?.tenantType === "supplier" ? req.activeTenant.tenantId : void 0;
     const calls = await callsRepository.listOpen({
       query: q,
-      callType: type
+      callType: type,
+      supplierId
     });
     res.json(calls);
   } catch (err) {
@@ -7375,12 +9431,34 @@ router4.get("/", async (req, res) => {
 });
 router4.get("/:id", async (req, res) => {
   try {
-    const call = await callsRepository.getById(req.params.id);
+    const call = await callsRepository.getById(req.params.id, {
+      supplierId: req.activeTenant?.tenantType === "supplier" ? req.activeTenant.tenantId : void 0,
+      organizationId: req.activeTenant?.tenantType === "organization" ? req.activeTenant.tenantId : void 0,
+      isPlatformAdmin: Boolean(req.user?.isPlatformAdmin)
+    });
     if (!call) {
-      res.status(404).json({ error: "CALL_NOT_FOUND", message: "Tender call not found." });
+      res.status(404).json({ error: "CALL_NOT_FOUND", message: "Tender call not found or restricted." });
       return;
     }
     res.json(call);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router4.post("/:id/addenda/:addendumId/acknowledge", requireAuth, requireTenantType("supplier"), async (req, res) => {
+  try {
+    const ctx = getSupplierContext(req);
+    const result = await callsRepository.acknowledgeAddendum({
+      callId: req.params.id,
+      addendumId: req.params.addendumId,
+      supplierId: ctx.tenantId,
+      userId: ctx.userId,
+      actorName: req.user.fullName,
+      actorRole: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true, ...result });
   } catch (err) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -7516,17 +9594,20 @@ var EvaluationsRepository = class {
          WHERE evaluator_assignment_id = $1`,
         [assignment.id]
       );
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: "Scorecard Finalized & Locked",
-        entityType: "EvaluatorAssignment",
-        entityId: assignment.id,
-        ipAddress: data.ipAddress,
-        details: `Evaluator scorecard locked and finalized for call ${data.callId}.`
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          action: "Scorecard Finalized & Locked",
+          entityType: "EvaluatorAssignment",
+          entityId: assignment.id,
+          ipAddress: data.ipAddress,
+          details: `Evaluator scorecard locked and finalized for call ${data.callId}.`
+        },
+        client
+      );
     });
   }
   async listScores(callId) {
@@ -7551,22 +9632,78 @@ var AwardsRepository = class {
     const res = await query(
       `SELECT a.id, a.call_id AS "callId", c.reference_no AS "callNumber", c.title AS "callTitle",
               a.bid_id AS "bidId", a.supplier_id AS "supplierId", s.legal_name AS "supplierName",
-              a.status, a.award_value AS "awardValue", a.currency, a.justification,
-              a.is_public_notice AS "isPublicNotice", a.issued_at AS "issuedAt"
+              a.status, a.award_value::numeric AS "awardValue", a.currency, a.justification,
+              a.is_public_notice AS "isPublicNotice",
+              a.recommended_by_user_id AS "recommendedByUserId",
+              ru.full_name AS "recommendedByName",
+              (SELECT au.full_name FROM award_approvals aa JOIN users au ON au.id = aa.approver_user_id WHERE aa.award_id = a.id ORDER BY aa.decided_at DESC NULLS LAST LIMIT 1) AS "approvedByName",
+              (SELECT aa.comment FROM award_approvals aa WHERE aa.award_id = a.id ORDER BY aa.decided_at DESC NULLS LAST LIMIT 1) AS "decisionComment",
+              (SELECT aa.decided_at FROM award_approvals aa WHERE aa.award_id = a.id ORDER BY aa.decided_at DESC NULLS LAST LIMIT 1) AS "decidedAt",
+              a.issued_at AS "issuedAt",
+              a.created_at AS "createdAt"
        FROM awards a
        JOIN calls c ON c.id = a.call_id
        JOIN suppliers s ON s.id = a.supplier_id
+       LEFT JOIN users ru ON ru.id = a.recommended_by_user_id
        WHERE c.organization_id = $1
        ORDER BY a.created_at DESC`,
       [orgId]
     );
-    return res.rows;
+    return res.rows.map((r) => ({ ...r, awardValue: Number(r.awardValue || 0) }));
   }
   /**
-   * Recommends contract award.
+   * Recommends contract award after verifying org ownership and opened bid state.
    */
   async recommendAward(data) {
+    if (!Number.isFinite(data.awardValue) || data.awardValue <= 0) {
+      const err = new Error("Award value must be greater than zero.");
+      err.status = 400;
+      throw err;
+    }
+    const cleanJustification = String(data.justification || "").trim();
+    if (!cleanJustification) {
+      const err = new Error("Evaluation and award recommendation justification is required.");
+      err.status = 400;
+      throw err;
+    }
     return tx(async (client) => {
+      const callRes = await client.query(
+        `SELECT id, reference_no, title, status FROM calls WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [data.callId, data.orgId]
+      );
+      if (!callRes.rows.length) {
+        const err = new Error("Tender call not found for your organization.");
+        err.status = 404;
+        throw err;
+      }
+      const call = callRes.rows[0];
+      const bidRes = await client.query(
+        `SELECT id, status, supplier_id FROM bids WHERE id = $1 AND call_id = $2 AND supplier_id = $3 FOR UPDATE`,
+        [data.bidId, data.callId, data.supplierId]
+      );
+      if (!bidRes.rows.length) {
+        const err = new Error("Referenced bid envelope was not found for this tender call and supplier.");
+        err.status = 404;
+        throw err;
+      }
+      if (bidRes.rows[0].status !== "opened") {
+        const err = new Error(
+          `Bids must be officially unsealed before recommending an award (current bid status: ${bidRes.rows[0].status}).`
+        );
+        err.status = 400;
+        err.code = "BID_NOT_OPENED";
+        throw err;
+      }
+      const existingAward = await client.query(
+        `SELECT id, status FROM awards WHERE bid_id = $1 FOR UPDATE`,
+        [data.bidId]
+      );
+      if (existingAward.rows.length > 0 && ["approved", "issued"].includes(existingAward.rows[0].status)) {
+        const err = new Error("An approved or issued award already exists for this bid and cannot be overwritten.");
+        err.status = 400;
+        err.code = "AWARD_ALREADY_FINALIZED";
+        throw err;
+      }
       const awardRes = await client.query(
         `INSERT INTO awards (
           call_id, bid_id, supplier_id, status, award_value, currency, justification, recommended_by_user_id, created_at, updated_at
@@ -7580,64 +9717,136 @@ var AwardsRepository = class {
             recommended_by_user_id = EXCLUDED.recommended_by_user_id,
             updated_at = NOW()
         RETURNING id`,
-        [data.callId, data.bidId, data.supplierId, data.awardValue, data.currency || "BWP", data.justification, data.userId]
+        [data.callId, data.bidId, data.supplierId, data.awardValue, data.currency || "BWP", cleanJustification, data.userId]
       );
       const awardId = awardRes.rows[0].id;
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: "Award Recommended",
-        entityType: "Award",
-        entityId: awardId,
-        ipAddress: data.ipAddress,
-        details: `Award recommended for BWP ${data.awardValue.toLocaleString()}. Justification: ${data.justification}`
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          supplierId: data.supplierId,
+          action: "Award Recommended",
+          entityType: "Award",
+          entityId: awardId,
+          ipAddress: data.ipAddress,
+          details: `Award recommended for ${call.reference_no} (BWP ${data.awardValue.toLocaleString()}). Justification: ${cleanJustification}`
+        },
+        client
+      );
+      await notificationsRepository.notifyOrganizationMembers(
+        data.orgId,
+        {
+          supplierId: data.supplierId,
+          eventType: "award_pending_approval",
+          title: `Award Awaiting Approval (${call.reference_no})`,
+          body: `${data.actorName} recommended contract award for BWP ${data.awardValue.toLocaleString()}. An independent authorized approver must sign off.`,
+          linkUrl: "awards",
+          priority: "urgent",
+          permissionCode: "awards.approve",
+          data: { awardId, callId: data.callId }
+        },
+        client
+      );
       return awardId;
     });
   }
   /**
-   * Approves contract award with financial delegation limit verification.
+   * Approves or rejects contract award with strict:
+   * 1) organization scoping
+   * 2) pending_approval state validation
+   * 3) separation of drafter vs approver enforcement
+   * 4) active role authority + financial delegation ceiling verification
    */
   async approveAward(data) {
-    const awardRes = await query(
-      `SELECT a.id, a.award_value, a.call_id, a.supplier_id, c.title
-       FROM awards a
-       JOIN calls c ON c.id = a.call_id
-       WHERE a.id = $1`,
-      [data.awardId]
-    );
-    if (!awardRes.rows.length) throw new Error("Award record not found.");
-    const award = awardRes.rows[0];
-    const awardVal = Number(award.award_value);
-    const memberRes = await query(
-      `SELECT r.approval_limit_bwp, r.name AS role_name
-       FROM organization_members om
-       JOIN roles r ON r.id = om.role_id
-       WHERE om.user_id = $1 AND om.organization_id = $2`,
-      [data.userId, data.orgId]
-    );
-    const limit = memberRes.rows[0]?.approval_limit_bwp ? Number(memberRes.rows[0].approval_limit_bwp) : null;
-    if (limit !== null && awardVal > limit) {
-      throw new Error(
-        `Financial delegation limit exceeded: Your role (${memberRes.rows[0]?.role_name || "Approver"}) has an approval ceiling of BWP ${limit.toLocaleString()}, but the contract value is BWP ${awardVal.toLocaleString()}. Higher board authorization is required.`
-      );
+    if (!["approved", "rejected"].includes(data.decision)) {
+      const err = new Error('Award decision must be "approved" or "rejected".');
+      err.status = 400;
+      throw err;
     }
     await tx(async (client) => {
+      const awardRes = await client.query(
+        `SELECT a.id, a.award_value, a.call_id, c.reference_no, a.supplier_id, c.title, a.status, a.recommended_by_user_id
+         FROM awards a
+         JOIN calls c ON c.id = a.call_id
+         WHERE a.id = $1 AND c.organization_id = $2
+         FOR UPDATE OF a`,
+        [data.awardId, data.orgId]
+      );
+      if (!awardRes.rows.length) {
+        const err = new Error("Award record not found for your organization.");
+        err.status = 404;
+        err.code = "AWARD_NOT_FOUND";
+        throw err;
+      }
+      const award = awardRes.rows[0];
+      const awardVal = Number(award.award_value);
+      if (award.status !== "pending_approval") {
+        const err = new Error(`Award is currently "${award.status}" and is not awaiting approval.`);
+        err.status = 400;
+        err.code = "AWARD_NOT_PENDING";
+        throw err;
+      }
+      if (award.recommended_by_user_id === data.userId) {
+        const err = new Error(
+          "Separation of duties violation: the officer who drafted or recommended this award cannot approve or reject it."
+        );
+        err.status = 403;
+        err.code = "SEPARATION_OF_DUTIES_VIOLATION";
+        throw err;
+      }
+      const hasMemberLimitRes = await client.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'approval_limit_bwp'
+         ) AS exists`
+      );
+      const limitSelectExpr = hasMemberLimitRes.rows[0]?.exists ? "COALESCE(om.approval_limit_bwp, r.approval_limit_bwp)" : "r.approval_limit_bwp";
+      const memberRes = await client.query(
+        `SELECT ${limitSelectExpr} AS approval_limit_bwp,
+                r.name AS role_name,
+                EXISTS (
+                  SELECT 1 FROM role_permissions rp
+                  JOIN permissions p ON p.id = rp.permission_id
+                  WHERE rp.role_id = om.role_id AND p.code = 'awards.approve'
+                ) AS has_approve_perm
+         FROM organization_members om
+         JOIN roles r ON r.id = om.role_id
+         WHERE om.user_id = $1 AND om.organization_id = $2 AND om.status = 'active'
+         LIMIT 1`,
+        [data.userId, data.orgId]
+      );
+      if (!memberRes.rows.length || !memberRes.rows[0].has_approve_perm) {
+        const err = new Error('Insufficient authority: an active organization role with "awards.approve" permission is required.');
+        err.status = 403;
+        err.code = "APPROVER_AUTHORITY_REQUIRED";
+        throw err;
+      }
+      const limit = memberRes.rows[0]?.approval_limit_bwp !== null && memberRes.rows[0]?.approval_limit_bwp !== void 0 ? Number(memberRes.rows[0].approval_limit_bwp) : null;
+      if (data.decision === "approved" && limit !== null && awardVal > limit) {
+        const err = new Error(
+          `Financial delegation limit exceeded: Your role (${memberRes.rows[0]?.role_name || "Approver"}) has an approval ceiling of BWP ${limit.toLocaleString()}, but the contract value is BWP ${awardVal.toLocaleString()}. Higher board authorization is required.`
+        );
+        err.status = 403;
+        err.code = "APPROVAL_LIMIT_EXCEEDED";
+        throw err;
+      }
       await client.query(
         `UPDATE awards
-         SET status = $2, issued_at = NOW(), updated_at = NOW()
+         SET status = $2,
+             issued_at = CASE WHEN $2 = 'approved' THEN NOW() ELSE issued_at END,
+             updated_at = NOW()
          WHERE id = $1`,
         [data.awardId, data.decision === "approved" ? "approved" : "rejected"]
       );
       await client.query(
         `INSERT INTO award_approvals (award_id, approver_user_id, decision, comment, decided_at)
          VALUES ($1, $2, $3, $4, NOW())`,
-        [data.awardId, data.userId, data.decision, data.comment || null]
+        [data.awardId, data.userId, data.decision, (data.comment || "").trim() || null]
       );
       if (data.decision === "approved") {
-        const contractNo = `CTR-${Date.now().toString().slice(-6)}`;
+        const contractNo = `CTR-${award.reference_no.replace(/[^a-zA-Z0-9]/g, "")}-${Date.now().toString().slice(-5)}`;
         await client.query(
           `INSERT INTO contracts (
             organization_id, supplier_id, award_id, contract_no, title, status, contract_value, currency, created_at, updated_at
@@ -7648,17 +9857,49 @@ var AwardsRepository = class {
         );
         await client.query(`UPDATE calls SET status = 'awarded', updated_at = NOW() WHERE id = $1`, [award.call_id]);
       }
-      await auditRepository.logEvent({
-        actorName: data.actorName,
-        actorRole: data.actorRole,
-        actorUserId: data.userId,
-        organizationId: data.orgId,
-        action: `Award ${data.decision.toUpperCase()}`,
-        entityType: "Award",
-        entityId: data.awardId,
-        ipAddress: data.ipAddress,
-        details: `Official award decision recorded: ${data.decision.toUpperCase()} for BWP ${awardVal.toLocaleString()}. Comment: ${data.comment || "Approved within statutory threshold."}`
-      });
+      await auditRepository.logEvent(
+        {
+          actorName: data.actorName,
+          actorRole: data.actorRole,
+          actorUserId: data.userId,
+          organizationId: data.orgId,
+          supplierId: award.supplier_id,
+          action: `Award ${data.decision.toUpperCase()}`,
+          entityType: "Award",
+          entityId: data.awardId,
+          ipAddress: data.ipAddress,
+          details: `Official award decision recorded for ${award.reference_no}: ${data.decision.toUpperCase()} (BWP ${awardVal.toLocaleString()}). Comment: ${data.comment || "Approved within statutory delegation threshold."}`
+        },
+        client
+      );
+      await notificationsRepository.notifyUsers(
+        {
+          userIds: [award.recommended_by_user_id],
+          organizationId: data.orgId,
+          eventType: "award_decision",
+          title: `Award Recommendation ${data.decision === "approved" ? "Approved" : "Rejected"} (${award.reference_no})`,
+          body: `${data.actorName} ${data.decision} the contract award recommendation for ${award.title}.`,
+          linkUrl: "awards",
+          priority: data.decision === "approved" ? "success" : "warning",
+          data: { awardId: data.awardId, callId: award.call_id, decision: data.decision }
+        },
+        client
+      );
+      if (data.decision === "approved") {
+        await notificationsRepository.notifySupplierMembers(
+          award.supplier_id,
+          {
+            organizationId: data.orgId,
+            eventType: "award_issued",
+            title: `Contract Award Approved (${award.reference_no})`,
+            body: `Congratulations! Your bid for "${award.title}" (BWP ${awardVal.toLocaleString()}) has been officially approved for contract execution.`,
+            linkUrl: "applications",
+            priority: "success",
+            data: { awardId: data.awardId, callId: award.call_id }
+          },
+          client
+        );
+      }
     });
   }
   async listContracts(orgId) {
@@ -7666,7 +9907,7 @@ var AwardsRepository = class {
       `SELECT c.id, c.contract_no AS "contractNo", c.title,
               c.organization_id AS "organizationId", o.name AS "organizationName",
               c.supplier_id AS "supplierId", s.legal_name AS "supplierName",
-              c.status, c.contract_value AS "contractValue", c.currency,
+              c.status, c.contract_value::numeric AS "contractValue", c.currency,
               c.start_date AS "startDate", c.end_date AS "endDate", c.signed_at AS "signedAt"
        FROM contracts c
        JOIN organizations o ON o.id = c.organization_id
@@ -7683,6 +9924,7 @@ var AwardsRepository = class {
       ]);
       contracts.push({
         ...row,
+        contractValue: Number(row.contractValue || 0),
         milestones: mRes.rows,
         invoices: iRes.rows
       });
@@ -7691,6 +9933,1394 @@ var AwardsRepository = class {
   }
 };
 var awardsRepository = new AwardsRepository();
+
+// server/repositories/workspace.repository.ts
+import crypto7 from "crypto";
+var UUID_REGEX7 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
+var ALLOWED_FIELD_TYPES = /* @__PURE__ */ new Set([
+  "text",
+  "number",
+  "dropdown",
+  "date",
+  "file_upload",
+  "yes_no",
+  "textarea",
+  "email",
+  "phone",
+  "currency"
+]);
+async function hasOrgMemberColumn(columnName) {
+  const res = await query(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'organization_members'
+         AND column_name = $1
+     ) AS exists`,
+    [columnName]
+  ).catch(() => ({ rows: [{ exists: false }] }));
+  return Boolean(res.rows[0]?.exists);
+}
+function validateSafeWebhookUrl(rawUrl) {
+  const trimmed = String(rawUrl || "").trim();
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    const err = new Error("Webhook endpoint must be a valid HTTPS URL.");
+    err.status = 400;
+    throw err;
+  }
+  if (parsed.protocol !== "https:") {
+    const err = new Error("Webhook endpoint URL must use HTTPS.");
+    err.status = 400;
+    throw err;
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isBlocked = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1" || host === "[::1]" || host.endsWith(".local") || host.endsWith(".internal") || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host) || /^127\./.test(host) || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
+  if (isBlocked) {
+    const err = new Error("Webhook URL cannot target localhost, loopback, link-local, or private network hosts.");
+    err.status = 400;
+    throw err;
+  }
+  return parsed.toString().slice(0, 500);
+}
+var DEFAULT_SCORING_TEMPLATES = [
+  {
+    id: "tpl-qcbs-80-20",
+    name: "Quality & Cost-Based Selection (80% Tech / 20% Fin)",
+    badge: "Standard Works Template",
+    method: "qcbs",
+    isActive: true,
+    criteria: [
+      { id: "c1", label: "Technical Capacity & Experience", weightPercent: 35 },
+      { id: "c2", label: "Key Personnel & Team Qualifications", weightPercent: 25 },
+      { id: "c3", label: "Methodology & Work Plan", weightPercent: 20 },
+      { id: "c4", label: "Price Proposal (Unsealed Post-Tech)", weightPercent: 20 }
+    ]
+  },
+  {
+    id: "tpl-least-cost",
+    name: "Compliant Least-Cost Selection (Pass/Fail + Price)",
+    badge: "Commodities & Supplies",
+    method: "least_cost",
+    isActive: true,
+    criteria: [
+      { id: "lc1", label: "Statutory Document Verification", passFail: true },
+      { id: "lc2", label: "Technical Specification Compliance", passFail: true },
+      { id: "lc3", label: "Evaluated Financial Proposal", weightPercent: 100 }
+    ]
+  }
+];
+var WorkspaceRepository = class {
+  // =========================================================================
+  // 1. TEAM, ROLES & INVITATIONS
+  // =========================================================================
+  async listOrgRoles(orgId) {
+    const res = await query(
+      `SELECT r.id,
+              r.name,
+              r.description,
+              r.is_system AS "isSystem",
+              r.approval_limit_bwp AS "approvalLimitBwp",
+              COALESCE(
+                (SELECT array_agg(p.code ORDER BY p.code)
+                 FROM role_permissions rp
+                 JOIN permissions p ON p.id = rp.permission_id
+                 WHERE rp.role_id = r.id),
+                '{}'::text[]
+              ) AS permissions
+       FROM roles r
+       WHERE r.scope = 'organization'
+         AND (r.organization_id IS NULL OR r.organization_id = $1)
+       ORDER BY r.sort_order ASC, r.is_system DESC, r.name ASC`,
+      [orgId]
+    );
+    return res.rows.map((r) => ({
+      ...r,
+      approvalLimitBwp: r.approvalLimitBwp !== null && r.approvalLimitBwp !== void 0 ? Number(r.approvalLimitBwp) : null
+    }));
+  }
+  async listTeamAndInvitations(orgId) {
+    const [hasLimitCol, hasConflictCol] = await Promise.all([
+      hasOrgMemberColumn("approval_limit_bwp"),
+      hasOrgMemberColumn("conflict_declared")
+    ]);
+    const limitExpr = hasLimitCol ? "COALESCE(om.approval_limit_bwp, r.approval_limit_bwp)" : "r.approval_limit_bwp";
+    const conflictExpr = hasConflictCol ? "COALESCE(om.conflict_declared, FALSE)" : "FALSE";
+    const [membersRes, invitesRes, roles] = await Promise.all([
+      query(
+        `SELECT om.id,
+                om.user_id AS "userId",
+                u.full_name AS "fullName",
+                u.email::text AS email,
+                COALESCE(u.phone, '') AS phone,
+                COALESCE(om.department, 'Supply Chain Management') AS department,
+                COALESCE(om.job_title, r.name) AS "jobTitle",
+                om.role_id AS "roleId",
+                r.name AS role,
+                ${limitExpr} AS "approvalLimitBWP",
+                om.status,
+                om.is_owner AS "isOwner",
+                om.mfa_enforced AS "mfaEnabled",
+                ${conflictExpr} AS "conflictDeclared",
+                om.joined_at AS "joinedAt",
+                om.last_active_at AS "lastActiveAt",
+                om.created_at AS "createdAt"
+         FROM organization_members om
+         JOIN users u ON u.id = om.user_id AND u.deleted_at IS NULL
+         JOIN roles r ON r.id = om.role_id
+         WHERE om.organization_id = $1 AND om.status != 'removed'
+         ORDER BY om.is_owner DESC, om.created_at ASC`,
+        [orgId]
+      ),
+      query(
+        `SELECT i.id,
+                i.email::text AS email,
+                i.role_id AS "roleId",
+                r.name AS role,
+                COALESCE(i.department, 'Supply Chain Management') AS department,
+                COALESCE(i.job_title, r.name) AS "jobTitle",
+                i.approval_limit_bwp AS "approvalLimitBWP",
+                i.created_at AS "sentAt",
+                i.expires_at AS "expiresAt",
+                COALESCE(u.full_name, 'Workspace Admin') AS "invitedByName"
+         FROM invitations i
+         JOIN roles r ON r.id = i.role_id
+         LEFT JOIN users u ON u.id = i.invited_by_user_id
+         WHERE i.organization_id = $1
+           AND i.accepted_at IS NULL
+           AND i.revoked_at IS NULL
+           AND i.expires_at > NOW()
+         ORDER BY i.created_at DESC`,
+        [orgId]
+      ),
+      this.listOrgRoles(orgId)
+    ]);
+    return {
+      members: membersRes.rows.map((m) => ({
+        ...m,
+        approvalLimitBWP: m.approvalLimitBWP !== null && m.approvalLimitBWP !== void 0 ? Number(m.approvalLimitBWP) : null
+      })),
+      pendingInvitations: invitesRes.rows.map((inv) => ({
+        ...inv,
+        approvalLimitBWP: inv.approvalLimitBWP !== null && inv.approvalLimitBWP !== void 0 ? Number(inv.approvalLimitBWP) : null
+      })),
+      roles
+    };
+  }
+  async inviteOrgMember(orgId, actor, input) {
+    const cleanEmail = String(input.email || "").trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      const err = new Error("A valid officer email address is required.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const orgRes = await client.query(`SELECT name FROM organizations WHERE id = $1`, [orgId]);
+      const orgName = orgRes.rows[0]?.name || "Procuring Organization";
+      let roleRow;
+      if (input.roleId && UUID_REGEX7.test(input.roleId)) {
+        const rRes = await client.query(
+          `SELECT id, name FROM roles WHERE id = $1 AND scope = 'organization' AND (organization_id IS NULL OR organization_id = $2) LIMIT 1`,
+          [input.roleId, orgId]
+        );
+        roleRow = rRes.rows[0];
+      }
+      if (!roleRow) {
+        const targetRoleName = String(input.roleName || "Procurement Officer").trim();
+        const rRes = await client.query(
+          `SELECT id, name FROM roles
+           WHERE scope = 'organization'
+             AND (organization_id IS NULL OR organization_id = $2)
+             AND LOWER(name) = LOWER($1)
+           LIMIT 1`,
+          [targetRoleName, orgId]
+        );
+        roleRow = rRes.rows[0];
+      }
+      if (!roleRow) {
+        const err = new Error("Selected organization role does not exist.");
+        err.status = 400;
+        throw err;
+      }
+      const existingMember = await client.query(
+        `SELECT om.id, om.status
+         FROM organization_members om
+         JOIN users u ON u.id = om.user_id
+         WHERE om.organization_id = $1 AND LOWER(u.email::text) = LOWER($2) AND om.status != 'removed'
+         LIMIT 1`,
+        [orgId, cleanEmail]
+      );
+      if (existingMember.rows.length > 0) {
+        const err = new Error(`User ${cleanEmail} is already a member of this organization.`);
+        err.status = 409;
+        throw err;
+      }
+      await client.query(
+        `UPDATE invitations
+         SET revoked_at = NOW()
+         WHERE organization_id = $1 AND LOWER(email::text) = LOWER($2) AND accepted_at IS NULL AND revoked_at IS NULL`,
+        [orgId, cleanEmail]
+      );
+      const rawToken = generateRandomToken(32);
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+      const cleanDept = input.department ? String(input.department).trim().slice(0, 128) : "Supply Chain Management";
+      const cleanTitle = input.jobTitle ? String(input.jobTitle).trim().slice(0, 128) : roleRow.name;
+      const numLimit = input.approvalLimitBWP !== void 0 && input.approvalLimitBWP !== null && !isNaN(Number(input.approvalLimitBWP)) ? Math.max(0, Number(input.approvalLimitBWP)) : null;
+      const invRes = await client.query(
+        `INSERT INTO invitations (
+           organization_id, email, role_id, token_hash, invited_by_user_id,
+           department, job_title, approval_limit_bwp, expires_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, email::text AS email, created_at, expires_at`,
+        [orgId, cleanEmail, roleRow.id, tokenHash, actor.userId, cleanDept, cleanTitle, numLimit, expiresAt]
+      );
+      const row = invRes.rows[0];
+      await notificationsRepository.queueEmailDelivery(
+        {
+          recipientEmail: cleanEmail,
+          templateCode: "team_invitation",
+          organizationId: orgId,
+          vars: {
+            tenantName: orgName,
+            inviterName: actor.fullName,
+            roleName: roleRow.name,
+            expiresAt: expiresAt.toISOString().slice(0, 10)
+          }
+        },
+        client
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          organizationName: orgName,
+          action: "Team Member Invited",
+          entityType: "Organization",
+          entityId: row.id,
+          ipAddress: actor.ipAddress,
+          details: `Invited ${cleanEmail} as ${roleRow.name} (${cleanDept})${numLimit !== null ? ` with BWP ${numLimit.toLocaleString()} limit` : ""}.`
+        },
+        client
+      );
+      return {
+        id: row.id,
+        email: row.email,
+        role: roleRow.name,
+        department: cleanDept,
+        jobTitle: cleanTitle,
+        approvalLimitBWP: numLimit,
+        sentAt: row.created_at,
+        expiresAt: row.expires_at,
+        inviteToken: rawToken
+      };
+    });
+  }
+  async updateOrgMember(orgId, memberId, actor, updates) {
+    if (!UUID_REGEX7.test(memberId)) {
+      const err = new Error("Invalid member ID.");
+      err.status = 400;
+      throw err;
+    }
+    const [hasLimitCol, hasConflictCol] = await Promise.all([
+      hasOrgMemberColumn("approval_limit_bwp"),
+      hasOrgMemberColumn("conflict_declared")
+    ]);
+    return tx(async (client) => {
+      const existingRes = await client.query(
+        `SELECT om.id, om.user_id, om.is_owner, u.full_name, u.email::text AS email
+         FROM organization_members om
+         JOIN users u ON u.id = om.user_id
+         WHERE om.id = $1 AND om.organization_id = $2
+         FOR UPDATE OF om`,
+        [memberId, orgId]
+      );
+      if (!existingRes.rows.length) {
+        const err = new Error("Organization member not found.");
+        err.status = 404;
+        throw err;
+      }
+      let resolvedRoleId = null;
+      let resolvedRoleName = null;
+      if (updates.roleId && UUID_REGEX7.test(updates.roleId)) {
+        const r = await client.query(
+          `SELECT id, name FROM roles WHERE id = $1 AND scope = 'organization' AND (organization_id IS NULL OR organization_id = $2) LIMIT 1`,
+          [updates.roleId, orgId]
+        );
+        if (r.rows[0]) {
+          resolvedRoleId = r.rows[0].id;
+          resolvedRoleName = r.rows[0].name;
+        }
+      } else if (updates.roleName) {
+        const r = await client.query(
+          `SELECT id, name FROM roles WHERE scope = 'organization' AND (organization_id IS NULL OR organization_id = $2) AND LOWER(name) = LOWER($1) LIMIT 1`,
+          [updates.roleName.trim(), orgId]
+        );
+        if (r.rows[0]) {
+          resolvedRoleId = r.rows[0].id;
+          resolvedRoleName = r.rows[0].name;
+        }
+      }
+      const setClauses = ["updated_at = NOW()"];
+      const params = [memberId, orgId];
+      let idx = 3;
+      if (resolvedRoleId) {
+        setClauses.push(`role_id = $${idx++}`);
+        params.push(resolvedRoleId);
+      }
+      if (updates.department !== void 0) {
+        setClauses.push(`department = $${idx++}`);
+        params.push(String(updates.department).trim().slice(0, 128) || null);
+      }
+      if (updates.jobTitle !== void 0) {
+        setClauses.push(`job_title = $${idx++}`);
+        params.push(String(updates.jobTitle).trim().slice(0, 128) || null);
+      }
+      if (updates.mfaEnabled !== void 0) {
+        setClauses.push(`mfa_enforced = $${idx++}`);
+        params.push(Boolean(updates.mfaEnabled));
+      }
+      if (hasLimitCol && updates.approvalLimitBWP !== void 0) {
+        const val = updates.approvalLimitBWP === null || updates.approvalLimitBWP === "" ? null : Math.max(0, Number(updates.approvalLimitBWP));
+        setClauses.push(`approval_limit_bwp = $${idx++}`);
+        params.push(val !== null && !isNaN(val) ? val : null);
+      }
+      if (hasConflictCol && updates.conflictDeclared !== void 0) {
+        setClauses.push(`conflict_declared = $${idx++}`);
+        params.push(Boolean(updates.conflictDeclared));
+      }
+      await client.query(
+        `UPDATE organization_members
+         SET ${setClauses.join(", ")}
+         WHERE id = $1 AND organization_id = $2`,
+        params
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          action: "Team Member Updated",
+          entityType: "Organization",
+          entityId: memberId,
+          ipAddress: actor.ipAddress,
+          details: `Updated officer ${existingRes.rows[0].full_name} (${existingRes.rows[0].email})${resolvedRoleName ? ` \u2014 Role: ${resolvedRoleName}` : ""}.`
+        },
+        client
+      );
+    });
+  }
+  async updateOrgMemberStatus(orgId, memberId, actor, status, reason) {
+    if (!UUID_REGEX7.test(memberId)) {
+      const err = new Error("Invalid member ID.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const existingRes = await client.query(
+        `SELECT om.id, om.user_id, om.is_owner, u.full_name
+         FROM organization_members om
+         JOIN users u ON u.id = om.user_id
+         WHERE om.id = $1 AND om.organization_id = $2
+         FOR UPDATE OF om`,
+        [memberId, orgId]
+      );
+      if (!existingRes.rows.length) {
+        const err = new Error("Organization member not found.");
+        err.status = 404;
+        throw err;
+      }
+      const target = existingRes.rows[0];
+      if (status === "suspended" && (target.user_id === actor.userId || target.is_owner)) {
+        const err = new Error("You cannot suspend your own account or the organization primary owner.");
+        err.status = 400;
+        throw err;
+      }
+      await client.query(
+        `UPDATE organization_members SET status = $3, updated_at = NOW() WHERE id = $1 AND organization_id = $2`,
+        [memberId, orgId, status]
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          action: status === "suspended" ? "Team Member Suspended" : "Team Member Reactivated",
+          entityType: "Organization",
+          entityId: memberId,
+          ipAddress: actor.ipAddress,
+          details: `${status === "suspended" ? "Suspended" : "Reactivated"} ${target.full_name}${reason ? `. Reason: ${reason.trim()}` : ""}.`
+        },
+        client
+      );
+    });
+  }
+  async removeOrgMember(orgId, memberId, actor) {
+    if (!UUID_REGEX7.test(memberId)) {
+      const err = new Error("Invalid member ID.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const existingRes = await client.query(
+        `SELECT om.id, om.user_id, om.is_owner, u.full_name
+         FROM organization_members om
+         JOIN users u ON u.id = om.user_id
+         WHERE om.id = $1 AND om.organization_id = $2
+         FOR UPDATE OF om`,
+        [memberId, orgId]
+      );
+      if (!existingRes.rows.length) {
+        const err = new Error("Organization member not found.");
+        err.status = 404;
+        throw err;
+      }
+      const target = existingRes.rows[0];
+      if (target.user_id === actor.userId || target.is_owner) {
+        const err = new Error("Cannot remove your own membership or the organization owner.");
+        err.status = 400;
+        throw err;
+      }
+      await client.query(
+        `UPDATE organization_members SET status = 'removed', updated_at = NOW() WHERE id = $1 AND organization_id = $2`,
+        [memberId, orgId]
+      );
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          action: "Team Member Removed",
+          entityType: "Organization",
+          entityId: memberId,
+          ipAddress: actor.ipAddress,
+          details: `Removed officer ${target.full_name} from organization workspace.`
+        },
+        client
+      );
+    });
+  }
+  async revokeOrgInvitation(orgId, invitationId, actor) {
+    if (!UUID_REGEX7.test(invitationId)) {
+      const err = new Error("Invalid invitation ID.");
+      err.status = 400;
+      throw err;
+    }
+    const res = await query(
+      `UPDATE invitations
+       SET revoked_at = NOW()
+       WHERE id = $1 AND organization_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL
+       RETURNING id, email::text AS email`,
+      [invitationId, orgId]
+    );
+    if (!res.rows.length) {
+      const err = new Error("Pending invitation not found.");
+      err.status = 404;
+      throw err;
+    }
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Team Invitation Revoked",
+      entityType: "Organization",
+      entityId: invitationId,
+      ipAddress: actor.ipAddress,
+      details: `Revoked pending invitation for ${res.rows[0].email}.`
+    });
+  }
+  async resendOrgInvitation(orgId, invitationId, actor) {
+    if (!UUID_REGEX7.test(invitationId)) {
+      const err = new Error("Invalid invitation ID.");
+      err.status = 400;
+      throw err;
+    }
+    return tx(async (client) => {
+      const invRes = await client.query(
+        `SELECT i.id, i.email::text AS email, r.name AS role_name, o.name AS org_name
+         FROM invitations i
+         JOIN roles r ON r.id = i.role_id
+         JOIN organizations o ON o.id = i.organization_id
+         WHERE i.id = $1 AND i.organization_id = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
+         FOR UPDATE OF i`,
+        [invitationId, orgId]
+      );
+      if (!invRes.rows.length) {
+        const err = new Error("Pending invitation not found or already closed.");
+        err.status = 404;
+        throw err;
+      }
+      const rawToken = generateRandomToken(32);
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+      await client.query(
+        `UPDATE invitations SET token_hash = $3, expires_at = $4 WHERE id = $1 AND organization_id = $2`,
+        [invitationId, orgId, tokenHash, expiresAt]
+      );
+      await notificationsRepository.queueEmailDelivery(
+        {
+          recipientEmail: invRes.rows[0].email,
+          templateCode: "team_invitation",
+          organizationId: orgId,
+          vars: {
+            tenantName: invRes.rows[0].org_name,
+            inviterName: actor.fullName,
+            roleName: invRes.rows[0].role_name,
+            expiresAt: expiresAt.toISOString().slice(0, 10)
+          }
+        },
+        client
+      );
+      return {
+        id: invitationId,
+        email: invRes.rows[0].email,
+        expiresAt: expiresAt.toISOString(),
+        inviteToken: rawToken
+      };
+    });
+  }
+  // =========================================================================
+  // 2. ORGANIZATION BRANDING
+  // =========================================================================
+  async getBranding(orgId) {
+    const res = await query(
+      `SELECT id,
+              name,
+              slug,
+              COALESCE(brand_subtext, 'Procurement & Asset Disposal Board') AS "brandSubtext",
+              COALESCE(brand_primary_color, '#1F5F99') AS "brandPrimaryColor",
+              COALESCE(custom_domain, '') AS "customDomain",
+              COALESCE(contact_email::text, '') AS "contactEmail",
+              COALESCE(contact_phone, '') AS "contactPhone",
+              COALESCE(physical_address, '') AS "physicalAddress",
+              COALESCE(city, '') AS city,
+              COALESCE(settings->>'welcomeNotice', '') AS "welcomeNotice"
+       FROM organizations
+       WHERE id = $1 AND deleted_at IS NULL
+       LIMIT 1`,
+      [orgId]
+    );
+    return res.rows[0] || null;
+  }
+  async updateBranding(orgId, actor, input) {
+    const cleanName = String(input.name || "").trim().slice(0, 255);
+    if (!cleanName) {
+      const err = new Error("Official entity name is required.");
+      err.status = 400;
+      throw err;
+    }
+    const color = String(input.brandPrimaryColor || "#1F5F99").trim();
+    if (!HEX_COLOR_REGEX.test(color)) {
+      const err = new Error("Primary theme accent must be a valid 6-digit hex color (e.g. #1F5F99).");
+      err.status = 400;
+      throw err;
+    }
+    const subtext = String(input.brandSubtext || "").trim().slice(0, 255);
+    const customDomain = String(input.customDomain || "").trim().toLowerCase().slice(0, 255) || null;
+    if (customDomain && !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(customDomain)) {
+      const err = new Error("Custom domain must be a valid hostname (e.g. tenders.council.gov.bw).");
+      err.status = 400;
+      throw err;
+    }
+    const welcomeNotice = String(input.welcomeNotice || "").trim().slice(0, 500);
+    const contactEmail = input.contactEmail ? String(input.contactEmail).trim().toLowerCase().slice(0, 200) : null;
+    const contactPhone = input.contactPhone ? String(input.contactPhone).trim().slice(0, 32) : null;
+    await query(
+      `UPDATE organizations
+       SET name = $2,
+           brand_subtext = $3,
+           brand_primary_color = $4,
+           custom_domain = $5,
+           contact_email = COALESCE($6, contact_email),
+           contact_phone = COALESCE($7, contact_phone),
+           settings = COALESCE(settings, '{}'::jsonb) || jsonb_build_object('welcomeNotice', $8::text),
+           updated_at = NOW()
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [orgId, cleanName, subtext, color, customDomain, contactEmail, contactPhone, welcomeNotice]
+    );
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      organizationName: cleanName,
+      action: "Organization Branding Updated",
+      entityType: "Organization",
+      entityId: orgId,
+      ipAddress: actor.ipAddress,
+      details: `Updated branding profile: name="${cleanName}", accent=${color}, subtext="${subtext}".`
+    });
+    return this.getBranding(orgId);
+  }
+  // =========================================================================
+  // 3. ORGANIZATION SETTINGS (organization_settings)
+  // =========================================================================
+  async getSettings(orgId) {
+    const res = await query(
+      `SELECT setting_key, setting_value
+       FROM organization_settings
+       WHERE organization_id = $1`,
+      [orgId]
+    );
+    const map = new Map(res.rows.map((r) => [r.setting_key, r.setting_value]));
+    return {
+      minRfpAdvertisingDays: Number(map.get("min_rfp_advertising_days") ?? 21),
+      defaultCurrency: String(map.get("default_currency") ?? "BWP"),
+      defaultClosingTimeCat: String(map.get("default_closing_time_cat") ?? "14:00"),
+      clarificationCutoffDays: Number(map.get("clarification_cutoff_days") ?? 7),
+      requireGazetteNotice: Boolean(map.get("require_gazette_notice") ?? true),
+      autoDeadlineReminders: Boolean(map.get("auto_deadline_reminders") ?? true),
+      requireMfaEvaluators: Boolean(map.get("require_mfa_evaluators") ?? true)
+    };
+  }
+  async updateSettings(orgId, actor, input) {
+    const minDays = Number(input.minRfpAdvertisingDays ?? 21);
+    if (!Number.isFinite(minDays) || minDays < 7 || minDays > 90) {
+      const err = new Error("Minimum advertising period must be between 7 and 90 days.");
+      err.status = 400;
+      throw err;
+    }
+    const cutoffDays = Number(input.clarificationCutoffDays ?? 7);
+    if (!Number.isFinite(cutoffDays) || cutoffDays < 1 || cutoffDays > 30) {
+      const err = new Error("Clarification cut-off must be between 1 and 30 days before closing.");
+      err.status = 400;
+      throw err;
+    }
+    const closingTime = String(input.defaultClosingTimeCat || "14:00").trim();
+    if (!/^\d{2}:\d{2}$/.test(closingTime)) {
+      const err = new Error("Default closing time must use HH:MM format.");
+      err.status = 400;
+      throw err;
+    }
+    const currency = String(input.defaultCurrency || "BWP").trim().toUpperCase().slice(0, 6);
+    const entries = [
+      { key: "min_rfp_advertising_days", value: minDays, type: "number", desc: "Minimum advertising period for competitive RFPs (days)" },
+      { key: "default_currency", value: currency, type: "string", desc: "Default procurement currency" },
+      { key: "default_closing_time_cat", value: closingTime, type: "string", desc: "Default tender closing time (CAT)" },
+      { key: "clarification_cutoff_days", value: cutoffDays, type: "number", desc: "Days before closing when clarification questions close" },
+      { key: "require_gazette_notice", value: Boolean(input.requireGazetteNotice ?? true), type: "boolean", desc: "Require statutory gazette notice reference on RFPs" },
+      { key: "auto_deadline_reminders", value: Boolean(input.autoDeadlineReminders ?? true), type: "boolean", desc: "Send automated tender closing reminders to bidders" },
+      { key: "require_mfa_evaluators", value: Boolean(input.requireMfaEvaluators ?? true), type: "boolean", desc: "Require MFA for evaluation panel scoring sessions" }
+    ];
+    await tx(async (client) => {
+      for (const item of entries) {
+        await client.query(
+          `INSERT INTO organization_settings (
+             organization_id, setting_key, setting_value, setting_type, description, updated_by_user_id, updated_at
+           ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, NOW())
+           ON CONFLICT (organization_id, setting_key) DO UPDATE
+           SET setting_value = EXCLUDED.setting_value,
+               setting_type = EXCLUDED.setting_type,
+               description = EXCLUDED.description,
+               updated_by_user_id = EXCLUDED.updated_by_user_id,
+               updated_at = NOW()`,
+          [orgId, item.key, JSON.stringify(item.value), item.type, item.desc, actor.userId]
+        );
+      }
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          action: "Organization Settings Updated",
+          entityType: "Organization",
+          entityId: orgId,
+          ipAddress: actor.ipAddress,
+          details: `Updated council procurement settings: minDays=${minDays}, cutoff=${cutoffDays}d, closingTime=${closingTime} CAT, currency=${currency}.`
+        },
+        client
+      );
+    });
+    return this.getSettings(orgId);
+  }
+  // =========================================================================
+  // 4. FORM TEMPLATES & FIELDS
+  // =========================================================================
+  async listFormTemplates(orgId) {
+    const res = await query(
+      `SELECT ft.id,
+              ft.organization_id AS "organizationId",
+              ft.name AS title,
+              ft.purpose,
+              COALESCE(ft.description, '') AS description,
+              ft.status,
+              ft.updated_at AS "updatedAt",
+              v.id AS "versionId",
+              v.version_no AS "versionNo",
+              COALESCE(v.label, 'v' || v.version_no::text || '.0') AS version,
+              v.schema_json AS "schemaJson"
+       FROM form_templates ft
+       LEFT JOIN LATERAL (
+         SELECT id, version_no, label, schema_json
+         FROM form_template_versions
+         WHERE template_id = ft.id
+         ORDER BY version_no DESC
+         LIMIT 1
+       ) v ON TRUE
+       WHERE ft.organization_id = $1 AND ft.status != 'archived'
+       ORDER BY ft.updated_at DESC`,
+      [orgId]
+    );
+    const versionIds = res.rows.map((r) => r.versionId).filter(Boolean);
+    const fieldsByVersion = /* @__PURE__ */ new Map();
+    if (versionIds.length > 0) {
+      const fieldsRes = await query(
+        `SELECT id,
+                form_version_id AS "formVersionId",
+                field_key AS "fieldKey",
+                label,
+                field_type AS type,
+                is_required AS required,
+                placeholder,
+                help_text AS "helpText",
+                options,
+                sort_order AS "sortOrder"
+         FROM form_fields
+         WHERE form_version_id = ANY($1::uuid[])
+         ORDER BY sort_order ASC, created_at ASC`,
+        [versionIds]
+      );
+      for (const f of fieldsRes.rows) {
+        const list = fieldsByVersion.get(f.formVersionId) || [];
+        list.push({
+          id: f.id,
+          label: f.label,
+          type: f.type,
+          required: Boolean(f.required),
+          placeholder: f.placeholder || "",
+          helpText: f.helpText || "",
+          options: Array.isArray(f.options) ? f.options : void 0
+        });
+        fieldsByVersion.set(f.formVersionId, list);
+      }
+    }
+    return res.rows.map((r) => {
+      const dbFields = r.versionId ? fieldsByVersion.get(r.versionId) : void 0;
+      const schemaFields = Array.isArray(r.schemaJson?.fields) ? r.schemaJson.fields : [];
+      return {
+        id: r.id,
+        organizationId: r.organizationId,
+        title: r.title,
+        purpose: r.purpose,
+        description: r.description,
+        version: r.version,
+        versionNo: r.versionNo || 1,
+        updatedAt: r.updatedAt,
+        fields: dbFields && dbFields.length > 0 ? dbFields : schemaFields
+      };
+    });
+  }
+  async createFormTemplate(orgId, actor, input) {
+    const title = String(input.title || "").trim().slice(0, 200);
+    if (!title) {
+      const err = new Error("Form template title is required.");
+      err.status = 400;
+      throw err;
+    }
+    const purpose = ["registration", "eoi", "rfp_questionnaire", "other"].includes(String(input.purpose)) ? String(input.purpose) : "rfp_questionnaire";
+    const description = String(input.description || "").trim().slice(0, 500);
+    const versionLabel = String(input.version || "v1.0").trim().slice(0, 100);
+    const fields = Array.isArray(input.fields) ? input.fields : [];
+    return tx(async (client) => {
+      const tplRes = await client.query(
+        `INSERT INTO form_templates (organization_id, name, purpose, description, status, created_by_user_id)
+         VALUES ($1, $2, $3, $4, 'active', $5)
+         RETURNING id`,
+        [orgId, title, purpose, description || null, actor.userId]
+      );
+      const templateId = tplRes.rows[0].id;
+      const verRes = await client.query(
+        `INSERT INTO form_template_versions (
+           template_id, version_no, label, schema_json, status, published_by_user_id, published_at
+         ) VALUES ($1, 1, $2, $3::jsonb, 'published', $4, NOW())
+         RETURNING id`,
+        [templateId, versionLabel, JSON.stringify({ fields }), actor.userId]
+      );
+      const versionId = verRes.rows[0].id;
+      for (let i = 0; i < fields.length; i++) {
+        const f = fields[i];
+        const safeType = ALLOWED_FIELD_TYPES.has(String(f.type)) ? String(f.type) : "text";
+        const fieldKey = `field_${i + 1}_${String(f.label || "q").toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40)}`;
+        await client.query(
+          `INSERT INTO form_fields (
+             form_version_id, field_key, label, field_type, is_required, placeholder, help_text, options, sort_order
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)`,
+          [
+            versionId,
+            fieldKey,
+            String(f.label || `Question ${i + 1}`).trim().slice(0, 255),
+            safeType,
+            Boolean(f.required),
+            f.placeholder ? String(f.placeholder).slice(0, 255) : null,
+            f.helpText ? String(f.helpText).slice(0, 1e3) : null,
+            Array.isArray(f.options) ? JSON.stringify(f.options) : null,
+            i
+          ]
+        );
+      }
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          action: "Form Template Created",
+          entityType: "FormTemplate",
+          entityId: templateId,
+          ipAddress: actor.ipAddress,
+          details: `Created tender form template "${title}" (${versionLabel}) with ${fields.length} fields.`
+        },
+        client
+      );
+      return templateId;
+    });
+  }
+  async updateFormTemplate(orgId, templateId, actor, input) {
+    if (!UUID_REGEX7.test(templateId)) {
+      const err = new Error("Invalid form template ID.");
+      err.status = 400;
+      throw err;
+    }
+    const fields = Array.isArray(input.fields) ? input.fields : [];
+    await tx(async (client) => {
+      const existing = await client.query(
+        `SELECT id, name FROM form_templates WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+        [templateId, orgId]
+      );
+      if (!existing.rows.length) {
+        const err = new Error("Form template not found for your organization.");
+        err.status = 404;
+        throw err;
+      }
+      const nextTitle = input.title ? String(input.title).trim().slice(0, 200) : existing.rows[0].name;
+      const nextDesc = input.description !== void 0 ? String(input.description).trim().slice(0, 500) : void 0;
+      await client.query(
+        `UPDATE form_templates
+         SET name = $3,
+             description = COALESCE($4, description),
+             updated_at = NOW()
+         WHERE id = $1 AND organization_id = $2`,
+        [templateId, orgId, nextTitle, nextDesc !== void 0 ? nextDesc : null]
+      );
+      const maxVerRes = await client.query(
+        `SELECT COALESCE(MAX(version_no), 0)::int AS max_ver FROM form_template_versions WHERE template_id = $1`,
+        [templateId]
+      );
+      const nextVersionNo = (maxVerRes.rows[0]?.max_ver || 0) + 1;
+      const versionLabel = String(input.version || `v${nextVersionNo}.0`).trim().slice(0, 100);
+      const verRes = await client.query(
+        `INSERT INTO form_template_versions (
+           template_id, version_no, label, schema_json, status, published_by_user_id, published_at
+         ) VALUES ($1, $2, $3, $4::jsonb, 'published', $5, NOW())
+         RETURNING id`,
+        [templateId, nextVersionNo, versionLabel, JSON.stringify({ fields }), actor.userId]
+      );
+      const versionId = verRes.rows[0].id;
+      for (let i = 0; i < fields.length; i++) {
+        const f = fields[i];
+        const safeType = ALLOWED_FIELD_TYPES.has(String(f.type)) ? String(f.type) : "text";
+        const fieldKey = `field_${i + 1}_${String(f.label || "q").toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40)}`;
+        await client.query(
+          `INSERT INTO form_fields (
+             form_version_id, field_key, label, field_type, is_required, placeholder, help_text, options, sort_order
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)`,
+          [
+            versionId,
+            fieldKey,
+            String(f.label || `Question ${i + 1}`).trim().slice(0, 255),
+            safeType,
+            Boolean(f.required),
+            f.placeholder ? String(f.placeholder).slice(0, 255) : null,
+            f.helpText ? String(f.helpText).slice(0, 1e3) : null,
+            Array.isArray(f.options) ? JSON.stringify(f.options) : null,
+            i
+          ]
+        );
+      }
+      await auditRepository.logEvent(
+        {
+          actorName: actor.fullName,
+          actorRole: actor.roleName,
+          actorUserId: actor.userId,
+          organizationId: orgId,
+          action: "Form Template Version Published",
+          entityType: "FormTemplate",
+          entityId: templateId,
+          ipAddress: actor.ipAddress,
+          details: `Published revision #${nextVersionNo} (${versionLabel}) for form template "${nextTitle}" (${fields.length} fields).`
+        },
+        client
+      );
+    });
+  }
+  async deleteFormTemplate(orgId, templateId, actor) {
+    if (!UUID_REGEX7.test(templateId)) {
+      const err = new Error("Invalid form template ID.");
+      err.status = 400;
+      throw err;
+    }
+    const res = await query(
+      `UPDATE form_templates SET status = 'archived', updated_at = NOW()
+       WHERE id = $1 AND organization_id = $2
+       RETURNING id, name`,
+      [templateId, orgId]
+    );
+    if (!res.rows.length) {
+      const err = new Error("Form template not found.");
+      err.status = 404;
+      throw err;
+    }
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Form Template Archived",
+      entityType: "FormTemplate",
+      entityId: templateId,
+      ipAddress: actor.ipAddress,
+      details: `Archived form template "${res.rows[0].name}".`
+    });
+  }
+  // =========================================================================
+  // 5. WORKFLOWS & SCORING TEMPLATES
+  // =========================================================================
+  async getWorkflowsAndScoring(orgId) {
+    const [stagesRes, settingsRes, roles] = await Promise.all([
+      query(
+        `SELECT ws.id,
+                ws.applies_to AS "appliesTo",
+                ws.name,
+                ws.sequence_no AS "sequenceNo",
+                ws.stage_type AS "stageType",
+                ws.required_role_id AS "requiredRoleId",
+                r.name AS "requiredRoleName",
+                ws.sla_days AS "slaDays",
+                ws.created_at AS "createdAt"
+         FROM workflow_stages ws
+         LEFT JOIN roles r ON r.id = ws.required_role_id
+         WHERE ws.organization_id = $1
+         ORDER BY ws.applies_to ASC, ws.sequence_no ASC`,
+        [orgId]
+      ),
+      query(
+        `SELECT setting_value FROM organization_settings
+         WHERE organization_id = $1 AND setting_key = 'scoring_templates'
+         LIMIT 1`,
+        [orgId]
+      ),
+      this.listOrgRoles(orgId)
+    ]);
+    const storedTemplates = settingsRes.rows[0]?.setting_value;
+    const scoringTemplates = Array.isArray(storedTemplates) && storedTemplates.length > 0 ? storedTemplates : DEFAULT_SCORING_TEMPLATES;
+    return {
+      stages: stagesRes.rows,
+      scoringTemplates,
+      roles
+    };
+  }
+  async createWorkflowStage(orgId, actor, input) {
+    const appliesTo = ["registration", "eoi", "rfp"].includes(input.appliesTo) ? input.appliesTo : "rfp";
+    const stageType = ["review", "approval"].includes(input.stageType) ? input.stageType : "review";
+    const name = String(input.name || "").trim().slice(0, 100);
+    if (!name) {
+      const err = new Error("Workflow stage name is required.");
+      err.status = 400;
+      throw err;
+    }
+    const seq = Math.max(1, Math.min(20, Number(input.sequenceNo) || 1));
+    const safeRoleId = input.requiredRoleId && UUID_REGEX7.test(input.requiredRoleId) ? input.requiredRoleId : null;
+    const slaDays = input.slaDays !== void 0 && input.slaDays !== null && !isNaN(Number(input.slaDays)) ? Math.max(1, Math.min(90, Number(input.slaDays))) : null;
+    const ins = await query(
+      `INSERT INTO workflow_stages (organization_id, applies_to, name, sequence_no, stage_type, required_role_id, sla_days)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [orgId, appliesTo, name, seq, stageType, safeRoleId, slaDays]
+    );
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Workflow Stage Configured",
+      entityType: "Organization",
+      entityId: ins.rows[0].id,
+      ipAddress: actor.ipAddress,
+      details: `Added ${appliesTo.toUpperCase()} workflow stage #${seq}: "${name}" (${stageType}).`
+    });
+    return ins.rows[0].id;
+  }
+  async deleteWorkflowStage(orgId, stageId, actor) {
+    if (!UUID_REGEX7.test(stageId)) {
+      const err = new Error("Invalid stage ID.");
+      err.status = 400;
+      throw err;
+    }
+    const res = await query(
+      `DELETE FROM workflow_stages WHERE id = $1 AND organization_id = $2 RETURNING id, name`,
+      [stageId, orgId]
+    );
+    if (!res.rows.length) {
+      const err = new Error("Workflow stage not found.");
+      err.status = 404;
+      throw err;
+    }
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Workflow Stage Removed",
+      entityType: "Organization",
+      entityId: stageId,
+      ipAddress: actor.ipAddress,
+      details: `Removed workflow stage "${res.rows[0].name}".`
+    });
+  }
+  async saveScoringTemplates(orgId, actor, templates) {
+    if (!Array.isArray(templates) || templates.length === 0) {
+      const err = new Error("At least one scoring template is required.");
+      err.status = 400;
+      throw err;
+    }
+    const sanitized = templates.map((t, idx) => {
+      const name = String(t.name || `Template ${idx + 1}`).trim().slice(0, 150);
+      const criteria = Array.isArray(t.criteria) ? t.criteria.map((c, cIdx) => ({
+        id: String(c.id || `crit-${idx}-${cIdx}`),
+        label: String(c.label || `Criterion ${cIdx + 1}`).trim().slice(0, 150),
+        weightPercent: c.passFail ? null : Math.max(0, Math.min(100, Number(c.weightPercent) || 0)),
+        passFail: Boolean(c.passFail)
+      })) : [];
+      return {
+        id: String(t.id || `tpl-${Date.now()}-${idx}`),
+        name,
+        badge: String(t.badge || "Custom Template").trim().slice(0, 80),
+        method: ["qcbs", "least_cost", "custom"].includes(t.method) ? t.method : "custom",
+        isActive: t.isActive !== false,
+        criteria
+      };
+    });
+    await query(
+      `INSERT INTO organization_settings (
+         organization_id, setting_key, setting_value, setting_type, description, updated_by_user_id, updated_at
+       ) VALUES ($1, 'scoring_templates', $2::jsonb, 'array', 'Evaluation scoring matrices and criteria templates', $3, NOW())
+       ON CONFLICT (organization_id, setting_key) DO UPDATE
+       SET setting_value = EXCLUDED.setting_value,
+           updated_by_user_id = EXCLUDED.updated_by_user_id,
+           updated_at = NOW()`,
+      [orgId, JSON.stringify(sanitized), actor.userId]
+    );
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Scoring Templates Saved",
+      entityType: "Organization",
+      entityId: orgId,
+      ipAddress: actor.ipAddress,
+      details: `Updated ${sanitized.length} evaluation scoring template(s) for organization workspace.`
+    });
+    return sanitized;
+  }
+  // =========================================================================
+  // 6. INTEGRATIONS (api_clients & webhook_endpoints)
+  // =========================================================================
+  async getIntegrations(orgId) {
+    const [clientsRes, webhooksRes] = await Promise.all([
+      query(
+        `SELECT ac.id,
+                ac.name,
+                ac.key_prefix AS "keyPrefix",
+                ac.scopes,
+                ac.last_used_at AS "lastUsedAt",
+                ac.revoked_at AS "revokedAt",
+                ac.created_at AS "createdAt",
+                COALESCE(u.full_name, 'Admin') AS "createdByName"
+         FROM api_clients ac
+         LEFT JOIN users u ON u.id = ac.created_by_user_id
+         WHERE ac.organization_id = $1
+         ORDER BY ac.created_at DESC`,
+        [orgId]
+      ),
+      query(
+        `SELECT id,
+                url,
+                event_types AS "eventTypes",
+                is_active AS "isActive",
+                created_at AS "createdAt"
+         FROM webhook_endpoints
+         WHERE organization_id = $1
+         ORDER BY created_at DESC`,
+        [orgId]
+      )
+    ]);
+    return {
+      apiClients: clientsRes.rows,
+      webhooks: webhooksRes.rows
+    };
+  }
+  async createApiClient(orgId, actor, input) {
+    const name = String(input.name || "").trim().slice(0, 150);
+    if (!name) {
+      const err = new Error("API client name is required.");
+      err.status = 400;
+      throw err;
+    }
+    const rawSecret = `br360_${crypto7.randomBytes(24).toString("hex")}`;
+    const keyPrefix = rawSecret.slice(0, 12);
+    const keyHash = crypto7.createHash("sha256").update(rawSecret).digest("hex");
+    const scopes = Array.isArray(input.scopes) && input.scopes.length > 0 ? input.scopes.map((s) => String(s).trim()).filter(Boolean) : ["calls.read", "awards.read", "applications.read"];
+    const res = await query(
+      `INSERT INTO api_clients (organization_id, name, key_prefix, key_hash, scopes, created_by_user_id)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+       RETURNING id, name, key_prefix AS "keyPrefix", scopes, created_at AS "createdAt"`,
+      [orgId, name, keyPrefix, keyHash, JSON.stringify(scopes), actor.userId]
+    );
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "API Client Key Created",
+      entityType: "ApiClient",
+      entityId: res.rows[0].id,
+      ipAddress: actor.ipAddress,
+      details: `Issued new API integration key "${name}" (${keyPrefix}...) with scopes: ${scopes.join(", ")}.`
+    });
+    return {
+      ...res.rows[0],
+      plainKeyOnce: rawSecret
+    };
+  }
+  async revokeApiClient(orgId, clientId, actor) {
+    if (!UUID_REGEX7.test(clientId)) {
+      const err = new Error("Invalid API client ID.");
+      err.status = 400;
+      throw err;
+    }
+    const res = await query(
+      `UPDATE api_clients SET revoked_at = NOW()
+       WHERE id = $1 AND organization_id = $2 AND revoked_at IS NULL
+       RETURNING id, name`,
+      [clientId, orgId]
+    );
+    if (!res.rows.length) {
+      const err = new Error("Active API key not found.");
+      err.status = 404;
+      throw err;
+    }
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "API Client Key Revoked",
+      entityType: "ApiClient",
+      entityId: clientId,
+      ipAddress: actor.ipAddress,
+      details: `Revoked API integration key "${res.rows[0].name}".`
+    });
+  }
+  async saveWebhookEndpoint(orgId, actor, input) {
+    const safeUrl = validateSafeWebhookUrl(input.url);
+    const eventTypes = Array.isArray(input.eventTypes) && input.eventTypes.length > 0 ? input.eventTypes.map((e) => String(e).trim()).filter(Boolean) : ["award.approved", "application.submitted", "bid.opened"];
+    if (input.id && UUID_REGEX7.test(input.id)) {
+      const upd = await query(
+        `UPDATE webhook_endpoints
+         SET url = $3, event_types = $4::jsonb, is_active = $5
+         WHERE id = $1 AND organization_id = $2
+         RETURNING id, url, event_types AS "eventTypes", is_active AS "isActive", created_at AS "createdAt"`,
+        [input.id, orgId, safeUrl, JSON.stringify(eventTypes), input.isActive !== false]
+      );
+      if (!upd.rows.length) {
+        const err = new Error("Webhook endpoint not found.");
+        err.status = 404;
+        throw err;
+      }
+      await auditRepository.logEvent({
+        actorName: actor.fullName,
+        actorRole: actor.roleName,
+        actorUserId: actor.userId,
+        organizationId: orgId,
+        action: "Webhook Endpoint Updated",
+        entityType: "WebhookEndpoint",
+        entityId: input.id,
+        ipAddress: actor.ipAddress,
+        details: `Updated outbound webhook endpoint to ${safeUrl} (${eventTypes.join(", ")}).`
+      });
+      return upd.rows[0];
+    }
+    const signingSecret = `whsec_${crypto7.randomBytes(24).toString("hex")}`;
+    const secretHash = crypto7.createHash("sha256").update(signingSecret).digest("hex");
+    const ins = await query(
+      `INSERT INTO webhook_endpoints (organization_id, url, secret_hash, event_types, is_active)
+       VALUES ($1, $2, $3, $4::jsonb, TRUE)
+       RETURNING id, url, event_types AS "eventTypes", is_active AS "isActive", created_at AS "createdAt"`,
+      [orgId, safeUrl, secretHash, JSON.stringify(eventTypes)]
+    );
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Webhook Endpoint Created",
+      entityType: "WebhookEndpoint",
+      entityId: ins.rows[0].id,
+      ipAddress: actor.ipAddress,
+      details: `Registered outbound HTTPS webhook ${safeUrl} for events: ${eventTypes.join(", ")}.`
+    });
+    return {
+      ...ins.rows[0],
+      signingSecretOnce: signingSecret
+    };
+  }
+  async deleteWebhookEndpoint(orgId, endpointId, actor) {
+    if (!UUID_REGEX7.test(endpointId)) {
+      const err = new Error("Invalid webhook endpoint ID.");
+      err.status = 400;
+      throw err;
+    }
+    const res = await query(
+      `DELETE FROM webhook_endpoints WHERE id = $1 AND organization_id = $2 RETURNING id, url`,
+      [endpointId, orgId]
+    );
+    if (!res.rows.length) {
+      const err = new Error("Webhook endpoint not found.");
+      err.status = 404;
+      throw err;
+    }
+    await auditRepository.logEvent({
+      actorName: actor.fullName,
+      actorRole: actor.roleName,
+      actorUserId: actor.userId,
+      organizationId: orgId,
+      action: "Webhook Endpoint Removed",
+      entityType: "WebhookEndpoint",
+      entityId: endpointId,
+      ipAddress: actor.ipAddress,
+      details: `Removed outbound webhook endpoint ${res.rows[0].url}.`
+    });
+  }
+  // =========================================================================
+  // 7. ORGANIZATION BILLING, SUBSCRIPTION & USAGE
+  // =========================================================================
+  async getOrgBilling(orgId) {
+    const [subRes, fallbackPlansRes, callsCountRes, seatsCountRes, invoicesRes] = await Promise.all([
+      query(
+        `SELECT s.id,
+                s.status,
+                s.current_period_start AS "currentPeriodStart",
+                s.current_period_end AS "currentPeriodEnd",
+                s.trial_ends_at AS "trialEndsAt",
+                p.id AS "planId",
+                p.code AS "planCode",
+                p.name AS "planName",
+                p.price,
+                p.currency,
+                p.billing_interval AS "billingInterval",
+                p.max_users AS "maxUsers",
+                p.max_calls_per_year AS "maxCallsPerYear",
+                p.features
+         FROM subscriptions s
+         JOIN plans p ON p.id = s.plan_id
+         WHERE s.organization_id = $1
+         ORDER BY (s.status = 'active') DESC, s.created_at DESC
+         LIMIT 1`,
+        [orgId]
+      ),
+      query(
+        `SELECT id, code, name, price, currency, billing_interval AS "billingInterval",
+                max_users AS "maxUsers", max_calls_per_year AS "maxCallsPerYear", features
+         FROM plans
+         WHERE audience = 'buyer' AND is_active = TRUE
+         ORDER BY sort_order ASC, price ASC`
+      ),
+      query(
+        `SELECT COUNT(*)::text AS count
+         FROM calls
+         WHERE organization_id = $1
+           AND created_at >= date_trunc('year', NOW())`,
+        [orgId]
+      ),
+      query(
+        `SELECT COUNT(*)::text AS count
+         FROM organization_members
+         WHERE organization_id = $1 AND status IN ('active', 'invited')`,
+        [orgId]
+      ),
+      query(
+        `SELECT id,
+                invoice_no AS "invoiceNumber",
+                total::numeric AS amount,
+                currency,
+                status,
+                issued_at AS "issuedAt",
+                due_at AS "dueAt",
+                paid_at AS "paidAt"
+         FROM platform_invoices
+         WHERE organization_id = $1
+         ORDER BY created_at DESC
+         LIMIT 25`,
+        [orgId]
+      )
+    ]);
+    const sub = subRes.rows[0] || null;
+    const defaultPlan = fallbackPlansRes.rows[0] || null;
+    return {
+      subscription: sub ? {
+        id: sub.id,
+        status: sub.status,
+        currentPeriodStart: sub.currentPeriodStart,
+        currentPeriodEnd: sub.currentPeriodEnd,
+        planName: sub.planName,
+        planCode: sub.planCode,
+        price: Number(sub.price) || 0,
+        currency: sub.currency || "BWP",
+        billingInterval: sub.billingInterval || "monthly",
+        maxUsers: sub.maxUsers !== null ? Number(sub.maxUsers) : null,
+        maxCallsPerYear: sub.maxCallsPerYear !== null ? Number(sub.maxCallsPerYear) : null,
+        features: sub.features || {}
+      } : defaultPlan ? {
+        id: null,
+        status: "trial",
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        planName: defaultPlan.name,
+        planCode: defaultPlan.code,
+        price: Number(defaultPlan.price) || 0,
+        currency: defaultPlan.currency || "BWP",
+        billingInterval: defaultPlan.billingInterval || "monthly",
+        maxUsers: defaultPlan.maxUsers !== null ? Number(defaultPlan.maxUsers) : null,
+        maxCallsPerYear: defaultPlan.maxCallsPerYear !== null ? Number(defaultPlan.maxCallsPerYear) : null,
+        features: defaultPlan.features || {}
+      } : null,
+      usage: {
+        callsPublishedThisYear: Number(callsCountRes.rows[0]?.count || 0),
+        activeSeatsUsed: Number(seatsCountRes.rows[0]?.count || 0)
+      },
+      availablePlans: fallbackPlansRes.rows.map((p) => ({
+        ...p,
+        price: Number(p.price) || 0
+      })),
+      invoices: invoicesRes.rows.map((inv) => ({
+        ...inv,
+        amount: Number(inv.amount) || 0
+      }))
+    };
+  }
+};
+var workspaceRepository = new WorkspaceRepository();
 
 // server/routes/buyer.routes.ts
 var router5 = Router5();
@@ -7788,8 +11418,293 @@ router5.patch("/calls/:id", requirePermission("calls.manage"), async (req, res) 
 router5.post("/calls/:id/addenda", requirePermission("calls.manage"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
-    const addendum = await callsRepository.createAddendum(req.params.id, ctx.tenantId, ctx.userId, req.body);
+    const addendum = await callsRepository.createAddendum(
+      req.params.id,
+      ctx.tenantId,
+      ctx.userId,
+      req.body,
+      {
+        actorName: req.user.fullName,
+        actorRole: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      }
+    );
     res.status(201).json(addendum);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/calls/:id/invitations", requirePermission("calls.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const list = await callsRepository.listInvitations(req.params.id, ctx.tenantId);
+    res.json(list);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/calls/:id/invitations", requirePermission("calls.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const { supplierIds } = req.body || {};
+    const result = await callsRepository.inviteSuppliers({
+      callId: req.params.id,
+      orgId: ctx.tenantId,
+      userId: ctx.userId,
+      actorName: req.user.fullName,
+      actorRole: ctx.roleName,
+      supplierIds: Array.isArray(supplierIds) ? supplierIds : [],
+      ipAddress: extractClientIp(req)
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/members", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const hasColRes = await query(
+      `SELECT EXISTS (
+         SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'organization_members' AND column_name = 'approval_limit_bwp'
+       ) AS exists`
+    ).catch(() => ({ rows: [{ exists: false }] }));
+    const limitExpr = hasColRes.rows[0]?.exists ? "COALESCE(om.approval_limit_bwp, r.approval_limit_bwp)" : "r.approval_limit_bwp";
+    const memRes = await query(
+      `SELECT om.user_id AS "userId",
+              u.full_name AS "fullName",
+              u.email::text AS email,
+              r.name AS "roleName",
+              ${limitExpr} AS "approvalLimitBwp",
+              om.is_owner AS "isOwner"
+       FROM organization_members om
+       JOIN users u ON u.id = om.user_id AND u.deleted_at IS NULL
+       JOIN roles r ON r.id = om.role_id
+       WHERE om.organization_id = $1 AND om.status = 'active'
+       ORDER BY om.is_owner DESC, u.full_name ASC`,
+      [ctx.tenantId]
+    );
+    res.json(memRes.rows);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/suppliers", requirePermission("suppliers.view"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const supRes = await query(
+      `SELECT s.id,
+              s.legal_name AS "legalName",
+              s.trading_name AS "tradingName",
+              s.cipa_uin AS "cipaNumber",
+              s.burs_tin AS "tinNumber",
+              s.city,
+              s.physical_address AS "physicalAddress",
+              s.email,
+              s.primary_phone AS "primaryPhone",
+              s.bank_name AS "bankName",
+              s.bank_branch AS "bankBranch",
+              s.compliance_status AS "complianceStatus",
+              s.verification_status AS "verificationStatus",
+              s.profile_completeness AS "profileCompleteness",
+              s.citizen_owned_percentage AS "citizenOwnedPercentage",
+              s.youth_owned AS "youthOwned",
+              s.women_owned AS "womenOwned",
+              s.edd_certified AS "eddCertified",
+              cg.status AS "rawGrantStatus",
+              cg.expires_at AS "grantExpiresAt",
+              cg.share_company_details AS "shareCompanyDetails",
+              cg.share_directors_owners AS "shareDirectorsOwners",
+              cg.share_tax_compliance AS "shareTaxCompliance",
+              cg.share_financial_statements AS "shareFinancialStatements",
+              cg.share_banking_details AS "shareBankingDetails",
+              EXISTS (
+                SELECT 1 FROM approved_suppliers ap
+                WHERE ap.supplier_id = s.id AND ap.organization_id = $1 AND ap.status = 'active'
+              ) AS "isApprovedRoster",
+              EXISTS (
+                SELECT 1 FROM applications a
+                WHERE a.supplier_id = s.id AND a.organization_id = $1 AND a.status <> 'Draft'
+              ) AS "hasSubmittedApplication",
+              COALESCE(
+                (SELECT array_agg(DISTINCT cat.name)
+                 FROM supplier_categories sc
+                 JOIN categories cat ON cat.id = sc.category_id
+                 WHERE sc.supplier_id = s.id),
+                '{}'::text[]
+              ) AS categories
+       FROM suppliers s
+       LEFT JOIN LATERAL (
+         SELECT * FROM consent_grants cg2
+         WHERE cg2.supplier_id = s.id AND cg2.organization_id = $1
+         ORDER BY cg2.granted_at DESC
+         LIMIT 1
+       ) cg ON TRUE
+       WHERE s.deleted_at IS NULL
+         AND (
+           s.status = 'active'
+           OR EXISTS (SELECT 1 FROM applications a WHERE a.supplier_id = s.id AND a.organization_id = $1 AND a.status <> 'Draft')
+         )
+       ORDER BY s.legal_name ASC`,
+      [ctx.tenantId]
+    );
+    const now = Date.now();
+    const formatted = supRes.rows.map((r) => {
+      const isExpired = r.rawGrantStatus === "active" && r.grantExpiresAt && new Date(r.grantExpiresAt).getTime() <= now;
+      const consentStatus = !r.rawGrantStatus ? "none" : isExpired ? "expired" : r.rawGrantStatus === "revoked" ? "revoked" : r.rawGrantStatus === "active" ? "active" : "none";
+      const hasActiveConsent = consentStatus === "active";
+      const allowCompany = hasActiveConsent && Boolean(r.shareCompanyDetails);
+      const allowTax = hasActiveConsent && Boolean(r.shareTaxCompliance);
+      const allowBanking = hasActiveConsent && Boolean(r.shareBankingDetails);
+      return {
+        id: r.id,
+        legalName: r.legalName,
+        tradingName: r.tradingName,
+        cipaNumber: allowCompany ? r.cipaNumber : null,
+        tinNumber: allowTax ? r.tinNumber : null,
+        city: r.city,
+        physicalAddress: allowCompany ? r.physicalAddress : null,
+        email: allowCompany ? r.email : null,
+        primaryPhone: allowCompany ? r.primaryPhone : null,
+        bankName: allowBanking ? r.bankName : null,
+        bankBranch: allowBanking ? r.bankBranch : null,
+        complianceStatus: r.complianceStatus,
+        verificationStatus: r.verificationStatus,
+        profileCompleteness: Number(r.profileCompleteness || 0),
+        citizenOwnedPercentage: r.citizenOwnedPercentage,
+        youthOwned: Boolean(r.youthOwned),
+        womenOwned: Boolean(r.womenOwned),
+        eddCertified: Boolean(r.eddCertified),
+        categories: Array.isArray(r.categories) ? r.categories : [],
+        consentStatus,
+        hasActiveConsent,
+        isApprovedRoster: Boolean(r.isApprovedRoster),
+        hasSubmittedApplication: Boolean(r.hasSubmittedApplication),
+        accessScopes: hasActiveConsent ? {
+          companyDetails: Boolean(r.shareCompanyDetails),
+          directorsOwners: Boolean(r.shareDirectorsOwners),
+          taxCompliance: Boolean(r.shareTaxCompliance),
+          financialStatements: Boolean(r.shareFinancialStatements),
+          bankingDetails: Boolean(r.shareBankingDetails)
+        } : null
+      };
+    });
+    res.json(formatted);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/suppliers/:id", requirePermission("suppliers.view"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const supplierId = req.params.id;
+    const supRes = await query(
+      `SELECT s.id, s.legal_name AS "legalName", s.trading_name AS "tradingName",
+              s.cipa_uin AS "cipaNumber", s.burs_tin AS "tinNumber", s.ppra_registration_no AS "ppraCode",
+              s.city, s.district, s.physical_address AS "physicalAddress", s.email, s.primary_phone AS "primaryPhone",
+              s.website, s.bank_name AS "bankName", s.bank_branch AS "bankBranch",
+              s.compliance_status AS "complianceStatus", s.verification_status AS "verificationStatus",
+              s.profile_completeness AS "profileCompleteness", s.citizen_owned_percentage AS "citizenOwnedPercentage",
+              s.youth_owned AS "youthOwned", s.women_owned AS "womenOwned", s.edd_certified AS "eddCertified",
+              cg.id AS "consentGrantId", cg.status AS "rawGrantStatus", cg.expires_at AS "grantExpiresAt",
+              cg.share_company_details AS "shareCompanyDetails", cg.share_directors_owners AS "shareDirectorsOwners",
+              cg.share_past_projects AS "sharePastProjects", cg.share_tax_compliance AS "shareTaxCompliance",
+              cg.share_financial_statements AS "shareFinancialStatements", cg.share_banking_details AS "shareBankingDetails"
+       FROM suppliers s
+       LEFT JOIN LATERAL (
+         SELECT * FROM consent_grants cg2
+         WHERE cg2.supplier_id = s.id AND cg2.organization_id = $1
+         ORDER BY cg2.granted_at DESC
+         LIMIT 1
+       ) cg ON TRUE
+       WHERE s.id = $2 AND s.deleted_at IS NULL
+       LIMIT 1`,
+      [ctx.tenantId, supplierId]
+    );
+    if (!supRes.rows.length) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Supplier not found." });
+    }
+    const r = supRes.rows[0];
+    const isExpired = r.rawGrantStatus === "active" && r.grantExpiresAt && new Date(r.grantExpiresAt).getTime() <= Date.now();
+    const consentStatus = !r.rawGrantStatus ? "none" : isExpired ? "expired" : r.rawGrantStatus === "revoked" ? "revoked" : r.rawGrantStatus === "active" ? "active" : "none";
+    const hasActiveConsent = consentStatus === "active";
+    const allowCompany = hasActiveConsent && Boolean(r.shareCompanyDetails);
+    const allowDirectors = hasActiveConsent && Boolean(r.shareDirectorsOwners);
+    const allowProjects = hasActiveConsent && Boolean(r.sharePastProjects);
+    const allowTax = hasActiveConsent && Boolean(r.shareTaxCompliance);
+    const allowBanking = hasActiveConsent && Boolean(r.shareBankingDetails);
+    const [directorsRes, projectsRes, docsRes] = await Promise.all([
+      allowDirectors ? query(
+        `SELECT id, full_name AS "fullName", person_role AS role, nationality, is_citizen AS "isCitizen", ownership_percent AS "ownershipPercent"
+             FROM supplier_people WHERE supplier_id = $1 ORDER BY ownership_percent DESC NULLS LAST`,
+        [supplierId]
+      ) : Promise.resolve({ rows: [] }),
+      allowProjects ? query(
+        `SELECT id, client_name AS "clientName", project_title AS title, contract_value_bwp AS "valueBWP", completion_year AS "completionYear"
+             FROM supplier_projects WHERE supplier_id = $1 ORDER BY completion_year DESC NULLS LAST`,
+        [supplierId]
+      ) : Promise.resolve({ rows: [] }),
+      hasActiveConsent ? query(
+        `SELECT sd.id, sd.current_version_id AS "versionId", dt.name AS "documentType",
+                    sdv.verification_status AS "verificationStatus", sdv.expiry_date AS "expiryDate"
+             FROM supplier_documents sd
+             JOIN document_types dt ON dt.id = sd.document_type_id
+             LEFT JOIN supplier_document_versions sdv ON sdv.id = sd.current_version_id
+             WHERE sd.supplier_id = $1 AND sd.status != 'deleted'
+               AND (
+                 NOT EXISTS (SELECT 1 FROM consent_grant_documents cgd WHERE cgd.consent_grant_id = $2)
+                 OR EXISTS (SELECT 1 FROM consent_grant_documents cgd WHERE cgd.consent_grant_id = $2 AND cgd.document_id = sd.id)
+               )
+             ORDER BY dt.sort_order ASC`,
+        [supplierId, r.consentGrantId]
+      ) : Promise.resolve({ rows: [] })
+    ]);
+    const accessedScopes = ["supplier_profile"];
+    if (allowCompany) accessedScopes.push("company_details");
+    if (allowDirectors) accessedScopes.push("directors_owners");
+    if (allowProjects) accessedScopes.push("past_projects");
+    if (allowTax) accessedScopes.push("tax_compliance");
+    if (allowBanking) accessedScopes.push("banking_details");
+    await consentRepository.logDataAccess({
+      organizationId: ctx.tenantId,
+      supplierId,
+      consentGrantId: hasActiveConsent ? r.consentGrantId : null,
+      accessedByUserId: ctx.userId,
+      accessedDataScope: accessedScopes,
+      ipAddress: extractClientIp(req),
+      userAgent: req.get("user-agent") || null
+    }).catch(() => {
+    });
+    res.json({
+      id: r.id,
+      legalName: r.legalName,
+      tradingName: r.tradingName,
+      city: r.city,
+      district: r.district,
+      complianceStatus: r.complianceStatus,
+      verificationStatus: r.verificationStatus,
+      profileCompleteness: Number(r.profileCompleteness || 0),
+      consentStatus,
+      hasActiveConsent,
+      cipaNumber: allowCompany ? r.cipaNumber : null,
+      ppraCode: allowCompany ? r.ppraCode : null,
+      physicalAddress: allowCompany ? r.physicalAddress : null,
+      email: allowCompany ? r.email : null,
+      primaryPhone: allowCompany ? r.primaryPhone : null,
+      website: allowCompany ? r.website : null,
+      tinNumber: allowTax ? r.tinNumber : null,
+      bankName: allowBanking ? r.bankName : null,
+      bankBranch: allowBanking ? r.bankBranch : null,
+      directors: directorsRes.rows,
+      projects: projectsRes.rows,
+      sharedDocuments: docsRes.rows
+    });
   } catch (err) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -7847,9 +11762,24 @@ router5.post("/clarifications/:id/answer", requirePermission("calls.manage"), as
       answer,
       responderTitle || `${req.user.fullName} (${ctx.roleName})`,
       ctx.userId,
-      ctx.tenantId
+      ctx.tenantId,
+      {
+        actorName: req.user.fullName,
+        actorRole: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      }
     );
     res.json({ success: true, message: "Official clarification answer published." });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/bids/:callId/session", requirePermission("bids.view"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const session = await bidsRepository.getOpeningSession(req.params.callId, ctx.tenantId);
+    res.json(session);
   } catch (err) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -7867,7 +11797,7 @@ router5.get("/bids/:callId", requirePermission("bids.view"), async (req, res) =>
 router5.post("/bids/:callId/open-session", requirePermission("bids.open"), async (req, res) => {
   try {
     const ctx = getOrganizationContext(req);
-    const { witnesses } = req.body;
+    const { witnesses } = req.body || {};
     const ip = extractClientIp(req);
     const result = await bidsRepository.conductOpeningSession({
       callId: req.params.callId,
@@ -7875,7 +11805,7 @@ router5.post("/bids/:callId/open-session", requirePermission("bids.open"), async
       userId: ctx.userId,
       actorName: req.user.fullName,
       actorRole: ctx.roleName,
-      witnesses: witnesses || [{ userId: ctx.userId, witnessRole: "Procurement Officer" }],
+      witnesses: Array.isArray(witnesses) ? witnesses : [],
       ipAddress: ip
     });
     res.json(result);
@@ -8036,6 +11966,19 @@ router5.get("/documents/:id/file", requirePermission("applications.view"), async
       });
       return;
     }
+    if (fileRecord.supplierId) {
+      await consentRepository.logDataAccess({
+        organizationId: ctx.tenantId,
+        supplierId: fileRecord.supplierId,
+        accessedByUserId: ctx.userId,
+        accessedDataScope: [
+          `document:${fileRecord.documentTypeName || fileRecord.fileName || "vault_file"}`
+        ],
+        ipAddress: extractClientIp(req),
+        userAgent: req.get("user-agent") || null
+      }).catch(() => {
+      });
+    }
     const isDownload = req.query.download === "1" || req.query.download === "true";
     const dispositionType = isDownload ? "attachment" : "inline";
     const safeFileName = (fileRecord.fileName || "document").replace(/[\r\n"\\]/g, "_");
@@ -8050,11 +11993,413 @@ router5.get("/documents/:id/file", requirePermission("applications.view"), async
     res.status(safe.status).json(safe);
   }
 });
+router5.get("/team", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const data = await workspaceRepository.listTeamAndInvitations(ctx.tenantId);
+    res.json(data);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/roles", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const roles = await workspaceRepository.listOrgRoles(ctx.tenantId);
+    res.json(roles);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/team/invite", requirePermission("org.members.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const created = await workspaceRepository.inviteOrgMember(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.patch("/team/members/:id", requirePermission("org.members.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.updateOrgMember(
+      ctx.tenantId,
+      req.params.id,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/team/members/:id/status", requirePermission("org.members.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const nextStatus = req.body?.status === "suspended" ? "suspended" : "active";
+    await workspaceRepository.updateOrgMemberStatus(
+      ctx.tenantId,
+      req.params.id,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      nextStatus,
+      req.body?.reason
+    );
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.delete("/team/members/:id", requirePermission("org.members.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.removeOrgMember(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.delete("/team/invitations/:id", requirePermission("org.members.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.revokeOrgInvitation(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/team/invitations/:id/resend", requirePermission("org.members.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const resent = await workspaceRepository.resendOrgInvitation(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json(resent);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/branding", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const branding = await workspaceRepository.getBranding(ctx.tenantId);
+    res.json(branding);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.put("/branding", requirePermission("org.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const updated = await workspaceRepository.updateBranding(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    res.json(updated);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/settings", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const settings = await workspaceRepository.getSettings(ctx.tenantId);
+    res.json(settings);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.put("/settings", requirePermission("org.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const updated = await workspaceRepository.updateSettings(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    res.json(updated);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/form-templates", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const list = await workspaceRepository.listFormTemplates(ctx.tenantId);
+    res.json(list);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/form-templates", requirePermission("forms.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const id = await workspaceRepository.createFormTemplate(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    const templates = await workspaceRepository.listFormTemplates(ctx.tenantId);
+    res.status(201).json({ id, templates });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.put("/form-templates/:id", requirePermission("forms.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.updateFormTemplate(
+      ctx.tenantId,
+      req.params.id,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    const templates = await workspaceRepository.listFormTemplates(ctx.tenantId);
+    res.json({ success: true, templates });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.delete("/form-templates/:id", requirePermission("forms.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.deleteFormTemplate(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/workflows", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const data = await workspaceRepository.getWorkflowsAndScoring(ctx.tenantId);
+    res.json(data);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/workflows/stages", requirePermission("workflows.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const id = await workspaceRepository.createWorkflowStage(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    const data = await workspaceRepository.getWorkflowsAndScoring(ctx.tenantId);
+    res.status(201).json({ id, ...data });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.delete("/workflows/stages/:id", requirePermission("workflows.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.deleteWorkflowStage(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.put("/workflows/scoring-templates", requirePermission("workflows.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const templates = await workspaceRepository.saveScoringTemplates(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body?.scoringTemplates || []
+    );
+    res.json({ scoringTemplates: templates });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/integrations", requirePermission("integrations.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const data = await workspaceRepository.getIntegrations(ctx.tenantId);
+    res.json(data);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/integrations/api-keys", requirePermission("integrations.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const created = await workspaceRepository.createApiClient(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    res.status(201).json(created);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.delete("/integrations/api-keys/:id", requirePermission("integrations.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.revokeApiClient(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.post("/integrations/webhooks", requirePermission("integrations.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const saved = await workspaceRepository.saveWebhookEndpoint(
+      ctx.tenantId,
+      {
+        userId: ctx.userId,
+        fullName: req.user.fullName,
+        roleName: ctx.roleName,
+        ipAddress: extractClientIp(req)
+      },
+      req.body || {}
+    );
+    res.status(201).json(saved);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.delete("/integrations/webhooks/:id", requirePermission("integrations.manage"), async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    await workspaceRepository.deleteWebhookEndpoint(ctx.tenantId, req.params.id, {
+      userId: ctx.userId,
+      fullName: req.user.fullName,
+      roleName: ctx.roleName,
+      ipAddress: extractClientIp(req)
+    });
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router5.get("/billing", async (req, res) => {
+  try {
+    const ctx = getOrganizationContext(req);
+    const data = await workspaceRepository.getOrgBilling(ctx.tenantId);
+    res.json(data);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
 var buyerRouter = router5;
 
 // server/routes/audit.routes.ts
 import { Router as Router6 } from "express";
-import crypto7 from "crypto";
+import crypto8 from "crypto";
 var router6 = Router6();
 router6.use(requireAuth);
 router6.get("/logs", requirePermission("audit.view"), async (req, res) => {
@@ -8070,13 +12415,25 @@ router6.get("/logs", requirePermission("audit.view"), async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router6.get("/verify", requirePermission("audit.view"), async (req, res) => {
+  try {
+    const ctx = getTenantContext(req);
+    const verification = await auditRepository.verifyChain({
+      organizationId: ctx.tenantType === "organization" ? ctx.tenantId : void 0,
+      supplierId: ctx.tenantType === "supplier" ? ctx.tenantId : void 0
+    });
+    res.json(verification);
+  } catch (err) {
+    res.status(500).json({ error: err.message || "Audit chain verification failed." });
+  }
+});
 router6.post("/export", requirePermission("audit.view"), async (req, res) => {
   try {
     const ctx = getTenantContext(req);
     const { exportType, recordsCount } = req.body;
     const ip = extractClientIp(req);
     const userAgent = req.headers["user-agent"] || "Web Client";
-    const checksumSha256 = crypto7.createHash("sha256").update(`${ctx.tenantId}|${exportType}|${Date.now()}`).digest("hex");
+    const checksumSha256 = crypto8.createHash("sha256").update(`${ctx.tenantId}|${exportType}|${Date.now()}`).digest("hex");
     await auditRepository.recordExport({
       organizationId: ctx.tenantId,
       exportedByUserId: ctx.userId,
@@ -8094,7 +12451,7 @@ router6.post("/export", requirePermission("audit.view"), async (req, res) => {
 var auditRouter = router6;
 
 // server/routes/bootstrap.routes.ts
-import crypto8 from "crypto";
+import crypto9 from "crypto";
 import { Router as Router7 } from "express";
 var router7 = Router7();
 router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res) => {
@@ -8242,7 +12599,12 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
       pastProjects.length,
       teamMembers.length
     ].join("|");
-    const serverFingerprint = crypto8.createHash("sha256").update(fingerprintRaw).digest("hex");
+    const serverFingerprint = crypto9.createHash("sha256").update(fingerprintRaw).digest("hex");
+    const notifications = await notificationsRepository.listForUser(
+      user.id,
+      activeTenant.tenantType === "supplier" ? "supplier" : "organization",
+      50
+    ).catch(() => []);
     res.json({
       activeTenant,
       profileSummary: req.profileSummary || null,
@@ -8258,6 +12620,7 @@ router7.get(["/", "/bootstrap", "/auth/bootstrap"], requireAuth, async (req, res
       pastProjects,
       teamMembers,
       pendingInvitations,
+      notifications,
       user: {
         id: user.id,
         email: user.email,
@@ -8370,7 +12733,7 @@ var debugRouter = router8;
 import { Router as Router9 } from "express";
 var router9 = Router9();
 router9.use(requireAuth, requirePlatformAdmin);
-var UUID_REGEX2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var UUID_REGEX8 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function getActorInfo(req) {
   return {
     actorUserId: req.user?.id || null,
@@ -8381,23 +12744,19 @@ function getActorInfo(req) {
   };
 }
 async function logAdminAudit(req, payload) {
-  try {
-    const actor = getActorInfo(req);
-    await auditRepository.logEvent({
-      ...actor,
-      organizationName: "BidReady360 Platform Administration",
-      action: payload.action,
-      entityType: payload.entityType,
-      entityId: payload.entityId || null,
-      organizationId: payload.organizationId || null,
-      supplierId: payload.supplierId || null,
-      beforeJson: payload.beforeJson,
-      afterJson: payload.afterJson,
-      details: payload.details
-    });
-  } catch (err) {
-    console.warn("[ADMIN AUDIT WARNING]:", err?.message || err);
-  }
+  const actor = getActorInfo(req);
+  await auditRepository.logEvent({
+    ...actor,
+    organizationName: "BidReady360 Platform Administration",
+    action: payload.action,
+    entityType: payload.entityType,
+    entityId: payload.entityId || null,
+    organizationId: payload.organizationId || null,
+    supplierId: payload.supplierId || null,
+    beforeJson: payload.beforeJson,
+    afterJson: payload.afterJson,
+    details: payload.details
+  });
 }
 async function hasPeopleGenderColumn() {
   const res = await query(
@@ -8614,7 +12973,7 @@ router9.get("/organizations", async (req, res) => {
 router9.post("/organizations/:id/approve", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid organization ID." });
     }
     const beforeRes = await query(
@@ -8656,7 +13015,7 @@ router9.post("/organizations/:id/approve", async (req, res) => {
 router9.post("/organizations/:id/reject", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid organization ID." });
     }
     const reason = String(req.body?.reason || "").trim().slice(0, 1e3);
@@ -8699,7 +13058,7 @@ router9.post("/organizations/:id/reject", async (req, res) => {
 router9.post("/organizations/:id/suspend", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid organization ID." });
     }
     const reason = req.body?.reason ? String(req.body.reason).trim().slice(0, 1e3) : "Suspended by platform administrator";
@@ -8816,7 +13175,7 @@ router9.get("/suppliers", async (req, res) => {
 router9.get("/suppliers/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid supplier ID." });
     }
     const encryptionKey = getIdKey();
@@ -8924,7 +13283,7 @@ router9.get("/suppliers/:id", async (req, res) => {
 router9.post("/suppliers/:id/verification", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid supplier ID." });
     }
     const verificationStatus = String(req.body?.verificationStatus || "").trim().toLowerCase();
@@ -9111,7 +13470,7 @@ router9.get("/verification/queue", async (_req, res) => {
 router9.get("/verification/documents/:versionId/file", async (req, res) => {
   try {
     const { versionId } = req.params;
-    if (!UUID_REGEX2.test(versionId)) {
+    if (!UUID_REGEX8.test(versionId)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid document version ID." });
     }
     const file = await documentsRepository.getFileForAdmin(versionId);
@@ -9138,7 +13497,7 @@ router9.get("/verification/documents/:versionId/file", async (req, res) => {
 router9.post("/verification/people/:personId", async (req, res) => {
   try {
     const { personId } = req.params;
-    if (!UUID_REGEX2.test(personId)) {
+    if (!UUID_REGEX8.test(personId)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid director ID." });
     }
     const rawStatus = String(req.body?.status || "").trim().toLowerCase();
@@ -9188,7 +13547,7 @@ router9.post("/verification/people/:personId", async (req, res) => {
 router9.post("/verification/documents/:versionId", async (req, res) => {
   try {
     const { versionId } = req.params;
-    if (!UUID_REGEX2.test(versionId)) {
+    if (!UUID_REGEX8.test(versionId)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid document version ID." });
     }
     const rawStatus = String(req.body?.status || "").trim().toUpperCase();
@@ -9362,7 +13721,7 @@ router9.get("/users", async (req, res) => {
 router9.post("/users/:id/unlock", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid user ID." });
     }
     const updated = await query(
@@ -9401,7 +13760,7 @@ router9.post("/users/:id/unlock", async (req, res) => {
 router9.post("/users/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid user ID." });
     }
     const status = String(req.body?.status || "").trim().toLowerCase();
@@ -9445,7 +13804,7 @@ router9.post("/users/:id/status", async (req, res) => {
 router9.post("/users/:id/revoke-sessions", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid user ID." });
     }
     const userRes = await query(
@@ -9532,7 +13891,7 @@ router9.get("/risk", async (_req, res) => {
 router9.post("/risk/flags", async (req, res) => {
   try {
     const { supplierId, flagType, severity, description, callId } = req.body || {};
-    if (!supplierId || !UUID_REGEX2.test(supplierId)) {
+    if (!supplierId || !UUID_REGEX8.test(supplierId)) {
       return res.status(400).json({ error: "INVALID_SUPPLIER", message: "Valid supplierId is required." });
     }
     const allowedFlagTypes = ["shared_director", "shared_address", "shared_phone", "duplicate_document", "price_pattern", "other"];
@@ -9542,7 +13901,7 @@ router9.post("/risk/flags", async (req, res) => {
     if (!desc) {
       return res.status(400).json({ error: "DESCRIPTION_REQUIRED", message: "Flag description is required." });
     }
-    const safeCallId = callId && UUID_REGEX2.test(callId) ? callId : null;
+    const safeCallId = callId && UUID_REGEX8.test(callId) ? callId : null;
     const supRes = await query(`SELECT legal_name FROM suppliers WHERE id = $1 AND deleted_at IS NULL`, [supplierId]);
     if (!supRes.rows.length) {
       return res.status(404).json({ error: "NOT_FOUND", message: "Supplier not found." });
@@ -9569,7 +13928,7 @@ router9.post("/risk/flags", async (req, res) => {
 router9.post("/risk/flags/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid risk flag ID." });
     }
     const status = String(req.body?.status || "").trim().toLowerCase();
@@ -9604,14 +13963,14 @@ router9.post("/risk/flags/:id/status", async (req, res) => {
 router9.post("/debarments", async (req, res) => {
   try {
     const { supplierId, organizationId, reason, startsOn, endsOn, evidenceRef } = req.body || {};
-    if (!supplierId || !UUID_REGEX2.test(supplierId)) {
+    if (!supplierId || !UUID_REGEX8.test(supplierId)) {
       return res.status(400).json({ error: "INVALID_SUPPLIER", message: "Valid supplierId is required." });
     }
     const cleanReason = String(reason || "").trim().slice(0, 1e3);
     if (!cleanReason || cleanReason.length < 5) {
       return res.status(400).json({ error: "REASON_REQUIRED", message: "Debarment reason (at least 5 characters) is required." });
     }
-    const safeOrgId = organizationId && UUID_REGEX2.test(organizationId) ? organizationId : null;
+    const safeOrgId = organizationId && UUID_REGEX8.test(organizationId) ? organizationId : null;
     const effectiveStart = startsOn && /^\d{4}-\d{2}-\d{2}$/.test(String(startsOn)) ? String(startsOn) : (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const effectiveEnd = endsOn && /^\d{4}-\d{2}-\d{2}$/.test(String(endsOn)) ? String(endsOn) : null;
     const cleanEvidence = evidenceRef ? String(evidenceRef).trim().slice(0, 255) : null;
@@ -9644,7 +14003,7 @@ router9.post("/debarments", async (req, res) => {
 router9.post("/debarments/:id/lift", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid debarment ID." });
     }
     const liftReason = req.body?.reason ? String(req.body.reason).trim().slice(0, 500) : "Debarment lifted by platform administrator";
@@ -9696,7 +14055,7 @@ router9.post("/catalogues/categories", async (req, res) => {
     if (!code || !String(code).trim() || !name || !String(name).trim()) {
       return res.status(400).json({ error: "INVALID_INPUT", message: "Category code and name are required." });
     }
-    if (parentId && !UUID_REGEX2.test(parentId)) {
+    if (parentId && !UUID_REGEX8.test(parentId)) {
       return res.status(400).json({ error: "INVALID_PARENT", message: "Invalid parentId." });
     }
     const created = await referenceRepository.createCategory({ code, name, description, parentId, level, sortOrder });
@@ -9715,7 +14074,7 @@ router9.post("/catalogues/categories", async (req, res) => {
 router9.put("/catalogues/categories/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid category ID." });
     }
     const updated = await referenceRepository.updateCategory(id, req.body || {});
@@ -9767,7 +14126,7 @@ router9.post("/catalogues/document-types", async (req, res) => {
 router9.put("/catalogues/document-types/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid document type ID." });
     }
     const updated = await referenceRepository.updateDocumentType(id, req.body || {});
@@ -9830,7 +14189,7 @@ router9.get("/billing", async (_req, res) => {
 router9.put("/billing/plans/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid plan ID." });
     }
     const { price, maxCallsPerYear, description, reason } = req.body || {};
@@ -9882,7 +14241,7 @@ router9.get("/notifications", async (_req, res) => {
 router9.post("/notifications/:id/retry", async (req, res) => {
   try {
     const { id } = req.params;
-    if (!UUID_REGEX2.test(id)) {
+    if (!UUID_REGEX8.test(id)) {
       return res.status(400).json({ error: "INVALID_ID", message: "Invalid delivery ID." });
     }
     const updated = await query(
@@ -9939,6 +14298,15 @@ router9.get("/audit-log", async (req, res) => {
     res.status(safe.status).json(safe);
   }
 });
+router9.get("/audit-log/verify", async (_req, res) => {
+  try {
+    const result = await auditRepository.verifyChain();
+    res.json(result);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
 router9.post("/support/sessions", async (req, res) => {
   try {
     const { targetType, targetId, targetName, ticketRef, justification } = req.body || {};
@@ -9952,7 +14320,7 @@ router9.post("/support/sessions", async (req, res) => {
       });
     }
     const entityType = targetType === "Supplier" ? "supplier" : "organization";
-    const safeTargetId = targetId && UUID_REGEX2.test(targetId) ? targetId : null;
+    const safeTargetId = targetId && UUID_REGEX8.test(targetId) ? targetId : null;
     await logAdminAudit(req, {
       action: "ADMIN_SUPPORT_SESSION_STARTED",
       entityType,
@@ -10044,6 +14412,45 @@ router9.put("/settings", async (req, res) => {
   }
 });
 
+// server/routes/notifications.routes.ts
+import { Router as Router10 } from "express";
+var router10 = Router10();
+router10.use(requireAuth);
+router10.get("/", async (req, res) => {
+  try {
+    const tenantType = req.activeTenant?.tenantType;
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const list = await notificationsRepository.listForUser(req.user.id, tenantType, limit);
+    res.json(list);
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router10.post("/read-all", async (req, res) => {
+  try {
+    const count = await notificationsRepository.markAllRead(req.user.id);
+    res.json({ success: true, updatedCount: count });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+router10.post("/:id/read", async (req, res) => {
+  try {
+    const ok = await notificationsRepository.markRead(req.params.id, req.user.id);
+    if (!ok) {
+      res.status(404).json({ error: "NOT_FOUND", message: "Notification not found." });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    const safe = translateDbError(err);
+    res.status(safe.status).json(safe);
+  }
+});
+var notificationsRouter = router10;
+
 // server/app.ts
 var app = express();
 app.set("etag", false);
@@ -10069,7 +14476,7 @@ app.use("/api", (req, res, next) => {
   next();
 });
 app.use((req, res, next) => {
-  const unprefixedApi = req.path.startsWith("/reference") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/calls") || req.path.startsWith("/buyer") || req.path.startsWith("/audit") || req.path.startsWith("/bootstrap") || req.path.startsWith("/debug") || req.path.startsWith("/admin");
+  const unprefixedApi = req.path.startsWith("/reference") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/calls") || req.path.startsWith("/buyer") || req.path.startsWith("/audit") || req.path.startsWith("/bootstrap") || req.path.startsWith("/debug") || req.path.startsWith("/admin") || req.path.startsWith("/notifications");
   if (unprefixedApi) {
     const s = secretsGuardStatus();
     if (!s.ok) {
@@ -10095,7 +14502,7 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Origin, Accept");
-  if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/bootstrap") || req.path.startsWith("/buyer") || req.path.startsWith("/reference") || req.path.startsWith("/calls") || req.path.startsWith("/audit") || req.path.startsWith("/admin")) {
+  if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/supplier") || req.path.startsWith("/bootstrap") || req.path.startsWith("/buyer") || req.path.startsWith("/reference") || req.path.startsWith("/calls") || req.path.startsWith("/audit") || req.path.startsWith("/admin") || req.path.startsWith("/notifications")) {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("Expires", "0");
@@ -10110,7 +14517,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 app.use("/api", generalApiRateLimiter);
-app.use(["/reference", "/auth", "/supplier", "/calls", "/buyer", "/audit", "/bootstrap", "/debug", "/admin"], generalApiRateLimiter);
+app.use(["/reference", "/auth", "/supplier", "/calls", "/buyer", "/audit", "/bootstrap", "/debug", "/admin", "/notifications"], generalApiRateLimiter);
 app.use(csrfProtection);
 app.use(authenticate);
 app.get(["/api/health", "/health"], async (_req, res) => {
@@ -10183,6 +14590,7 @@ app.use("/api/audit", auditRouter);
 app.use("/api/bootstrap", bootstrapRouter);
 app.use("/api/debug", debugRouter);
 app.use("/api/admin", router9);
+app.use("/api/notifications", notificationsRouter);
 app.use("/reference", referenceRouter);
 app.use("/auth", authEndpointRateLimiter, authRouter);
 app.use("/supplier", supplierRouter);
@@ -10192,6 +14600,7 @@ app.use("/audit", auditRouter);
 app.use("/bootstrap", bootstrapRouter);
 app.use("/debug", debugRouter);
 app.use("/admin", router9);
+app.use("/notifications", notificationsRouter);
 app.use((err, _req, res, _next) => {
   console.error("[EXPRESS UNHANDLED ERROR]:", err);
   if (err instanceof ConfigSecretError || err?.code === "CONFIG_SECRET") {

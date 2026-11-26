@@ -18,6 +18,7 @@ import { auditRouter } from './routes/audit.routes';
 import { bootstrapRouter } from './routes/bootstrap.routes';
 import { debugRouter } from './routes/debug.routes';
 import { adminRouter } from './routes/admin.routes';
+import { notificationsRouter } from './routes/notifications.routes';
 
 const app = express();
 app.set('etag', false);
@@ -55,7 +56,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     req.path.startsWith('/audit') ||
     req.path.startsWith('/bootstrap') ||
     req.path.startsWith('/debug') ||
-    req.path.startsWith('/admin');
+    req.path.startsWith('/admin') ||
+    req.path.startsWith('/notifications');
   if (unprefixedApi) {
     const s = secretsGuardStatus();
     if (!s.ok) {
@@ -85,7 +87,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Origin, Accept');
 
   // Enforce no-store on all API endpoints by default (reference success responses override with max-age=300)
-  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/supplier') || req.path.startsWith('/bootstrap') || req.path.startsWith('/buyer') || req.path.startsWith('/reference') || req.path.startsWith('/calls') || req.path.startsWith('/audit') || req.path.startsWith('/admin')) {
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/supplier') || req.path.startsWith('/bootstrap') || req.path.startsWith('/buyer') || req.path.startsWith('/reference') || req.path.startsWith('/calls') || req.path.startsWith('/audit') || req.path.startsWith('/admin') || req.path.startsWith('/notifications')) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -102,7 +104,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use('/api', generalApiRateLimiter);
-app.use(['/reference', '/auth', '/supplier', '/calls', '/buyer', '/audit', '/bootstrap', '/debug', '/admin'], generalApiRateLimiter);
+app.use(['/reference', '/auth', '/supplier', '/calls', '/buyer', '/audit', '/bootstrap', '/debug', '/admin', '/notifications'], generalApiRateLimiter);
 app.use(csrfProtection);
 app.use(authenticate);
 
@@ -187,6 +189,7 @@ app.use('/api/audit', auditRouter);
 app.use('/api/bootstrap', bootstrapRouter);
 app.use('/api/debug', debugRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // Same routes without the prefix, in case a rewrite strips '/api'
 app.use('/reference', referenceRouter);
@@ -198,6 +201,7 @@ app.use('/audit', auditRouter);
 app.use('/bootstrap', bootstrapRouter);
 app.use('/debug', debugRouter);
 app.use('/admin', adminRouter);
+app.use('/notifications', notificationsRouter);
 
 // Centralized error handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

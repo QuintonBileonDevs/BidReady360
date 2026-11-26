@@ -7,12 +7,15 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const AdminAuditLog: React.FC = () => {
   const [events, setEvents] = useState<AdminAuditEventRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<any | null>(null);
 
   // Server-backed filter inputs
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,12 +53,25 @@ export const AdminAuditLog: React.FC = () => {
     return () => clearTimeout(t);
   }, [loadLogs]);
 
+  const handleVerifyChain = async () => {
+    setIsVerifying(true);
+    setError(null);
+    try {
+      const res = await adminApi.verifyAuditChain();
+      setVerifyResult(res);
+    } catch (err: any) {
+      setError(err?.message || 'Unable to verify cryptographic audit chain.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const handleExportCSV = () => {
-    const headers = 'ID,Timestamp,Actor,Role,Action,EntityType,EntityID,Details\n';
+    const headers = 'ID,Timestamp,Actor,Role,Action,EntityType,EntityID,RowHash,Details\n';
     const rows = events
       .map(
         (e) =>
-          `"${e.id}","${e.timestamp}","${(e.actorName || '').replace(/"/g, '""')}","${(e.actorRole || '').replace(/"/g, '""')}","${(e.action || '').replace(/"/g, '""')}","${(e.entityType || '').replace(/"/g, '""')}","${e.entityId || ''}","${(e.details || '').replace(/"/g, '""')}"`
+          `"${e.id}","${e.timestamp}","${(e.actorName || '').replace(/"/g, '""')}","${(e.actorRole || '').replace(/"/g, '""')}","${(e.action || '').replace(/"/g, '""')}","${(e.entityType || '').replace(/"/g, '""')}","${e.entityId || ''}","${e.rowHash || ''}","${(e.details || '').replace(/"/g, '""')}"`
       )
       .join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv' });
@@ -76,11 +92,11 @@ export const AdminAuditLog: React.FC = () => {
             Statutory audit log
           </h1>
           <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
-            Cross-tenant chronological record of administrative approvals, rejections, unlocks, debarments, and tender operations.
+            Cross-tenant append-only cryptographic record of administrative approvals, bids, awards, consent grants, and tender operations.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={loadLogs}
@@ -89,6 +105,15 @@ export const AdminAuditLog: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleVerifyChain}
+            disabled={isVerifying}
+            className="px-3.5 py-2 border border-[#2F8F5B] text-[#2F8F5B] hover:bg-emerald-50 rounded-[6px] text-[13px] font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>{isVerifying ? 'Verifying...' : 'Verify Ledger Integrity'}</span>
           </button>
           <button
             type="button"
@@ -103,7 +128,7 @@ export const AdminAuditLog: React.FC = () => {
       </div>
 
       {/* Audit Integrity Banner */}
-      <div className="p-4 rounded-[12px] bg-[#ECFDF5] dark:bg-[#065F46]/20 border border-[#A7F3D0] dark:border-[#065F46]/40 flex items-center justify-between gap-4 text-[14px] text-[#065F46] dark:text-[#A7F3D0]">
+      <div className="p-4 rounded-[12px] bg-[#ECFDF5] dark:bg-[#065F46]/20 border border-[#A7F3D0] dark:border-[#065F46]/40 flex flex-wrap items-center justify-between gap-4 text-[14px] text-[#065F46] dark:text-[#A7F3D0]">
         <div className="flex items-center gap-2.5">
           <CheckCircle2 className="w-5 h-5 shrink-0 text-[#2F8F5B]" />
           <span>
@@ -111,6 +136,32 @@ export const AdminAuditLog: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {verifyResult && (
+        <div
+          className={`p-4 rounded-[12px] border text-[13px] flex flex-wrap items-center justify-between gap-3 ${
+            verifyResult.valid
+              ? 'bg-[#ECFDF5] dark:bg-[#065F46]/20 border-[#A7F3D0] text-[#065F46] dark:text-[#A7F3D0]'
+              : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 text-[#8E2A1B] dark:text-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {verifyResult.valid ? (
+              <CheckCircle2 className="w-4 h-4 text-[#2F8F5B] shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-[#C2412D] shrink-0" />
+            )}
+            <span>
+              <strong>{verifyResult.valid ? 'Global Hash Chain Intact:' : 'Chain Integrity Anomaly:'}</strong>{' '}
+              Checked {verifyResult.totalChecked} rows ({verifyResult.brokenLinks} broken link{verifyResult.brokenLinks === 1 ? '' : 's'}, {verifyResult.hashMismatches} hash mismatch{verifyResult.hashMismatches === 1 ? '' : 'es'}).
+              {verifyResult.firstBrokenReason ? ` ${verifyResult.firstBrokenReason}` : ''}
+            </span>
+          </div>
+          {verifyResult.latestHash && (
+            <span className="font-mono text-[11px]">Tip: {String(verifyResult.latestHash).slice(0, 16)}…</span>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-[#C2412D] dark:text-rose-200 text-[14px] flex items-center gap-2">
@@ -148,6 +199,13 @@ export const AdminAuditLog: React.FC = () => {
           <option value="supplier">Supplier</option>
           <option value="supplier_person">Director</option>
           <option value="supplier_document_version">Document</option>
+          <option value="Call">Call / Tender</option>
+          <option value="Application">Application</option>
+          <option value="Bid">Bid Envelope</option>
+          <option value="Award">Award Decision</option>
+          <option value="ConsentGrant">Consent Grant</option>
+          <option value="CallAddendum">Call Addendum</option>
+          <option value="EvaluatorAssignment">Evaluation Lock</option>
           <option value="user">User</option>
           <option value="debarment">Debarment</option>
           <option value="risk_flag">Risk flag</option>
@@ -215,7 +273,7 @@ export const AdminAuditLog: React.FC = () => {
                 <tr>
                   <th className="p-4">Timestamp</th>
                   <th className="p-4">Actor</th>
-                  <th className="p-4">Entity</th>
+                  <th className="p-4">Entity & Hash</th>
                   <th className="p-4">Action</th>
                   <th className="p-4">Details</th>
                 </tr>
@@ -230,8 +288,11 @@ export const AdminAuditLog: React.FC = () => {
                       <div className="font-semibold text-[13px]">{evt.actorName}</div>
                       <div className="text-[11px] text-[#6B7A87]">{evt.actorRole}</div>
                     </td>
-                    <td className="p-4 text-[12px] text-[#43525F] dark:text-[#B2C3D2] capitalize">
-                      {(evt.entityType || 'system').replace(/_/g, ' ')}
+                    <td className="p-4 text-[12px] text-[#43525F] dark:text-[#B2C3D2]">
+                      <div className="capitalize">{(evt.entityType || 'system').replace(/_/g, ' ')}</div>
+                      {evt.rowHash && (
+                        <div className="font-mono text-[10px] text-[#6B7A87]">#{String(evt.rowHash).slice(0, 8)}</div>
+                      )}
                     </td>
                     <td className="p-4 font-medium text-[#1F5F99] dark:text-[#6FAEE0] text-[13px]">
                       {evt.action}
