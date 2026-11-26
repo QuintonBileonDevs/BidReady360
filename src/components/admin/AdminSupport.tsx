@@ -56,19 +56,19 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({ onStartSupportSessio
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Support &amp; privacy governance
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Enforce statutory data isolation, tenant privacy boundaries, and audited administrative support sessions.
           </p>
         </div>
       </div>
 
       {/* Privacy Rules Card */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
         <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
           Data isolation and support privacy rules
         </h2>
@@ -78,7 +78,7 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({ onStartSupportSessio
             <span className="font-semibold text-[#10212E] dark:text-white block">
               1. Account metadata only
             </span>
-            <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               Standard admin views display account status, verification pins, and billing logs only. Confidential bidder vaults remain isolated.
             </p>
           </div>
@@ -87,7 +87,7 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({ onStartSupportSessio
             <span className="font-semibold text-[#10212E] dark:text-white block">
               2. Mandatory audit reasoning
             </span>
-            <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               Starting a diagnostic session requires a formal ticket reference and written reason before access is logged.
             </p>
           </div>
@@ -96,7 +96,7 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({ onStartSupportSessio
             <span className="font-semibold text-[#10212E] dark:text-white block">
               3. Permanent banner &amp; audit log
             </span>
-            <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               Every authorized session is marked with a persistent top banner and written directly to PostgreSQL audit_log.
             </p>
           </div>
@@ -111,18 +111,18 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({ onStartSupportSessio
       )}
 
       {/* Direct Launch Diagnostic Card */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
         <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
           Start logged support session
         </h2>
 
         {isLoading ? (
-          <div className="flex items-center gap-2 text-[14px] text-[#6B7A87]">
-            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+          <div className="flex items-center gap-2 text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
+            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span>Loading registered organizations and suppliers...</span>
           </div>
         ) : targets.length === 0 ? (
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             No buyer organizations or suppliers are registered yet.
           </p>
         ) : (
@@ -134,7 +134,7 @@ export const AdminSupport: React.FC<AdminSupportProps> = ({ onStartSupportSessio
               <select
                 value={selectedKey}
                 onChange={(e) => setSelectedKey(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               >
                 {targets.map((t) => (
                   <option key={`${t.type}:${t.id}`} value={`${t.type}:${t.id}`}>

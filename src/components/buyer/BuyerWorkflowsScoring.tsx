@@ -169,22 +169,22 @@ export const BuyerWorkflowsScoring: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Workflows &amp; scoring templates
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Standardize evaluation stages, multi-evaluator scoring matrices, and statutory approval gates.
           </p>
         </div>
 
-        <div className="inline-flex rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] p-1">
+        <div className="inline-flex rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] p-1">
           <button
             type="button"
             onClick={() => setActiveTab('workflows')}
             className={`px-3.5 py-1.5 rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'workflows' ? 'bg-[#1F5F99] text-white' : 'text-[#43525F] dark:text-[#B2C3D2]'
+              activeTab === 'workflows' ? 'bg-[#1F5F99] text-white' : 'text-[#43525F] dark:text-[#D3E3F2]'
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -194,7 +194,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
             type="button"
             onClick={() => setActiveTab('templates')}
             className={`px-3.5 py-1.5 rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'templates' ? 'bg-[#1F5F99] text-white' : 'text-[#43525F] dark:text-[#B2C3D2]'
+              activeTab === 'templates' ? 'bg-[#1F5F99] text-white' : 'text-[#43525F] dark:text-[#D3E3F2]'
             }`}
           >
             <Sliders className="w-4 h-4" />
@@ -211,22 +211,22 @@ export const BuyerWorkflowsScoring: React.FC = () => {
       )}
 
       {feedback && (
-        <div className="p-4 rounded-[12px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2">
+        <div className="p-4 rounded-[12px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2 dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
           <span>{feedback}</span>
         </div>
       )}
 
       {isLoading ? (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-10 flex items-center justify-center gap-2.5 text-[#6B7A87]">
-          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-10 flex items-center justify-center gap-2.5 text-[#6B7A87] dark:text-[#9CB4C9]">
+          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
           <span className="text-[14px]">Loading workflows and scoring templates...</span>
         </div>
       ) : activeTab === 'workflows' ? (
         <div className="space-y-6">
           <form
             onSubmit={handleAddStage}
-            className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4 text-[14px]"
+            className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4 text-[14px]"
           >
             <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               Add Review or Approval Gate
@@ -235,7 +235,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
               <select
                 value={stageAppliesTo}
                 onChange={(e) => setStageAppliesTo(e.target.value as any)}
-                className="p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               >
                 <option value="rfp">Competitive RFP</option>
                 <option value="eoi">Expression of Interest</option>
@@ -247,12 +247,12 @@ export const BuyerWorkflowsScoring: React.FC = () => {
                 value={stageName}
                 onChange={(e) => setStageName(e.target.value)}
                 placeholder="Stage name (e.g. Tender Committee Approval)"
-                className="sm:col-span-2 p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="sm:col-span-2 p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               />
               <select
                 value={stageType}
                 onChange={(e) => setStageType(e.target.value as any)}
-                className="p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               >
                 <option value="review">Review Stage</option>
                 <option value="approval">Approval Gate</option>
@@ -260,7 +260,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
               <select
                 value={stageRoleId}
                 onChange={(e) => setStageRoleId(e.target.value)}
-                className="p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               >
                 <option value="">Any Authorized Role</option>
                 {roles.map((r) => (
@@ -272,14 +272,14 @@ export const BuyerWorkflowsScoring: React.FC = () => {
             </div>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-[13px]">
-                <label className="text-[#43525F] dark:text-[#B2C3D2]">SLA target (days):</label>
+                <label className="text-[#43525F] dark:text-[#D3E3F2]">SLA target (days):</label>
                 <input
                   type="number"
                   min={1}
                   max={60}
                   value={stageSlaDays}
                   onChange={(e) => setStageSlaDays(e.target.value)}
-                  className="w-20 p-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                  className="w-20 p-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
                 />
               </div>
               <button
@@ -294,7 +294,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
           </form>
 
           {stages.length === 0 ? (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center text-[14px] text-[#6B7A87]">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-8 text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               No custom workflow stages configured yet. Add your first review or approval gate above.
             </div>
           ) : (
@@ -304,25 +304,25 @@ export const BuyerWorkflowsScoring: React.FC = () => {
                 return (
                   <div
                     key={kind}
-                    className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-5 space-y-3"
+                    className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-5 space-y-3"
                   >
                     <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white uppercase">
                       {kind === 'rfp' ? 'RFP Tenders' : kind === 'eoi' ? 'EOI Calls' : 'Registration Drives'}
                     </h3>
                     {kindStages.length === 0 ? (
-                      <p className="text-[12px] text-[#6B7A87]">No stages defined.</p>
+                      <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">No stages defined.</p>
                     ) : (
                       <div className="space-y-2">
                         {kindStages.map((s) => (
                           <div
                             key={s.id}
-                            className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-start justify-between gap-2 text-[13px]"
+                            className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex items-start justify-between gap-2 text-[13px]"
                           >
                             <div>
                               <div className="font-semibold text-[#10212E] dark:text-white">
                                 {s.sequenceNo}. {s.name}
                               </div>
-                              <div className="text-[11px] text-[#6B7A87]">
+                              <div className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">
                                 {s.stageType === 'approval' ? 'Approval Gate' : 'Review'} ·{' '}
                                 {s.requiredRoleName || 'Any Role'}
                                 {s.slaDays ? ` · ${s.slaDays}d SLA` : ''}
@@ -331,7 +331,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleDeleteStage(s.id)}
-                              className="p-1 text-[#C2412D] hover:bg-rose-50 rounded cursor-pointer"
+                              className="p-1 text-[#C2412D] hover:bg-rose-50 rounded cursor-pointer dark:hover:bg-[#C2412D]/20"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -367,14 +367,14 @@ export const BuyerWorkflowsScoring: React.FC = () => {
               return (
                 <div
                   key={tpl.id}
-                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4"
+                  className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-medium text-[#1F5F99] bg-[#EAF2FA] px-2 py-0.5 rounded-[4px]">
+                    <span className="text-[12px] font-medium text-[#1F5F99] bg-[#EAF2FA] px-2 py-0.5 rounded-[4px] dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                       {tpl.badge}
                     </span>
                     <span
-                      className={`text-[12px] font-mono font-semibold ${
+                      className={`text-[12px] tabular-nums font-semibold ${
                         totalWeight === 100 ? 'text-[#2F8F5B]' : 'text-[#92400E]'
                       }`}
                     >
@@ -390,7 +390,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
                     {tpl.criteria.map((c) => (
                       <div
                         key={c.id}
-                        className="flex items-center justify-between gap-2 py-1.5 border-b border-[#D5E0EA] dark:border-[#1E364A]"
+                        className="flex items-center justify-between gap-2 py-1.5 border-b border-[#D5E0EA] dark:border-[#244157]"
                       >
                         <input
                           type="text"
@@ -410,9 +410,9 @@ export const BuyerWorkflowsScoring: React.FC = () => {
                               onChange={(e) =>
                                 handleUpdateCriterionWeight(tpl.id, c.id, Number(e.target.value) || 0)
                               }
-                              className="w-16 p-1 text-right font-mono font-semibold border border-[#D5E0EA] dark:border-[#1E364A] rounded bg-[#F7FAFD] dark:bg-[#10212E]"
+                              className="w-16 p-1 text-right tabular-nums font-semibold border border-[#D5E0EA] dark:border-[#244157] rounded bg-[#F7FAFD] dark:bg-[#10212E]"
                             />
-                            <span className="text-[#6B7A87]">%</span>
+                            <span className="text-[#6B7A87] dark:text-[#9CB4C9]">%</span>
                           </div>
                         )}
                       </div>
@@ -422,7 +422,7 @@ export const BuyerWorkflowsScoring: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleAddCriterion(tpl.id)}
-                    className="text-[12px] font-medium text-[#1F5F99] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    className="text-[12px] font-medium text-[#1F5F99] hover:underline inline-flex items-center gap-1 cursor-pointer dark:text-[#6FAEE0]"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add criterion</span>

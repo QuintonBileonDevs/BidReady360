@@ -15,6 +15,7 @@ import {
   ConsentGrant,
   AuditEvent,
   NotificationItem,
+  NotificationBulkAction,
   FormTemplate,
   Evaluator,
   AwardDecision,
@@ -23,6 +24,7 @@ import {
 import { ApiUser, ProfileSummary, authApi, callsApi, supplierApi, buyerApi, notificationsApi } from '../services/api';
 import { Language, TRANSLATIONS } from '../translations';
 import { calculateSupplierCompleteness, SupplierCompletenessResult } from '../utils/supplierOnboarding';
+import { ThemeMode, ResolvedTheme, useTheme } from './ThemeContext';
 
 const EMPTY_SUPPLIER: Supplier = {
   id: '',
@@ -81,7 +83,7 @@ const DEFAULT_AWARD_DECISION: AwardDecision = {
 
 export type UserRole = 'public' | 'supplier' | 'buyer' | 'admin';
 export type BuyerSubRole = 'Org admin' | 'Procurement officer' | 'Evaluator' | 'Approver' | 'Auditor';
-export type ThemeMode = 'light' | 'dark';
+export type { ThemeMode, ResolvedTheme };
 
 export const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes of inactivity before automatic logout
 export const INACTIVITY_WARNING_MS = 2 * 60 * 1000;  // 2 minutes warning countdown before expiration
@@ -123,6 +125,7 @@ interface AppContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
   theme: ThemeMode;
+  resolvedTheme: ResolvedTheme;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
   t: (key: string) => string;
@@ -230,6 +233,11 @@ interface AppContextType {
   signConflictDeclaration: (evaluatorId: string, details?: string) => void;
   updateAwardDecision: (updates: Partial<AwardDecision>) => void;
   markNotificationRead: (id: string) => Promise<void>;
+  markNotificationUnread: (id: string) => Promise<void>;
+  toggleNotificationStar: (id: string, starred: boolean) => Promise<void>;
+  toggleNotificationArchive: (id: string, archived: boolean) => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  bulkUpdateNotifications: (ids: string[], action: NotificationBulkAction) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
   addAuditEvent: (event: Omit<AuditEvent, 'id' | 'timestamp'>) => void;
@@ -329,7 +337,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [buyerSubRole, setBuyerSubRole] = useState<BuyerSubRole>('Procurement officer');
   const [currentOrgSlug, setCurrentOrgSlug] = useState<string>('org-grc');
   const [language, setLanguage] = useState<Language>('en');
-  const [theme, setThemeState] = useState<ThemeMode>('light');
+  const { theme, resolvedTheme, setTheme, toggleTheme } = useTheme();
 
   const [activeNav, setActiveNavState] = useState<string>(() => {
     const savedNav = localStorage.getItem('bidready_active_nav');
@@ -709,6 +717,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 message: n.body || n.message || '',
                 timestamp: n.createdAt || '',
                 read: typeof n.isRead === 'boolean' ? n.isRead : Boolean(n.readAt),
+                starred: Boolean(n.isStarred ?? n.starred),
+                archived: Boolean(n.isArchived ?? n.archived ?? n.archivedAt),
+                archivedAt: n.archivedAt || null,
                 type: (['urgent', 'info', 'success', 'warning'].includes(n.priority) ? n.priority : 'info') as NotificationItem['type'],
                 actionLink: n.linkUrl || n.link || undefined,
                 data: n.data || null,
@@ -1245,25 +1256,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const setTheme = (newTheme: ThemeMode) => {
-    setThemeState(newTheme);
-  };
-
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.body.classList.add('dark');
-      document.documentElement.style.colorScheme = 'dark';
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.remove('dark');
-      document.documentElement.style.colorScheme = 'light';
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
+  // Theme preference and OS sync are managed by ThemeProvider (src/context/ThemeContext.tsx)
 
   // Dynamic data states initialized clean from server bootstrap (no localStorage business-state fallbacks)
   const [supplier, setSupplier] = useState<Supplier>(EMPTY_SUPPLIER);
@@ -2325,7 +2318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshNotifications = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const rows = await notificationsApi.list(50);
+      const rows = await notificationsApi.list(100);
       if (!Array.isArray(rows)) return;
       const mapped: NotificationItem[] = rows.map((n: any) => ({
         id: n.id,
@@ -2339,6 +2332,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: n.body || n.message || '',
         timestamp: n.createdAt || '',
         read: typeof n.isRead === 'boolean' ? n.isRead : Boolean(n.readAt),
+        starred: Boolean(n.isStarred ?? n.starred),
+        archived: Boolean(n.isArchived ?? n.archived ?? n.archivedAt),
+        archivedAt: n.archivedAt || null,
         type: (['urgent', 'info', 'success', 'warning'].includes(n.priority) ? n.priority : 'info') as NotificationItem['type'],
         actionLink: n.linkUrl || n.link || undefined,
         data: n.data || null,
@@ -2382,8 +2378,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const markNotificationUnread = async (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: false } : n))
+    );
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.markUnread(id);
+    } catch {
+      await refreshNotifications();
+    }
+  };
+
+  const toggleNotificationStar = async (id: string, starred: boolean) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, starred } : n))
+    );
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.setStarred(id, starred);
+    } catch {
+      await refreshNotifications();
+    }
+  };
+
+  const toggleNotificationArchive = async (id: string, archived: boolean) => {
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === id
+          ? { ...n, archived, archivedAt: archived ? new Date().toISOString() : null }
+          : n
+      )
+    );
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.setArchived(id, archived);
+    } catch {
+      await refreshNotifications();
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.deleteNotification(id);
+    } catch {
+      await refreshNotifications();
+    }
+  };
+
+  const bulkUpdateNotifications = async (ids: string[], action: NotificationBulkAction) => {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    const nowIso = new Date().toISOString();
+    setNotifications((prev) => {
+      if (action === 'delete') {
+        return prev.filter((n) => !idSet.has(n.id));
+      }
+      return prev.map((n) => {
+        if (!idSet.has(n.id)) return n;
+        switch (action) {
+          case 'read':
+            return { ...n, read: true };
+          case 'unread':
+            return { ...n, read: false };
+          case 'star':
+            return { ...n, starred: true };
+          case 'unstar':
+            return { ...n, starred: false };
+          case 'archive':
+            return { ...n, archived: true, archivedAt: n.archivedAt || nowIso };
+          case 'unarchive':
+            return { ...n, archived: false, archivedAt: null };
+          default:
+            return n;
+        }
+      });
+    });
+    if (!isAuthenticated) return;
+    try {
+      await notificationsApi.bulkAction(ids, action);
+    } catch {
+      await refreshNotifications();
+    }
+  };
+
   const markAllNotificationsRead = async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev) => prev.map((n) => (n.archived ? n : { ...n, read: true })));
     if (!isAuthenticated) return;
     try {
       await notificationsApi.markAllRead();
@@ -2404,6 +2486,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         language,
         setLanguage,
         theme,
+        resolvedTheme,
         setTheme,
         toggleTheme,
         t,
@@ -2474,6 +2557,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         signConflictDeclaration,
         updateAwardDecision,
         markNotificationRead,
+        markNotificationUnread,
+        toggleNotificationStar,
+        toggleNotificationArchive,
+        deleteNotification,
+        bulkUpdateNotifications,
         markAllNotificationsRead,
         refreshNotifications,
         addAuditEvent,

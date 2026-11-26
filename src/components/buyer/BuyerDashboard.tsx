@@ -259,7 +259,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
     <div className="space-y-12">
       {/* 1. Branded Page Header */}
       <div
-        className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 p-6 space-y-4"
+        className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] border-l-4 p-6 space-y-4"
         style={{ borderLeftColor: brandColor }}
       >
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -276,12 +276,12 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   {orgDisplayName}
                 </h1>
                 {brandDomain && (
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87]">
+                  <span className="text-[11px] tabular-nums px-2 py-0.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] text-[#6B7A87] dark:text-[#9CB4C9]">
                     https://{brandDomain}
                   </span>
                 )}
               </div>
-              <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+              <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
                 {brandSubtext ? `${brandSubtext} · ` : ''}Signed in as <strong>{buyerSubRole}</strong>
               </p>
             </div>
@@ -291,7 +291,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('form-builder')}
-              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer"
+              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer"
             >
               Form builder
             </button>
@@ -308,7 +308,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         </div>
 
         {brandWelcomeNotice && (
-          <div className="pt-3 border-t border-[#D5E0EA]/70 dark:border-[#1E364A] text-[13px] text-[#43525F] dark:text-[#B2C3D2] flex items-center justify-between gap-3">
+          <div className="pt-3 border-t border-[#D5E0EA]/70 dark:border-[#244157] text-[13px] text-[#43525F] dark:text-[#D3E3F2] flex items-center justify-between gap-3">
             <span>{brandWelcomeNotice}</span>
             <button
               type="button"
@@ -333,9 +333,8 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             <div
               key={item.id}
               onClick={() => onNavigate(item.target)}
-              className={`bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] ${
-                item.count > 0 ? `border-l-4 ${item.border}` : ''
-              } p-3.5 flex flex-col justify-between hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors cursor-pointer group`}
+              className={`bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] ${
+                item.count > 0 ? `border-l-4 ${item.border}` : '' } p-3.5 flex flex-col justify-between hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors cursor-pointer group`}
             >
               <div className="space-y-1">
                 <div className="font-heading font-semibold text-[26px] text-[#10212E] dark:text-white leading-none">
@@ -344,7 +343,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 <div className="text-[13px] font-medium text-[#10212E] dark:text-white leading-snug">
                   {item.label}
                 </div>
-                <div className="text-[12px] text-[#6B7A87] leading-tight line-clamp-1">
+                <div className="text-[12px] text-[#6B7A87] leading-tight line-clamp-1 dark:text-[#9CB4C9]">
                   {item.sublabel}
                 </div>
               </div>
@@ -367,9 +366,9 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           {keyFigures.map((fig, idx) => (
             <div
               key={idx}
-              className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-2"
+              className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-2"
             >
-              <div className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+              <div className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
                 {fig.label}
               </div>
               <div className="font-heading font-semibold text-[32px] text-[#10212E] dark:text-white tabular-nums leading-none">
@@ -385,14 +384,14 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
       {/* 4. Two Charts Side-by-Side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
           <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
             Calls by stage
           </h3>
           <BuyerCallsByStageChart calls={calls} />
         </div>
 
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
           <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
             Value by category
           </h3>
@@ -415,10 +414,10 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
           </button>
         </div>
 
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
+            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px] dark:text-[#9CB4C9]">
                 <tr>
                   <th className="p-4">Call reference</th>
                   <th className="p-4">Title</th>
@@ -430,10 +429,10 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                   <th className="p-4 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
                 {calls.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-6 text-center text-[13px] text-[#6B7A87]">
+                    <td colSpan={8} className="p-6 text-center text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       No procurement calls published yet for {orgDisplayName}.
                     </td>
                   </tr>
@@ -450,7 +449,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         </td>
                         <td className="p-4 font-medium max-w-xs line-clamp-1">{c.title}</td>
                         <td className="p-4">
-                          <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                          <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                             {c.type}
                           </span>
                         </td>
@@ -460,7 +459,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                         <td className="p-4 text-center tabular-nums font-semibold">
                           {c.applicationsCount}
                         </td>
-                        <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2]">
+                        <td className="p-4 tabular-nums text-[#43525F] dark:text-[#D3E3F2]">
                           {c.closingDate} ({c.daysRemaining >= 0 ? `${c.daysRemaining} days left` : 'Closed'})
                         </td>
                         <td className="p-4">
@@ -483,7 +482,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                               onSelectCall(c.id);
                               onNavigate('calls');
                             }}
-                            className="px-3 py-1.5 border border-[#D5E0EA] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white text-[13px] font-medium rounded-[4px] cursor-pointer"
+                            className="px-3 py-1.5 border border-[#D5E0EA] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white text-[13px] font-medium rounded-[4px] cursor-pointer dark:border-[#244157] dark:hover:bg-[#162C3D]"
                           >
                             Manage
                           </button>
@@ -501,30 +500,30 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
       {/* 6. Applications Awaiting Review & Governance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         {/* Panel 1: Applications to review */}
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Applications awaiting review
               </h3>
-              <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+              <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                 {pendingApps.length} pending
               </span>
             </div>
 
             {pendingApps.length === 0 ? (
-              <p className="text-[13px] text-[#6B7A87] py-4">
+              <p className="text-[13px] text-[#6B7A87] py-4 dark:text-[#9CB4C9]">
                 No supplier applications awaiting review right now.
               </p>
             ) : (
-              <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+              <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157]">
                 {pendingApps.slice(0, 3).map((app) => (
                   <div key={app.id} className="py-3 flex items-center justify-between gap-3">
                     <div className="space-y-0.5">
                       <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
                         {app.supplierName}
                       </span>
-                      <span className="text-[12px] text-[#6B7A87]">
+                      <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                         {app.callNumber} · Submitted {app.submittedAt || 'Recently'}
                       </span>
                     </div>
@@ -541,7 +540,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-4">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-4">
             <button
               type="button"
               onClick={() => onNavigate('applications')}
@@ -553,7 +552,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         </div>
 
         {/* Panel 2: Governance Safeguards & Clarification Queue */}
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
@@ -570,7 +569,7 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
 
             <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] space-y-3 text-[14px]">
               <div className="flex items-center justify-between">
-                <span className="text-[#43525F] dark:text-[#B2C3D2]">Unanswered clarifications</span>
+                <span className="text-[#43525F] dark:text-[#D3E3F2]">Unanswered clarifications</span>
                 <span
                   className={`text-[12px] px-2 py-0.5 rounded-[4px] font-medium ${
                     unansweredClarifications.length > 0
@@ -582,21 +581,21 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#43525F] dark:text-[#B2C3D2]">Awards pending approval</span>
-                <span className="bg-[#FFFBEB] text-[#92400E] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                <span className="text-[#43525F] dark:text-[#D3E3F2]">Awards pending approval</span>
+                <span className="bg-[#FFFBEB] text-[#92400E] text-[12px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#E8A33D]/20 dark:text-[#FCD34D]">
                   {pendingAwards.length} pending
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[#43525F] dark:text-[#B2C3D2]">Cryptographic sealed envelopes</span>
-                <span className="bg-[#ECFDF5] text-[#2F8F5B] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                <span className="text-[#43525F] dark:text-[#D3E3F2]">Cryptographic sealed envelopes</span>
+                <span className="bg-[#ECFDF5] text-[#2F8F5B] text-[12px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#2F8F5B]/20">
                   SHA-256 Sealed
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-4">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-4">
             <button
               type="button"
               onClick={() => onNavigate('roster')}
@@ -609,13 +608,13 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
       </div>
 
       {/* 7. Audit Events Summary */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               Procurement fairness & audit trail
             </h2>
-            <p className="text-[13px] text-[#6B7A87]">
+            <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Chronological audit entries recorded for {orgDisplayName}.
             </p>
           </div>
@@ -629,18 +628,18 @@ export const BuyerDashboard: React.FC<BuyerDashboardProps> = ({
         </div>
 
         {auditEvents.length === 0 ? (
-          <p className="text-[13px] text-[#6B7A87] py-2">
+          <p className="text-[13px] text-[#6B7A87] py-2 dark:text-[#9CB4C9]">
             No recent audit events loaded in this session.
           </p>
         ) : (
-          <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[13px]">
+          <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[13px]">
             {auditEvents.slice(0, 4).map((evt) => (
               <div key={evt.id} className="py-2 flex items-center justify-between">
                 <div className="space-y-0.5">
                   <span className="font-medium text-[#10212E] dark:text-white block line-clamp-1">
                     {evt.action}: {evt.details}
                   </span>
-                  <span className="text-[12px] text-[#6B7A87]">
+                  <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     {evt.actorName} · {evt.timestamp}
                   </span>
                 </div>

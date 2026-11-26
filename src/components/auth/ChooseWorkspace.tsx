@@ -56,7 +56,7 @@ export const ChooseWorkspace: React.FC<ChooseWorkspaceProps> = ({ onNavigate }) 
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Choose workspace
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Select the organization or supplier company you wish to work in today.
           </p>
         </div>
@@ -66,7 +66,7 @@ export const ChooseWorkspace: React.FC<ChooseWorkspaceProps> = ({ onNavigate }) 
             <div
               key={ws.id}
               onClick={() => handleSelect(ws)}
-              className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors cursor-pointer space-y-2 group"
+              className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors cursor-pointer space-y-2 group"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
@@ -80,13 +80,13 @@ export const ChooseWorkspace: React.FC<ChooseWorkspaceProps> = ({ onNavigate }) 
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[13px] text-[#6B7A87]">{ws.type}</p>
+                  <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">{ws.type}</p>
                 </div>
 
-                <ChevronRight className="w-4 h-4 text-[#6B7A87] group-hover:translate-x-1 transition-transform shrink-0 mt-1" />
+                <ChevronRight className="w-4 h-4 text-[#6B7A87] group-hover:translate-x-1 transition-transform shrink-0 mt-1 dark:text-[#9CB4C9]" />
               </div>
 
-              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                 <span>Role: {ws.role}</span>
                 <span className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
                   Open workspace →
@@ -96,7 +96,7 @@ export const ChooseWorkspace: React.FC<ChooseWorkspaceProps> = ({ onNavigate }) 
           ))}
         </div>
 
-        <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-[14px] text-[#6B7A87]">
+        <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
           <span>Have an invitation to another entity?</span>
           <button
             type="button"

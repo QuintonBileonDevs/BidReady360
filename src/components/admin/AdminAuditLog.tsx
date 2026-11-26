@@ -86,12 +86,12 @@ export const AdminAuditLog: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Statutory audit log
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Cross-tenant append-only cryptographic record of administrative approvals, bids, awards, consent grants, and tender operations.
           </p>
         </div>
@@ -101,7 +101,7 @@ export const AdminAuditLog: React.FC = () => {
             type="button"
             onClick={loadLogs}
             disabled={isLoading}
-            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:bg-[#F7FAFD] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] hover:bg-[#F7FAFD] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer dark:hover:bg-[#162C3D]"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -119,7 +119,7 @@ export const AdminAuditLog: React.FC = () => {
             type="button"
             onClick={handleExportCSV}
             disabled={events.length === 0}
-            className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#132635] rounded-[6px] text-[14px] font-medium transition-colors inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] rounded-[6px] text-[14px] font-medium transition-colors inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
             <span>Export CSV</span>
@@ -142,7 +142,7 @@ export const AdminAuditLog: React.FC = () => {
           className={`p-4 rounded-[12px] border text-[13px] flex flex-wrap items-center justify-between gap-3 ${
             verifyResult.valid
               ? 'bg-[#ECFDF5] dark:bg-[#065F46]/20 border-[#A7F3D0] text-[#065F46] dark:text-[#A7F3D0]'
-              : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 text-[#8E2A1B] dark:text-rose-200'
+              : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 text-[#8E2A1B] dark:text-rose-200 dark:border-[#C2412D]/40'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ export const AdminAuditLog: React.FC = () => {
             </span>
           </div>
           {verifyResult.latestHash && (
-            <span className="font-mono text-[11px]">Tip: {String(verifyResult.latestHash).slice(0, 16)}…</span>
+            <span className="tabular-nums text-[11px]">Tip: {String(verifyResult.latestHash).slice(0, 16)}…</span>
           )}
         </div>
       )}
@@ -171,15 +171,15 @@ export const AdminAuditLog: React.FC = () => {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-[13px]">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-[13px]">
         <div className="relative lg:col-span-2">
-          <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2 dark:text-[#9CB4C9]" />
           <input
             type="text"
             placeholder="Search details, action, actor..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+            className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
           />
         </div>
         <input
@@ -187,12 +187,12 @@ export const AdminAuditLog: React.FC = () => {
           placeholder="Actor name/email"
           value={actorFilter}
           onChange={(e) => setActorFilter(e.target.value)}
-          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
         />
         <select
           value={entityTypeFilter}
           onChange={(e) => setEntityTypeFilter(e.target.value)}
-          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
         >
           <option value="">All entities</option>
           <option value="organization">Organization</option>
@@ -219,14 +219,14 @@ export const AdminAuditLog: React.FC = () => {
           aria-label="From date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
-          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
         />
         <input
           type="date"
           aria-label="To date"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}
-          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+          className="px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
         />
         <div className="sm:col-span-2 lg:col-span-6 flex items-center justify-between gap-3 pt-1">
           <input
@@ -234,7 +234,7 @@ export const AdminAuditLog: React.FC = () => {
             placeholder="Filter by action code (e.g. ADMIN_APPROVED, ADMIN_UNLOCKED, DEBARMENT)..."
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
-            className="flex-1 px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+            className="flex-1 px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
           />
           {(searchQuery || actorFilter || actionFilter || entityTypeFilter || fromDate || toDate) && (
             <button
@@ -247,7 +247,7 @@ export const AdminAuditLog: React.FC = () => {
                 setFromDate('');
                 setToDate('');
               }}
-              className="text-[12px] text-[#1F5F99] font-medium hover:underline cursor-pointer shrink-0"
+              className="text-[12px] text-[#1F5F99] font-medium hover:underline cursor-pointer shrink-0 dark:text-[#6FAEE0]"
             >
               Clear filters
             </button>
@@ -256,20 +256,20 @@ export const AdminAuditLog: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] overflow-hidden">
         {isLoading ? (
-          <div className="p-12 flex items-center justify-center gap-2 text-[#6B7A87] text-[14px]">
-            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+          <div className="p-12 flex items-center justify-center gap-2 text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
+            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span>Querying audit ledger...</span>
           </div>
         ) : events.length === 0 ? (
-          <div className="p-12 text-center text-[#6B7A87] text-[15px]">
+          <div className="p-12 text-center text-[#6B7A87] text-[15px] dark:text-[#9CB4C9]">
             No audit events match your current filters.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
+            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px] dark:text-[#9CB4C9]">
                 <tr>
                   <th className="p-4">Timestamp</th>
                   <th className="p-4">Actor</th>
@@ -278,26 +278,26 @@ export const AdminAuditLog: React.FC = () => {
                   <th className="p-4">Details</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
                 {events.map((evt) => (
                   <tr key={evt.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
-                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] whitespace-nowrap text-[13px]">
+                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#D3E3F2] whitespace-nowrap text-[13px]">
                       {evt.timestamp}
                     </td>
                     <td className="p-4">
                       <div className="font-semibold text-[13px]">{evt.actorName}</div>
-                      <div className="text-[11px] text-[#6B7A87]">{evt.actorRole}</div>
+                      <div className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">{evt.actorRole}</div>
                     </td>
-                    <td className="p-4 text-[12px] text-[#43525F] dark:text-[#B2C3D2]">
+                    <td className="p-4 text-[12px] text-[#43525F] dark:text-[#D3E3F2]">
                       <div className="capitalize">{(evt.entityType || 'system').replace(/_/g, ' ')}</div>
                       {evt.rowHash && (
-                        <div className="font-mono text-[10px] text-[#6B7A87]">#{String(evt.rowHash).slice(0, 8)}</div>
+                        <div className="tabular-nums text-[10px] text-[#6B7A87] dark:text-[#9CB4C9]">#{String(evt.rowHash).slice(0, 8)}</div>
                       )}
                     </td>
                     <td className="p-4 font-medium text-[#1F5F99] dark:text-[#6FAEE0] text-[13px]">
                       {evt.action}
                     </td>
-                    <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] max-w-md text-[13px]">
+                    <td className="p-4 text-[#43525F] dark:text-[#D3E3F2] max-w-md text-[13px]">
                       {evt.details}
                     </td>
                   </tr>

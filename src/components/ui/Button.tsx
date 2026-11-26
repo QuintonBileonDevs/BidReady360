@@ -26,7 +26,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     // 6px control radius per tokens
     const baseStyles =
-      'inline-flex items-center justify-center font-medium font-sans rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5F99] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none select-none tracking-tight cursor-pointer';
+      'inline-flex items-center justify-center font-medium font-sans rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5F99] dark:focus-visible:ring-[#6FAEE0] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#10212E] disabled:opacity-50 disabled:pointer-events-none select-none tracking-tight cursor-pointer';
 
     const sizeStyles = {
       sm: 'text-xs h-8 px-3 gap-1.5',
@@ -36,11 +36,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       primary:
-        'bg-[#1F5F99] text-white hover:bg-[#184b7a] active:bg-[#12385b] border border-[#1F5F99] shadow-subtle',
+        'bg-[#1F5F99] text-white hover:bg-[#184b7a] active:bg-[#12385b] border border-[#1F5F99] dark:bg-[#6FAEE0] dark:text-[#10212E] dark:hover:bg-[#82BCE8] dark:active:bg-[#5B9DD2] dark:border-[#6FAEE0] shadow-subtle',
       secondary:
-        'bg-white dark:bg-[#132635] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#1A3347] border border-[#D5E0EA] dark:border-[#1E364A] shadow-subtle',
+        'bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white hover:bg-[#EAF2FA] dark:hover:bg-[#244157] border border-[#D5E0EA] dark:border-[#244157] shadow-subtle',
       ghost:
-        'bg-transparent text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3E] hover:text-[#10212E] dark:hover:text-white',
+        'bg-transparent text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] hover:text-[#10212E] dark:hover:text-white',
       destructive:
         'bg-[#C2412D] text-white hover:bg-[#a63624] active:bg-[#8b2d1d] border border-[#C2412D]',
       'outline-dark':

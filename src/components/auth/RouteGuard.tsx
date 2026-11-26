@@ -172,7 +172,7 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
   if (isRoleMismatch) {
     return (
       <div className="py-12 sm:py-16 flex items-center justify-center">
-        <div className="w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-8 shadow-elevated text-center space-y-6">
+        <div className="w-full max-w-lg bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] p-8 shadow-elevated text-center space-y-6">
           <div className="w-14 h-14 mx-auto rounded-full bg-amber-50 dark:bg-amber-950/40 text-[#E8A33D] flex items-center justify-center border border-amber-200 dark:border-amber-900/50">
             <ShieldAlert className="w-7 h-7" strokeWidth={1.5} />
           </div>
@@ -184,10 +184,10 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
             <h2 className="font-heading font-semibold text-[24px] text-[#10212E] dark:text-white">
               Authorized role required
             </h2>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               The page <strong>"{routeInfo.title}"</strong> requires an active <strong>{requiredRole}</strong> account. You are currently logged in as a <strong>{role}</strong>.
             </p>
-            <p className="text-[13px] text-[#6B7A87] italic">
+            <p className="text-[13px] text-[#6B7A87] italic dark:text-[#9CB4C9]">
               {routeInfo.purpose}
             </p>
           </div>
@@ -218,7 +218,7 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
 
   return (
     <div className="py-12 sm:py-16 flex items-center justify-center">
-      <div className="w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-8 shadow-elevated text-center space-y-6">
+      <div className="w-full max-w-lg bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] p-8 shadow-elevated text-center space-y-6">
         <div className="w-14 h-14 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center border border-[#C9D9E8] dark:border-[#1F5F99]/40">
           <Lock className="w-7 h-7" strokeWidth={1.5} />
         </div>
@@ -230,10 +230,10 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
           <h2 className="font-heading font-semibold text-[24px] text-[#10212E] dark:text-white">
             Sign in required
           </h2>
-          <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+          <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
             Access to <strong>"{routeInfo.title}"</strong> is protected. In compliance with the Public Procurement Act, confidential documents, sealed tenders, and operational records require an authenticated session.
           </p>
-          <p className="text-[13px] text-[#6B7A87] italic">
+          <p className="text-[13px] text-[#6B7A87] italic dark:text-[#9CB4C9]">
             {routeInfo.purpose}
           </p>
         </div>
@@ -255,11 +255,11 @@ export const RouteGuard: React.FC<RouteGuardProps> = ({
           </Button>
         </div>
 
-        <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
           <button
             type="button"
             onClick={() => setActiveNav('opportunities')}
-            className="text-[13px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1.5 cursor-pointer"
+            className="text-[13px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1.5 cursor-pointer dark:text-[#9CB4C9]"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Browse public opportunities without signing in</span>

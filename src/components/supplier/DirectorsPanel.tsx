@@ -228,8 +228,8 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-lg bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="w-full max-w-lg bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#244157]">
           <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
             {editingDirector ? 'Edit director' : 'Add director'}
           </h3>
@@ -274,7 +274,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                 markDirty();
               }}
               placeholder="e.g. Kagiso Phiri"
-              className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+              className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
             />
           </div>
 
@@ -289,7 +289,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                   setRole(e.target.value);
                   markDirty();
                 }}
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
               >
                 <option value="director">Director</option>
                 <option value="shareholder">Shareholder</option>
@@ -304,7 +304,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                 <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                   Ownership percentage *
                 </label>
-                <span className="text-[12px] text-[#6B7A87]">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Max: <strong className="text-[#10212E] dark:text-white tabular-nums">{remainingEquityAvailable}%</strong>
                 </span>
               </div>
@@ -324,9 +324,9 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                   markDirty();
                 }}
                 placeholder={remainingEquityAvailable > 0 ? `e.g. ${Math.min(50, remainingEquityAvailable)}` : '0'}
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
               />
-              <p className="text-[12px] text-[#6B7A87]">
+              <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 {otherDirectorsOwnership > 0 ? (
                   <>Currently <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">{otherDirectorsOwnership}%</span> allocated across other directors. Total equity cannot exceed 100%.</>
                 ) : (
@@ -351,7 +351,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                   setFormError(null);
                   markDirty();
                 }}
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
               >
                 <option value="OMANG">National ID (Omang)</option>
                 <option value="PASSPORT">Passport</option>
@@ -376,7 +376,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                   className={`w-full px-3 py-2 border rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] ${
                     formError?.field === 'gender'
                       ? 'border-red-400 dark:border-red-600'
-                      : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                      : 'border-[#D5E0EA] dark:border-[#244157]'
                   }`}
                 >
                   <option value="">Select gender</option>
@@ -397,7 +397,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                     markDirty();
                   }}
                   placeholder="e.g. South African"
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
             )}
@@ -426,7 +426,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
               className={`w-full px-3 py-2 border rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums ${
                 liveIdError
                   ? 'border-red-400 dark:border-red-600'
-                  : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                  : 'border-[#D5E0EA] dark:border-[#244157]'
               }`}
             />
             {liveIdError ? (
@@ -434,7 +434,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                 {liveIdError}
               </p>
             ) : identityType === 'OMANG' ? (
-              <p className="text-[12px] text-[#6B7A87]">
+              <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 {editingDirector?.hasId && editingDirector.idLast4
                   ? `Saved ID ending ${editingDirector.idLast4}. Leave blank to keep existing ID, or enter a 9-digit Omang (5th digit: 1 = male, 2 = female).`
                   : '9 digits only. The 5th digit indicates gender (1 = male, 2 = female).'}
@@ -455,7 +455,7 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                   markDirty();
                 }}
                 placeholder="e.g. name@company.co.bw"
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
               />
             </div>
 
@@ -471,16 +471,16 @@ const DirectorFormModal: React.FC<DirectorFormModalProps> = ({
                   markDirty();
                 }}
                 placeholder="e.g. +267 71 234 567"
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
               />
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="flex justify-end gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium hover:bg-slate-50 dark:hover:bg-[#10212E] cursor-pointer"
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium hover:bg-slate-50 dark:hover:bg-[#10212E] cursor-pointer"
             >
               Cancel
             </button>
@@ -525,9 +525,9 @@ const DeleteDirectorModal: React.FC<DeleteDirectorModalProps> = ({
     <div
       role="alertdialog"
       aria-labelledby="remove-director-title"
-      className="w-full max-w-md bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 shadow-2xl space-y-4"
+      className="w-full max-w-md bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] p-6 shadow-2xl space-y-4"
     >
-      <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex items-center justify-between pb-3 border-b border-[#D5E0EA] dark:border-[#244157]">
         <h3 id="remove-director-title" className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
           Remove director?
         </h3>
@@ -541,7 +541,7 @@ const DeleteDirectorModal: React.FC<DeleteDirectorModalProps> = ({
         </button>
       </div>
 
-      <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+      <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
         Remove {director.fullName} from your directors list?
       </p>
 
@@ -557,7 +557,7 @@ const DeleteDirectorModal: React.FC<DeleteDirectorModalProps> = ({
           autoFocus
           disabled={isRemoving}
           onClick={onClose}
-          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer disabled:opacity-50"
+          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer disabled:opacity-50"
         >
           Cancel
         </button>
@@ -732,13 +732,13 @@ export const DirectorsPanel: React.FC = () => {
   };
 
   return (
-    <div id="field-directors" className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+    <div id="field-directors" className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div>
           <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
             People and directors
           </h2>
-          <p className="text-[14px] text-[#6B7A87] mt-0.5">
+          <p className="text-[14px] text-[#6B7A87] mt-0.5 dark:text-[#9CB4C9]">
             Statutory requirement: Resident directors and beneficial owners with total ownership tallying exactly 100%.
           </p>
         </div>
@@ -761,46 +761,46 @@ export const DirectorsPanel: React.FC = () => {
       )}
 
       {/* Ownership Total Summary Bar */}
-      <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px]">
+      <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px]">
         <div className="flex items-center gap-2.5">
-          <span className="text-[#6B7A87]">Ownership total:</span>
+          <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Ownership total:</span>
           <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white tabular-nums">
             {totalOwnership}% of 100%
           </span>
           {directors.length > 0 && Math.round(totalOwnership) === 100 ? (
-            <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
+            <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1 dark:bg-[#2F8F5B]/20">
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Balanced (100% equity allocated)</span>
             </span>
           ) : totalOwnership > 100 ? (
-            <span className="bg-[#FEF2F2] text-[#C2412D] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
+            <span className="bg-[#FEF2F2] text-[#C2412D] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1 dark:bg-[#C2412D]/20">
               <AlertCircle className="w-3.5 h-3.5" />
               <span>Exceeds 100% allocation</span>
             </span>
           ) : (
-            <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1">
+            <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1 dark:bg-[#E8A33D]/20 dark:text-[#FCD34D]">
               <Info className="w-3.5 h-3.5" />
               <span>{100 - totalOwnership}% still to allocate</span>
             </span>
           )}
         </div>
-        <span className="text-[13px] text-[#6B7A87]">
+        <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
           {directors.length} person{directors.length === 1 ? '' : 's'} recorded
         </span>
       </div>
 
       {/* List of saved people */}
       {isLoading ? (
-        <div className="flex items-center justify-center p-12 space-x-3 text-[#6B7A87] bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A]">
-          <Loader2 className="w-6 h-6 animate-spin text-[#1F5F99]" />
+        <div className="flex items-center justify-center p-12 space-x-3 text-[#6B7A87] bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] dark:text-[#9CB4C9]">
+          <Loader2 className="w-6 h-6 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
           <span className="text-[14px] font-medium">Loading people and directors records...</span>
         </div>
       ) : directors.length === 0 ? (
-        <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center space-y-3">
+        <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#244157] rounded-[8px] text-center space-y-3">
           <p className="text-[15px] font-semibold text-[#10212E] dark:text-white">
             No directors added yet
           </p>
-          <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto">
+          <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto dark:text-[#9CB4C9]">
             Add at least one director or shareholder with shareholdings totaling exactly 100%.
           </p>
           <button
@@ -813,9 +813,9 @@ export const DirectorsPanel: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
-          <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-            <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px]">
+        <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#244157] rounded-[8px]">
+          <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+            <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px] dark:text-[#9CB4C9]">
               <tr>
                 <th className="p-4">Name</th>
                 <th className="p-4">Role</th>
@@ -825,7 +825,7 @@ export const DirectorsPanel: React.FC = () => {
                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+            <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
               {directors.map((dir) => {
                 const displayId = dir.idLast4
                   ? `ending ${dir.idLast4}`
@@ -839,10 +839,10 @@ export const DirectorsPanel: React.FC = () => {
                     <td className="p-4">
                       <div className="space-y-0.5">
                         <span className="font-semibold block">{dir.fullName}</span>
-                        <span className="text-[13px] text-[#6B7A87] block">{dir.nationality}</span>
+                        <span className="text-[13px] text-[#6B7A87] block dark:text-[#9CB4C9]">{dir.nationality}</span>
                       </div>
                     </td>
-                    <td className="p-4 capitalize text-[#43525F] dark:text-[#B2C3D2]">{dir.personRole.replace('_', ' ')}</td>
+                    <td className="p-4 capitalize text-[#43525F] dark:text-[#D3E3F2]">{dir.personRole.replace('_', ' ')}</td>
                     <td className="p-4 text-right font-semibold tabular-nums text-[15px]">
                       {dir.ownershipPercent}%
                     </td>
@@ -854,7 +854,7 @@ export const DirectorsPanel: React.FC = () => {
                             {dir.identityType || 'OMANG'}
                           </span>
                           {dir.gender ? (
-                            <span className="text-[11px] px-2 py-0.5 bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] rounded font-medium capitalize inline-block">
+                            <span className="text-[11px] px-2 py-0.5 bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] rounded font-medium capitalize inline-block">
                               {dir.gender}
                             </span>
                           ) : needsGender ? (
@@ -872,7 +872,7 @@ export const DirectorsPanel: React.FC = () => {
                     <td className="p-4">
                       {dir.kycStatus === 'verified' ? (
                         <span
-                          className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#ECFDF5] text-[#2F8F5B]"
+                          className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#ECFDF5] text-[#2F8F5B] dark:bg-[#2F8F5B]/20"
                           title={dir.kycVerifiedAt ? `Verified by admin on ${new Date(dir.kycVerifiedAt).toLocaleDateString()}` : 'Verified by platform admin'}
                         >
                           <ShieldCheck className="w-3 h-3" />
@@ -880,7 +880,7 @@ export const DirectorsPanel: React.FC = () => {
                         </span>
                       ) : dir.kycStatus === 'failed' ? (
                         <div className="space-y-0.5">
-                          <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#FEF2F2] text-[#C2412D]">
+                          <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium inline-flex items-center gap-1 bg-[#FEF2F2] text-[#C2412D] dark:bg-[#C2412D]/20">
                             <AlertCircle className="w-3 h-3" />
                             <span>Rejected</span>
                           </span>
@@ -913,7 +913,7 @@ export const DirectorsPanel: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(dir)}
-                          className="px-2.5 py-1 text-[13px] font-medium text-[#1F5F99] dark:text-[#38BDF8] bg-[#EAF2FA] dark:bg-[#1E364A] hover:bg-[#dbeafe] dark:hover:bg-[#254661] rounded-[4px] inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          className="px-2.5 py-1 text-[13px] font-medium text-[#1F5F99] dark:text-[#38BDF8] bg-[#EAF2FA] dark:bg-[#244157] hover:bg-[#dbeafe] dark:hover:bg-[#254661] rounded-[4px] inline-flex items-center gap-1 cursor-pointer transition-colors"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                           <span>Edit</span>

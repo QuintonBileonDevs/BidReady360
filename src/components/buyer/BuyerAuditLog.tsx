@@ -133,7 +133,7 @@ export const BuyerAuditLog: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Immutable Trail
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">· {events.length} Persisted Forensic Actions</span>
@@ -151,7 +151,7 @@ export const BuyerAuditLog: React.FC = () => {
             type="button"
             onClick={loadLogs}
             disabled={isLoading}
-            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -170,9 +170,9 @@ export const BuyerAuditLog: React.FC = () => {
           <button
             type="button"
             onClick={handleExportCSV}
-            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer dark:hover:bg-[#162C3D]"
           >
-            <Download className="w-4 h-4 text-[#1F5F99]" />
+            <Download className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span>Export Audit CSV</span>
           </button>
 
@@ -191,8 +191,8 @@ export const BuyerAuditLog: React.FC = () => {
         <div
           className={`p-4 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-3 ${
             verifyResult.valid
-              ? 'bg-emerald-50 border-emerald-200 text-[#065F46]'
-              : 'bg-rose-50 border-rose-200 text-[#8E2A1B]'
+              ? 'bg-emerald-50 border-emerald-200 text-[#065F46] dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40'
+              : 'bg-rose-50 border-rose-200 text-[#8E2A1B] dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export const BuyerAuditLog: React.FC = () => {
             </span>
           </div>
           {verifyResult.latestHash && (
-            <span className="font-mono text-[11px]">
+            <span className="tabular-nums text-[11px]">
               Tip: {String(verifyResult.latestHash).slice(0, 16)}…
             </span>
           )}
@@ -220,13 +220,13 @@ export const BuyerAuditLog: React.FC = () => {
       )}
 
       {errorMsg && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-[#C2412D]">
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-[#C2412D] dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40">
           {errorMsg}
         </div>
       )}
 
       {/* Filter controls */}
-      <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs dark:bg-[#162C3D] dark:border-[#244157]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -234,14 +234,14 @@ export const BuyerAuditLog: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search actor, action, or entity ID..."
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
           />
         </div>
 
         <select
           value={selectedRoleFilter}
           onChange={(e) => setSelectedRoleFilter(e.target.value)}
-          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
         >
           <option value="ALL">All Actor Roles</option>
           <option value="Supplier">Supplier</option>
@@ -255,7 +255,7 @@ export const BuyerAuditLog: React.FC = () => {
         <select
           value={selectedEntityFilter}
           onChange={(e) => setSelectedEntityFilter(e.target.value)}
-          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
         >
           <option value="ALL">All Entity Types</option>
           <option value="Bid">Bid Envelope</option>
@@ -269,9 +269,9 @@ export const BuyerAuditLog: React.FC = () => {
       </div>
 
       {/* Audit Log Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs dark:bg-[#1C364B] dark:border-[#244157]">
         {isLoading ? (
-          <div className="p-10 flex items-center justify-center gap-2 text-xs text-slate-500">
+          <div className="p-10 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-[#9CB4C9]">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>Querying append-only audit ledger...</span>
           </div>
@@ -279,15 +279,15 @@ export const BuyerAuditLog: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                   <th className="py-3 px-4 w-44">Timestamp (CAT)</th>
                   <th className="py-3 px-4 w-48">Actor & Organization</th>
                   <th className="py-3 px-4 w-48">Action & Hash</th>
                   <th className="py-3 px-4">Event Details</th>
-                  <th className="py-3 px-4 w-28 font-mono">IP / Node</th>
+                  <th className="py-3 px-4 w-28 tabular-nums">IP / Node</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                 {filteredEvents.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-slate-400">
@@ -297,30 +297,30 @@ export const BuyerAuditLog: React.FC = () => {
                 ) : (
                   filteredEvents.map((ev) => (
                     <tr key={ev.id} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4 font-mono text-slate-500 tabular-nums">
+                      <td className="py-3 px-4 text-slate-500 tabular-nums dark:text-[#9CB4C9]">
                         {ev.timestamp}
                       </td>
 
                       <td className="py-3 px-4">
-                        <div className="font-bold text-[#10212E]">{ev.actorName}</div>
-                        <span className="text-[11px] text-slate-500 block truncate max-w-[180px]">
+                        <div className="font-bold text-[#10212E] dark:text-white">{ev.actorName}</div>
+                        <span className="text-[11px] text-slate-500 block truncate max-w-[180px] dark:text-[#9CB4C9]">
                           {ev.actorRole} · {ev.organizationName || 'Organization'}
                         </span>
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className="font-semibold text-[#1F5F99] block">{ev.action}</span>
-                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                        <span className="font-semibold text-[#1F5F99] block dark:text-[#6FAEE0]">{ev.action}</span>
+                        <span className="text-[10px] tabular-nums text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-0.5 dark:bg-[#162C3D] dark:text-[#9CB4C9]">
                           {ev.entityType}
                           {ev.rowHash ? ` · #${String(ev.rowHash).slice(0, 8)}` : ''}
                         </span>
                       </td>
 
-                      <td className="py-3 px-4 text-slate-700 leading-relaxed">
+                      <td className="py-3 px-4 text-slate-700 leading-relaxed dark:text-[#D3E3F2]">
                         {ev.details}
                       </td>
 
-                      <td className="py-3 px-4 font-mono text-slate-400 text-[11px]">
+                      <td className="py-3 px-4 tabular-nums text-slate-400 text-[11px]">
                         {ev.ipAddress || '—'}
                       </td>
                     </tr>

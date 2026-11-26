@@ -192,7 +192,7 @@ export const BuyerEvaluation: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Scoring Matrix
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">· Weighted Composite Evaluation</span>
@@ -220,15 +220,15 @@ export const BuyerEvaluation: React.FC = () => {
       </div>
 
       {/* Conflict of Interest Declaration Notice */}
-      <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">
           <div
             className={`p-2.5 rounded-xl shrink-0 ${
               hasSignedIndependence
-                ? 'bg-emerald-50 text-[#2F8F5B]'
+                ? 'bg-emerald-50 text-[#2F8F5B] dark:bg-[#2F8F5B]/20'
                 : hasConflictFlag
-                ? 'bg-rose-50 text-[#C2412D]'
-                : 'bg-amber-50 text-[#E8A33D]'
+                ? 'bg-rose-50 text-[#C2412D] dark:bg-[#C2412D]/20'
+                : 'bg-amber-50 text-[#E8A33D] dark:bg-[#E8A33D]/20'
             }`}
           >
             <UserCheck className="w-5 h-5" />
@@ -239,20 +239,20 @@ export const BuyerEvaluation: React.FC = () => {
                 Evaluator: {evaluatorName}
               </span>
               {hasSignedIndependence ? (
-                <span className="text-[11px] bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded font-bold border border-emerald-200">
+                <span className="text-[11px] bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded font-bold border border-emerald-200 dark:bg-[#2F8F5B]/20 dark:border-[#2F8F5B]/40">
                   Independence Declaration Signed
                 </span>
               ) : hasConflictFlag ? (
-                <span className="text-[11px] bg-rose-50 text-[#C2412D] px-2 py-0.5 rounded font-bold border border-rose-200">
+                <span className="text-[11px] bg-rose-50 text-[#C2412D] px-2 py-0.5 rounded font-bold border border-rose-200 dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40">
                   Conflict Declared — Scoring Blocked
                 </span>
               ) : (
-                <span className="text-[11px] bg-amber-50 text-amber-900 px-2 py-0.5 rounded font-bold border border-[#E8A33D]">
+                <span className="text-[11px] bg-amber-50 text-amber-900 px-2 py-0.5 rounded font-bold border border-[#E8A33D] dark:bg-[#E8A33D]/20">
                   Declaration Pending
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5 dark:text-[#9CB4C9]">
               {hasSignedIndependence
                 ? `Signed on ${assignment.coiDeclaredAt ? new Date(assignment.coiDeclaredAt).toLocaleString() : 'record'}. Scoring authorized.`
                 : 'Under Section 42 of the Public Procurement Act, evaluators must declare independence before scoring any bids.'}
@@ -275,7 +275,7 @@ export const BuyerEvaluation: React.FC = () => {
       {/* Conflict Modal */}
       {isSigningConflict && selectedCall && (
         <div className="fixed inset-0 z-50 bg-[#10212E]/50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl text-xs">
+          <div className="bg-white dark:bg-[#1C364B] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-xl text-xs">
             <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
               Statutory Conflict of Interest Declaration
             </h3>
@@ -307,14 +307,14 @@ export const BuyerEvaluation: React.FC = () => {
                 value={conflictNotes}
                 onChange={(e) => setConflictNotes(e.target.value)}
                 placeholder="Optional disclosure notes..."
-                className="w-full p-2 border border-slate-300 dark:border-[#1E364A] rounded-lg"
+                className="w-full p-2 border border-slate-300 dark:border-[#244157] rounded-lg"
               />
             </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#1E364A]">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#244157]">
               <button
                 type="button"
                 onClick={() => setIsSigningConflict(false)}
-                className="px-3 py-1.5 text-slate-600 cursor-pointer"
+                className="px-3 py-1.5 text-slate-600 cursor-pointer dark:text-[#D3E3F2]"
               >
                 Cancel
               </button>
@@ -335,14 +335,14 @@ export const BuyerEvaluation: React.FC = () => {
       {criteria.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {criteria.map((crit) => (
-            <div key={crit.id} className="p-4 bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-xl space-y-1">
+            <div key={crit.id} className="p-4 bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-xl space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-bold text-slate-800 dark:text-white truncate">{crit.name}</span>
-                <span className="font-bold text-[#1F5F99] bg-[#EAF2FA] px-2 py-0.5 rounded font-mono shrink-0">
+                <span className="font-bold text-[#1F5F99] bg-[#EAF2FA] px-2 py-0.5 rounded tabular-nums shrink-0 dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                   {crit.weight}%
                 </span>
               </div>
-              <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2">
+              <p className="text-slate-500 text-[11px] leading-relaxed line-clamp-2 dark:text-[#9CB4C9]">
                 {crit.description || `Max score: ${crit.maxScore || 100}`}
               </p>
             </div>
@@ -351,7 +351,7 @@ export const BuyerEvaluation: React.FC = () => {
       )}
 
       {/* Scoring Matrix Table */}
-      <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 space-y-4">
+      <div className="bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-2xl p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -359,12 +359,12 @@ export const BuyerEvaluation: React.FC = () => {
                 Evaluator Scoring Matrix
               </h3>
               {isScoreLocked && (
-                <span className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded font-bold border border-slate-300">
+                <span className="text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded font-bold border border-slate-300 dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                   Scores Locked & Finalized
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-[#9CB4C9]">
               {isScoreLocked
                 ? 'Your scorecard is locked in PostgreSQL and protected by audit triggers.'
                 : 'Enter scores against each criterion for unsealed bids (values persist immediately on change).'}
@@ -385,7 +385,7 @@ export const BuyerEvaluation: React.FC = () => {
         </div>
 
         {isLoading ? (
-          <div className="py-10 flex items-center justify-center gap-2 text-xs text-slate-500">
+          <div className="py-10 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-[#9CB4C9]">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>Loading evaluation workspace...</span>
           </div>
@@ -397,14 +397,14 @@ export const BuyerEvaluation: React.FC = () => {
             </span>
           </div>
         ) : criteria.length === 0 ? (
-          <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl">
+          <div className="p-6 text-center text-xs text-slate-500 border border-dashed border-slate-200 rounded-xl dark:text-[#9CB4C9] dark:border-[#244157]">
             No evaluation criteria have been defined for this tender call yet.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="bg-slate-50 dark:bg-[#10212E] border-b border-slate-200 dark:border-[#1E364A] text-slate-600 dark:text-slate-300 font-semibold">
+                <tr className="bg-slate-50 dark:bg-[#10212E] border-b border-slate-200 dark:border-[#244157] text-slate-600 dark:text-slate-300 font-semibold">
                   <th className="py-2.5 px-3">Candidate Bidder</th>
                   {criteria.map((c) => (
                     <th key={c.id} className="py-2.5 px-3 text-center">
@@ -414,14 +414,14 @@ export const BuyerEvaluation: React.FC = () => {
                   <th className="py-2.5 px-3 text-right">Composite Score</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[#1E364A]">
+              <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                 {bids.map((bid) => {
                   const ranked = rankedBidders.find((r) => r.bid.id === bid.id);
                   return (
                     <tr key={bid.id} className="hover:bg-slate-50/60 dark:hover:bg-[#10212E]/60">
                       <td className="py-3 px-3">
                         <div className="font-bold text-[#10212E] dark:text-white">{bid.supplierName}</div>
-                        <span className="text-[11px] text-slate-400 font-mono">
+                        <span className="text-[11px] text-slate-400 tabular-nums">
                           {bid.receiptNumber || bid.id}
                         </span>
                       </td>
@@ -447,13 +447,13 @@ export const BuyerEvaluation: React.FC = () => {
                                 }
                               }}
                               placeholder={`0-${max}`}
-                              className="w-16 p-1.5 text-center font-mono font-bold bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#1E364A] rounded-lg text-slate-900 dark:text-white disabled:bg-slate-100 disabled:text-slate-400"
+                              className="w-16 p-1.5 text-center tabular-nums font-bold bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#244157] rounded-lg text-slate-900 dark:text-white disabled:bg-slate-100 disabled:text-slate-400"
                             />
                           </td>
                         );
                       })}
 
-                      <td className="py-3 px-3 text-right font-mono font-bold text-sm text-[#1F5F99]">
+                      <td className="py-3 px-3 text-right tabular-nums font-bold text-sm text-[#1F5F99] dark:text-[#6FAEE0]">
                         {ranked?.compositeScore ?? 0}%
                       </td>
                     </tr>
@@ -467,7 +467,7 @@ export const BuyerEvaluation: React.FC = () => {
 
       {/* Auto-Ranked Leaderboard */}
       {rankedBidders.length > 0 && (
-        <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 space-y-4">
+        <div className="bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Trophy className="w-5 h-5 text-[#E8A33D]" />
@@ -475,10 +475,10 @@ export const BuyerEvaluation: React.FC = () => {
                 Auto-Ranked Evaluation Results
               </h3>
             </div>
-            <span className="text-xs text-slate-500 font-mono">Multi-Evaluator Composite</span>
+            <span className="text-xs text-slate-500 tabular-nums dark:text-[#9CB4C9]">Multi-Evaluator Composite</span>
           </div>
 
-          <div className="divide-y divide-slate-100 dark:divide-[#1E364A] border border-slate-200 dark:border-[#1E364A] rounded-xl overflow-hidden">
+          <div className="divide-y divide-slate-100 dark:divide-[#244157] border border-slate-200 dark:border-[#244157] rounded-xl overflow-hidden">
             {rankedBidders.map((item, idx) => {
               const isWinner = idx === 0 && item.compositeScore > 0;
               return (
@@ -490,8 +490,8 @@ export const BuyerEvaluation: React.FC = () => {
                 >
                   <div className="flex items-center gap-3.5">
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs font-mono ${
-                        isWinner ? 'bg-[#E8A33D] text-white' : 'bg-slate-100 text-slate-600'
+                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs tabular-nums ${
+                        isWinner ? 'bg-[#E8A33D] text-white' : 'bg-slate-100 text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2]'
                       }`}
                     >
                       #{idx + 1}
@@ -505,14 +505,14 @@ export const BuyerEvaluation: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-slate-500 font-mono">
+                      <span className="text-xs text-slate-500 tabular-nums dark:text-[#9CB4C9]">
                         Offer: {item.bid.currency || 'BWP'} {item.bid.totalPrice != null ? Number(item.bid.totalPrice).toLocaleString() : 'N/A'}
                       </span>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <span className="text-lg font-bold font-mono text-[#1F5F99]">
+                    <span className="text-lg font-bold tabular-nums text-[#1F5F99] dark:text-[#6FAEE0]">
                       {item.compositeScore}%
                     </span>
                     <span className="text-[11px] text-slate-400 block">Composite Score</span>

@@ -229,7 +229,7 @@ export const PublicAbout: React.FC = () => {
       {/* ======================================================== */}
       {/* 1. HERO SECTION WITH COMPOSED PRODUCT PREVIEW (NO IMAGE) */}
       {/* ======================================================== */}
-      <section className="relative border-b border-[#D5E0EA] dark:border-[#1E364A] pb-14 sm:pb-16 overflow-hidden">
+      <section className="relative border-b border-[#D5E0EA] dark:border-[#244157] pb-14 sm:pb-16 overflow-hidden">
         {/* Signature Brand Motif in Background */}
         <RingMotif
           size={480}
@@ -251,7 +251,7 @@ export const PublicAbout: React.FC = () => {
               A 360° picture of procurement.
             </h1>
 
-            <p className="text-base sm:text-lg text-[#43525F] dark:text-[#B2C3D2] leading-relaxed max-w-xl">
+            <p className="text-base sm:text-lg text-[#43525F] dark:text-[#D3E3F2] leading-relaxed max-w-xl">
               Connect suppliers and buying organizations in one verified, auditable procurement platform — from single-profile registration to sealed-bid evaluation and award.
             </p>
 
@@ -291,7 +291,7 @@ export const PublicAbout: React.FC = () => {
             </div>
 
             {/* Micro Trust Proof */}
-            <div id="how-it-works-section" className="pt-4 flex flex-wrap items-center gap-4 sm:gap-6 text-[14px] text-[#334155] border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div id="how-it-works-section" className="pt-4 flex flex-wrap items-center gap-4 sm:gap-6 text-[14px] text-[#334155] border-t border-[#D5E0EA] dark:border-[#244157]">
               <span className="flex items-center gap-2">
                 <CheckCircle2 className="w-[18px] h-[18px] text-[#2F8F5B]" strokeWidth={1.5} />
                 <span className="text-[14px] text-[#334155] font-medium">CIPA & BURS sync</span>
@@ -301,7 +301,7 @@ export const PublicAbout: React.FC = () => {
                 <span className="text-[14px] text-[#334155] font-medium">Asymmetric sealed bids</span>
               </span>
               <span className="flex items-center gap-2">
-                <Shield className="w-[18px] h-[18px] text-[#B45309]" strokeWidth={1.5} />
+                <Shield className="w-[18px] h-[18px] text-[#B45309] dark:text-[#FCD34D]" strokeWidth={1.5} />
                 <span className="text-[14px] text-[#334155] font-medium">PPRA compliant</span>
               </span>
             </div>
@@ -321,7 +321,7 @@ export const PublicAbout: React.FC = () => {
                 <Card
                   variant="default"
                   padding="none"
-                  className="overflow-hidden shadow-elevated border-hairline relative bg-white dark:bg-[#132635]"
+                  className="overflow-hidden shadow-elevated border-hairline relative bg-white dark:bg-[#1C364B]"
                 >
                   <div aria-hidden="true">
                     {/* Active Laser Scanner Beam across the card during scan */}
@@ -330,12 +330,12 @@ export const PublicAbout: React.FC = () => {
                     )}
 
                     {/* Simulated UI Window Header */}
-                    <div className="bg-[#F7FAFD] dark:bg-[#10212E] px-4 py-3 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-2">
+                    <div className="bg-[#F7FAFD] dark:bg-[#10212E] px-4 py-3 border-b border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="w-2.5 h-2.5 rounded-full bg-[#E5484D]/80 hover:scale-125 transition-transform cursor-pointer" />
                         <span className="w-2.5 h-2.5 rounded-full bg-[#E8A33D]/80 hover:scale-125 transition-transform cursor-pointer" />
                         <span className="w-2.5 h-2.5 rounded-full bg-[#2F8F5B]/80 hover:scale-125 transition-transform cursor-pointer" />
-                        <span className="ml-2 text-xs font-mono font-medium text-[#475569] truncate hidden sm:inline">
+                        <span className="ml-2 text-xs tabular-nums font-medium text-[#475569] truncate hidden sm:inline">
                           bidready360.co.bw / supplier-passport / BW00008492019
                         </span>
                       </div>
@@ -353,7 +353,7 @@ export const PublicAbout: React.FC = () => {
                           <span>{isScanning ? 'Verifying...' : 'Scan Vault'}</span>
                         </button>
 
-                        <span className="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded text-xs tabular-nums font-semibold bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] flex items-center gap-1.5">
                           <span className="relative flex h-2 w-2">
                             <span className="motion-reduce:animate-none animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -370,16 +370,16 @@ export const PublicAbout: React.FC = () => {
                           <CheckCircle2 className="w-4 h-4 shrink-0 text-white" />
                           <span>All 4 SHA-256 cryptographic hashes verified untampered via live CIPA API!</span>
                         </div>
-                        <span className="font-mono text-xs bg-emerald-700 px-1.5 py-0.5 rounded text-white">
+                        <span className="tabular-nums text-xs bg-emerald-700 px-1.5 py-0.5 rounded text-white">
                           0.04s
                         </span>
                       </div>
                     )}
 
                     {/* Composed Passport Preview Content - Strictly Demo Data */}
-                    <div className="p-5 sm:p-6 space-y-4 bg-white dark:bg-[#132635] relative">
+                    <div className="p-5 sm:p-6 space-y-4 bg-white dark:bg-[#1C364B] relative">
                       {/* Company Profile Header Row */}
-                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#D5E0EA] dark:border-[#244157]">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-[8px] bg-gradient-to-br from-[#1F5F99] via-[#164875] to-[#10212E] text-white flex items-center justify-center font-heading font-bold text-sm shrink-0 shadow-md relative overflow-hidden group/avatar">
                             <span>MS</span>
@@ -390,12 +390,12 @@ export const PublicAbout: React.FC = () => {
                               <h2 className="text-sm sm:text-base font-heading font-semibold text-[#10212E] dark:text-white leading-tight">
                                 Morama Solutions (Pty) Ltd
                               </h2>
-                              <span className="font-mono text-xs px-2 py-0.5 rounded-[4px] bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] font-semibold">
+                              <span className="tabular-nums text-xs px-2 py-0.5 rounded-[4px] bg-[#DCFCE7] text-[#166534] border border-[#86EFAC] font-semibold">
                                 Citizen-owned
                               </span>
                             </div>
                             <p className="text-xs text-[#475569]">
-                              CIPA: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">BW00008492019</span> · BURS TIN: <span className="font-mono text-[#10212E] dark:text-slate-300 font-medium">C9018472-01</span>
+                              CIPA: <span className="tabular-nums text-[#10212E] dark:text-slate-300 font-medium">BW00008492019</span> · BURS TIN: <span className="tabular-nums text-[#10212E] dark:text-slate-300 font-medium">C9018472-01</span>
                             </p>
                             <p className="text-xs text-[#475569]">
                               Gaborone West Industrial · Building Works, Civil Engineering & ICT Supplies
@@ -420,7 +420,7 @@ export const PublicAbout: React.FC = () => {
                       </div>
 
                       {/* Interactive Tab Navigation with role="tablist" */}
-                      <div role="tablist" aria-label="Passport preview tabs" className="flex items-center gap-1 p-1 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] text-xs">
+                      <div role="tablist" aria-label="Passport preview tabs" className="flex items-center gap-1 p-1 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] text-xs">
                         <button
                           role="tab"
                           aria-selected={previewTab === 'documents'}
@@ -486,7 +486,7 @@ export const PublicAbout: React.FC = () => {
                               <div
                                 key={doc.id}
                                 onClick={() => setSelectedDemoDoc(doc)}
-                                className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs hover:border-[#1F5F99] hover:bg-white dark:hover:bg-[#162C3E] hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 cursor-pointer group/row focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
+                                className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-3 text-xs hover:border-[#1F5F99] hover:bg-white dark:hover:bg-[#162C3D] hover:-translate-y-0.5 hover:shadow-xs transition-all duration-200 cursor-pointer group/row focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8]"
                                 title="Click to inspect cryptographic seal & OCR confidence"
                               >
                                 <div className="flex items-center gap-3 min-w-0">
@@ -532,7 +532,7 @@ export const PublicAbout: React.FC = () => {
                           </div>
 
                           <div className="space-y-2">
-                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-[#10212E] dark:text-white text-xs">
                                   Municipal Council Authority (Sample)
@@ -547,7 +547,7 @@ export const PublicAbout: React.FC = () => {
                               </p>
                             </div>
 
-                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-[#10212E] dark:text-white text-xs">
                                   Debswana Diamond Company
@@ -562,7 +562,7 @@ export const PublicAbout: React.FC = () => {
                               </p>
                             </div>
 
-                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-[#10212E] dark:text-white text-xs">
                                   Water Utilities Corporation (WUC)
@@ -583,7 +583,7 @@ export const PublicAbout: React.FC = () => {
                       {/* TAB 3: VAULT INTEGRITY */}
                       {previewTab === 'security' && (
                         <div className="space-y-3 motion-reduce:animate-none animate-fade-in">
-                          <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2 text-xs">
+                          <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-2 text-xs">
                             <div className="flex items-center gap-2 text-[#10212E] dark:text-white font-semibold text-xs">
                               <div className="p-1 rounded bg-[#1F5F99]/10 text-[#1F5F99] dark:text-[#38BDF8]">
                                 <Lock className="w-4 h-4 motion-reduce:animate-none animate-pulse" />
@@ -596,14 +596,14 @@ export const PublicAbout: React.FC = () => {
                           </div>
 
                           <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                            <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
                               <span className="text-xs text-[#475569] block">Ledger Integrity</span>
-                              <span className="font-mono text-xs font-semibold text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1">
+                              <span className="tabular-nums text-xs font-semibold text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-[#166534]" />
                                 SHA-256 Hashed
                               </span>
                             </div>
-                            <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
+                            <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1 hover:border-[#1F5F99]/50 transition-colors">
                               <span className="text-xs text-[#475569] block">Access Control</span>
                               <span className="text-xs font-semibold text-[#166534] flex items-center gap-1">
                                 <ShieldCheck className="w-3.5 h-3.5 text-[#166534]" />
@@ -615,7 +615,7 @@ export const PublicAbout: React.FC = () => {
                       )}
 
                       {/* Confidential Data Protection Footer */}
-                      <div className="p-3 rounded-[6px] bg-[#F0F5FA] dark:bg-[#162C3E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-xs text-[#475569]">
+                      <div className="p-3 rounded-[6px] bg-[#F0F5FA] dark:bg-[#162C3D] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between text-xs text-[#475569]">
                         <div className="flex items-center gap-2">
                           <Shield className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0" strokeWidth={1.5} />
                           <span className="text-xs">
@@ -627,8 +627,8 @@ export const PublicAbout: React.FC = () => {
                       {/* Interactive Document Inspection Modal (Opens on document click) */}
                       {selectedDemoDoc && (
                         <div className="absolute inset-0 z-40 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 motion-reduce:animate-none animate-fade-in">
-                          <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] shadow-2xl max-w-sm w-full p-4 space-y-3 motion-reduce:animate-none animate-fade-in text-xs">
-                            <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                          <div className="bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[10px] shadow-2xl max-w-sm w-full p-4 space-y-3 motion-reduce:animate-none animate-fade-in text-xs">
+                            <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#D5E0EA] dark:border-[#244157]">
                               <div className="space-y-0.5">
                                 <span className="font-heading font-semibold text-sm text-[#10212E] dark:text-white block">
                                   {selectedDemoDoc.title}
@@ -647,7 +647,7 @@ export const PublicAbout: React.FC = () => {
                             </div>
 
                             <div className="space-y-2">
-                              <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                              <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
                                 <div className="flex items-center justify-between">
                                   <span className="text-xs font-semibold text-[#475569]">
                                     Cryptographic SHA-256 Hash
@@ -665,19 +665,19 @@ export const PublicAbout: React.FC = () => {
                                     <span>{copiedHash ? 'Copied!' : 'Copy'}</span>
                                   </button>
                                 </div>
-                                <span className="font-mono text-xs text-slate-700 dark:text-slate-300 break-all block leading-tight">
+                                <span className="tabular-nums text-xs text-slate-700 dark:text-slate-300 break-all block leading-tight">
                                   {selectedDemoDoc.sha256}
                                 </span>
                               </div>
 
                               <div className="grid grid-cols-2 gap-2">
-                                <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+                                <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157]">
                                   <span className="text-xs text-[#475569] block">OCR Confidence</span>
                                   <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
                                     {selectedDemoDoc.ocrConfidence}
                                   </span>
                                 </div>
-                                <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+                                <div className="p-2.5 rounded bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157]">
                                   <span className="text-xs text-[#475569] block">File Size</span>
                                   <span className="font-semibold text-[#10212E] dark:text-white text-xs">
                                     {selectedDemoDoc.size}
@@ -714,7 +714,7 @@ export const PublicAbout: React.FC = () => {
       {/* 2. HOW IT WORKS: DUAL SEQUENCE (FOR SUPPLIERS / BUYERS)   */}
       {/* ======================================================== */}
       <section className="space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#D5E0EA] dark:border-[#244157] pb-4">
           <div className="space-y-2 max-w-xl">
             <Badge variant="pula" size="md">
               Sequential Workflow
@@ -728,7 +728,7 @@ export const PublicAbout: React.FC = () => {
           </div>
 
           {/* Segmented Switcher with role="tablist" */}
-          <div role="tablist" aria-label="Workflow tabs" className="flex items-center p-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] shrink-0">
+          <div role="tablist" aria-label="Workflow tabs" className="flex items-center p-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] shrink-0">
             <button
               role="tab"
               aria-selected={howItWorksTab === 'suppliers'}
@@ -742,7 +742,7 @@ export const PublicAbout: React.FC = () => {
               }}
               className={`px-4 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
                 howItWorksTab === 'suppliers'
-                  ? 'bg-white dark:bg-[#132635] text-[#10212E] dark:text-white shadow-subtle border border-[#D5E0EA] dark:border-[#1E364A]'
+                  ? 'bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white shadow-subtle border border-[#D5E0EA] dark:border-[#244157]'
                   : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
               }`}
             >
@@ -762,7 +762,7 @@ export const PublicAbout: React.FC = () => {
               }}
               className={`px-4 py-1.5 rounded-[6px] text-xs font-semibold transition-all flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D4ED8] ${
                 howItWorksTab === 'buyers'
-                  ? 'bg-white dark:bg-[#132635] text-[#10212E] dark:text-white shadow-subtle border border-[#D5E0EA] dark:border-[#1E364A]'
+                  ? 'bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white shadow-subtle border border-[#D5E0EA] dark:border-[#244157]'
                   : 'text-[#475569] hover:text-[#10212E] dark:hover:text-white'
               }`}
             >
@@ -777,7 +777,7 @@ export const PublicAbout: React.FC = () => {
           {(howItWorksTab === 'suppliers' ? supplierSteps : buyerSteps).map((step) => (
             <Card key={step.num} variant="default" padding="md" className="space-y-3 flex flex-col justify-between">
               <div className="space-y-2.5">
-                <span className="font-mono text-xs font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 px-2 py-0.5 rounded-[4px] inline-block">
+                <span className="tabular-nums text-xs font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 px-2 py-0.5 rounded-[4px] inline-block">
                   STEP {step.num}
                 </span>
                 <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white leading-snug">
@@ -788,7 +788,7 @@ export const PublicAbout: React.FC = () => {
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-xs text-[#1F5F99] dark:text-[#6FAEE0] font-medium flex items-center gap-1">
+              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] text-xs text-[#1F5F99] dark:text-[#6FAEE0] font-medium flex items-center gap-1">
                 <span>{howItWorksTab === 'suppliers' ? 'Supplier Gateway' : 'Buyer Console'}</span>
                 <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.5} />
               </div>
@@ -801,7 +801,7 @@ export const PublicAbout: React.FC = () => {
       {/* 3. TRUST & SECURITY LAYER                                 */}
       {/* ======================================================== */}
       <section className="space-y-8">
-        <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4 space-y-2 max-w-2xl">
+        <div className="border-b border-[#D5E0EA] dark:border-[#244157] pb-4 space-y-2 max-w-2xl">
           <Badge variant="pula" size="md">
             The Trust Layer
           </Badge>
@@ -816,7 +816,7 @@ export const PublicAbout: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Pillar 1: Cryptographic Sealed Bids */}
           <Card variant="surface" padding="md" className="space-y-3">
-            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#132635] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#1C364B] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center">
               <Lock className="w-5 h-5" strokeWidth={1.5} />
             </div>
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
@@ -829,7 +829,7 @@ export const PublicAbout: React.FC = () => {
 
           {/* Pillar 2: Verified Statutory Standing */}
           <Card variant="surface" padding="md" className="space-y-3">
-            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#132635] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#1C364B] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center">
               <FileCheck2 className="w-5 h-5 text-[#2F8F5B]" strokeWidth={1.5} />
             </div>
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
@@ -842,7 +842,7 @@ export const PublicAbout: React.FC = () => {
 
           {/* Pillar 3: Consent-Based Sharing */}
           <Card variant="surface" padding="md" className="space-y-3">
-            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#132635] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#1C364B] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center">
               <Share2 className="w-5 h-5 text-[#E8A33D]" strokeWidth={1.5} />
             </div>
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
@@ -855,7 +855,7 @@ export const PublicAbout: React.FC = () => {
 
           {/* Pillar 4: Immutable Forensic Audit Trail */}
           <Card variant="surface" padding="md" className="space-y-3">
-            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#132635] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-[6px] bg-white dark:bg-[#1C364B] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center">
               <Eye className="w-5 h-5" strokeWidth={1.5} />
             </div>
             <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
@@ -872,7 +872,7 @@ export const PublicAbout: React.FC = () => {
       {/* 4. LATEST OPPORTUNITIES STRIP (LIVE-LOOKING FROM DATA)    */}
       {/* ======================================================== */}
       <section className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#D5E0EA] dark:border-[#244157] pb-4">
           <div className="space-y-2">
             <Badge variant="pula" size="md">
               Active Procurement Calls
@@ -903,7 +903,7 @@ export const PublicAbout: React.FC = () => {
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-[#475569]">
+                  <span className="tabular-nums text-xs text-[#475569]">
                     {call.callNumber}
                   </span>
                   <Badge variant={call.type === 'RFP' ? 'pula' : 'neutral'} size="sm">
@@ -920,8 +920,8 @@ export const PublicAbout: React.FC = () => {
                 </p>
               </div>
 
-              <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 text-[#43525F] dark:text-[#B2C3D2]">
+              <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5 text-[#43525F] dark:text-[#D3E3F2]">
                   <Clock className="w-3.5 h-3.5 text-[#E8A33D]" strokeWidth={1.5} />
                   <span>Closes {call.closingDate}</span>
                 </div>
@@ -938,7 +938,7 @@ export const PublicAbout: React.FC = () => {
       {/* 5. FREQUENTLY ASKED QUESTIONS PREVIEW                     */}
       {/* ======================================================== */}
       <section className="space-y-6">
-        <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-4 flex items-center justify-between gap-4">
+        <div className="border-b border-[#D5E0EA] dark:border-[#244157] pb-4 flex items-center justify-between gap-4">
           <div className="space-y-2">
             <Badge variant="pula" size="md">
               Clear Answers

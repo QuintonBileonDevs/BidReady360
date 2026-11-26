@@ -178,7 +178,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
               <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
                 Sign in
               </h2>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Enter your credentials to access your account.
               </p>
             </div>
@@ -280,7 +280,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
             </form>
 
             {/* Bottom Switcher */}
-            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Don't have an account?{' '}
               <button
                 type="button"
@@ -294,7 +294,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
         ) : (
           /* MFA Challenge View */
           <div className="space-y-6 text-center">
-            <div className="w-12 h-12 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-[8px] bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center mx-auto">
               <ShieldCheck className="w-6 h-6" strokeWidth={1.5} />
             </div>
 
@@ -302,7 +302,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
               <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
                 Enter verification code
               </h2>
-              <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto">
+              <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto dark:text-[#9CB4C9]">
                 We sent a 6-digit security code to <strong>{email}</strong>. Enter it below to complete sign in.
               </p>
             </div>
@@ -318,7 +318,7 @@ export const SupplierLogin: React.FC<SupplierLoginProps> = ({ onNavigate }) => {
               <DigitCodeInput onComplete={handleMfaComplete} disabled={isLoading} />
             </div>
 
-            <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3">
+            <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3 dark:text-[#9CB4C9]">
               <div className="flex items-center justify-center gap-3 pt-2">
                 <Button
                   variant="ghost"

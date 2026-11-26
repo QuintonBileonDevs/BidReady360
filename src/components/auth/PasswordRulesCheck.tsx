@@ -15,7 +15,7 @@ export const PasswordRulesCheck: React.FC<PasswordRulesCheckProps> = ({ password
   const metCount = rules.filter((r) => r.met).length;
 
   const strengthLabels = ['Too weak', 'Weak', 'Fair', 'Good', 'Strong'];
-  const strengthColors = ['bg-slate-200', 'bg-[#C2412D]', 'bg-[#E8A33D]', 'bg-[#1F5F99]', 'bg-[#2F8F5B]'];
+  const strengthColors = ['bg-slate-200 dark:bg-[#162C3D]', 'bg-[#C2412D]', 'bg-[#E8A33D]', 'bg-[#1F5F99]', 'bg-[#2F8F5B]'];
 
   return (
     <div className="space-y-3 pt-1 text-[14px]" aria-live="polite">
@@ -23,7 +23,7 @@ export const PasswordRulesCheck: React.FC<PasswordRulesCheckProps> = ({ password
       {password.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-[14px]">
-            <span className="text-[#6B7A87]">Password strength:</span>
+            <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Password strength:</span>
             <span className="font-semibold text-[#10212E] dark:text-white">
               {strengthLabels[metCount]}
             </span>
@@ -42,8 +42,8 @@ export const PasswordRulesCheck: React.FC<PasswordRulesCheckProps> = ({ password
       )}
 
       {/* Rules Checklist */}
-      <div className="space-y-1.5 bg-[#F7FAFD] dark:bg-[#10212E] p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A]">
-        <span className="text-[13px] font-semibold text-[#6B7A87] block uppercase tracking-wider mb-1">
+      <div className="space-y-1.5 bg-[#F7FAFD] dark:bg-[#10212E] p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157]">
+        <span className="text-[13px] font-semibold text-[#6B7A87] block uppercase tracking-wider mb-1 dark:text-[#9CB4C9]">
           Password requirements
         </span>
         {rules.map((rule, i) => (

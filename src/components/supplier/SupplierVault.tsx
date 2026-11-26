@@ -770,19 +770,19 @@ export const SupplierVault: React.FC = () => {
   return (
     <div className="space-y-8 py-2">
       {/* 1. Header with Progress & Readiness Chip */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold text-[#1F5F99] dark:text-[#38BDF8] bg-[#EAF2FA] dark:bg-[#1E364A] px-2.5 py-0.5 rounded-[4px]">
+              <span className="text-[13px] font-semibold text-[#1F5F99] dark:text-[#38BDF8] bg-[#EAF2FA] dark:bg-[#244157] px-2.5 py-0.5 rounded-[4px]">
                 Vault & Qualification
               </span>
-              <span className="text-[13px] text-[#6B7A87]">· Dynamic supplier passport</span>
+              <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">· Dynamic supplier passport</span>
             </div>
             <h1 className="font-heading font-semibold text-[26px] sm:text-[30px] leading-tight text-[#10212E] dark:text-white">
               Documents and eligibility
             </h1>
-            <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
               Manage mandatory statutory compliance, business eligibility declarations, and preference margin evidence.
             </p>
           </div>
@@ -801,23 +801,23 @@ export const SupplierVault: React.FC = () => {
         </div>
 
         {/* Progress Bar */}
-        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
           <div className="flex items-center justify-between text-[14px]">
             <span className="font-semibold text-[#10212E] dark:text-white">
               {readyCount} of {totalRequiredCount} required documents ready
             </span>
-            <span className="text-[#6B7A87] font-mono text-[13px]">
+            <span className="text-[#6B7A87] tabular-nums text-[13px] dark:text-[#9CB4C9]">
               {Math.round((readyCount / Math.max(1, totalRequiredCount)) * 100)}%
             </span>
           </div>
-          <div className="w-full h-2.5 bg-[#D5E0EA] dark:bg-[#1E364A] rounded-full overflow-hidden">
+          <div className="w-full h-2.5 bg-[#D5E0EA] dark:bg-[#244157] rounded-full overflow-hidden">
             <div
               className="h-full bg-[#1F5F99] dark:bg-[#38BDF8] transition-all duration-300 rounded-full"
               style={{ width: `${Math.round((readyCount / Math.max(1, totalRequiredCount)) * 100)}%` }}
             />
           </div>
 
-          <div className="flex items-center justify-between text-[12px] text-[#6B7A87]">
+          <div className="flex items-center justify-between text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
             <span>Based on statutory documents required for everyone ({mandatoryItems.length} items)</span>
             <span>{isReadyToApply ? 'All mandatory statutory documents ready' : `${missingItemNames.length} missing`}</span>
           </div>
@@ -835,7 +835,7 @@ export const SupplierVault: React.FC = () => {
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px]">
+        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px] dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
             <span>{toastMessage}</span>
@@ -843,7 +843,7 @@ export const SupplierVault: React.FC = () => {
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-[#065F46] hover:opacity-75 cursor-pointer"
+            className="text-[#065F46] hover:opacity-75 cursor-pointer dark:text-[#6EE7B7]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -851,13 +851,13 @@ export const SupplierVault: React.FC = () => {
       )}
 
       {/* ================= SECTION 1: Required for everyone (4) ================= */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
           <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white flex items-center gap-2">
             <span>Required for everyone</span>
             <span className="text-[12px] bg-[#1F5F99] text-white px-2 py-0.5 rounded-full font-medium">4 items</span>
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Mandatory statutory compliance documents required for basic qualification across all public and corporate procurement calls (CIPA certificate, BURS tax clearance, directors' and shareholders' ID, bank confirmation letter).
           </p>
         </div>
@@ -890,7 +890,7 @@ export const SupplierVault: React.FC = () => {
           />
 
           {/* Row 3: Directors & Shareholders ID (Multi-document support) */}
-          <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-4">
+          <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -901,11 +901,11 @@ export const SupplierVault: React.FC = () => {
                     {directorsStatusLabel}
                   </span>
                 </div>
-                <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                   Mandatory statutory identity documents / passports for all registered directors and beneficial shareholders. You can upload multiple ID documents (one for each director/shareholder).
                 </p>
                 {directorsCount > 0 && (
-                  <span className="text-[12px] text-[#6B7A87] italic block">
+                  <span className="text-[12px] text-[#6B7A87] italic block dark:text-[#9CB4C9]">
                     Registered Directors ({directorsCount}): {directorsList.map(d => `${d.fullName} (${d.role}, ${d.shareholdingPercentage}%)`).join(' · ')}
                   </span>
                 )}
@@ -922,9 +922,9 @@ export const SupplierVault: React.FC = () => {
 
             {/* List of uploaded director ID documents */}
             {directorDocs.length > 0 ? (
-              <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
                 {directorDocs.map((dDoc, idx) => (
-                  <div key={dDoc.id || idx} className="flex items-center justify-between p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] gap-3">
+                  <div key={dDoc.id || idx} className="flex items-center justify-between p-3 bg-white dark:bg-[#1C364B] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] gap-3">
                     <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-[14px] text-[#10212E] dark:text-white truncate">
@@ -937,7 +937,7 @@ export const SupplierVault: React.FC = () => {
                           {getDerivedStatus(dDoc).label}
                         </span>
                       </div>
-                      <p className="text-[12px] text-[#6B7A87]">
+                      <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                         Size: {dDoc.fileSize} · Uploaded: {dDoc.issueDate || 'N/A'}
                       </p>
                     </div>
@@ -945,7 +945,7 @@ export const SupplierVault: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setPreviewDoc(dDoc)}
-                        className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer"
                         title="View document"
                       >
                         <Eye className="w-3 h-3 text-[#1F5F99] dark:text-[#38BDF8]" />
@@ -955,7 +955,7 @@ export const SupplierVault: React.FC = () => {
                         type="button"
                         onClick={() => handleDownloadDocument(dDoc)}
                         disabled={downloadingDocId === dDoc.id}
-                        className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="px-2.5 py-1 border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[4px] text-[12px] font-medium inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                         title="Download file"
                       >
                         <Download className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
@@ -982,7 +982,7 @@ export const SupplierVault: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="p-3 text-center text-[13px] text-[#6B7A87] italic bg-white/50 dark:bg-[#132635]/50 rounded-[6px]">
+              <div className="p-3 text-center text-[13px] text-[#6B7A87] italic bg-white/50 dark:bg-[#1C364B]/50 rounded-[6px] dark:text-[#9CB4C9]">
                 No director or shareholder ID documents uploaded yet. Click "Add Director/Shareholder ID" to upload.
               </div>
             )}
@@ -1004,18 +1004,18 @@ export const SupplierVault: React.FC = () => {
       </div>
 
       {/* ================= SECTION 2: Tell us about your business ================= */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
           <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
             Tell us about your business
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Switch on relevant business attributes to reveal conditional document requirements and preference margin evidence uploads.
           </p>
         </div>
 
         {/* Automatic District Location Bar */}
-        <div className="p-4 rounded-[10px] bg-[#EAF2FA] dark:bg-[#1E364A]/70 border border-[#BDE0FE] dark:border-[#2C4D63] text-[14px] text-[#10212E] dark:text-[#EAF2FA] flex items-center gap-3">
+        <div className="p-4 rounded-[10px] bg-[#EAF2FA] dark:bg-[#244157]/70 border border-[#BDE0FE] dark:border-[#2C4D63] text-[14px] text-[#10212E] dark:text-[#EAF2FA] flex items-center gap-3">
           <MapPin className="w-5 h-5 text-[#1F5F99] dark:text-[#38BDF8] shrink-0" />
           <span>
             Located in <strong>{supplier.district || supplier.city || 'Gaborone District'}</strong> (automatically determined from your company profile).
@@ -1023,35 +1023,35 @@ export const SupplierVault: React.FC = () => {
         </div>
 
         {/* Question: Does your business hold a trading licence? */}
-        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
           <div className="space-y-1">
             <h3 className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white">
               Does your business hold a trading licence?
             </h3>
-            <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
               Trading licences are issued by municipal or district councils. If your trade is exempt under the Botswana Trade Act, select "Not required for my business". Unanswered blocks nothing.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-4 pt-1">
-            <label className="flex items-center gap-2.5 cursor-pointer text-[14px] text-[#10212E] dark:text-white font-medium p-2.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:border-[#1F5F99]">
+            <label className="flex items-center gap-2.5 cursor-pointer text-[14px] text-[#10212E] dark:text-white font-medium p-2.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] hover:border-[#1F5F99]">
               <input
                 type="radio"
                 name="vaultTradingLicence"
                 checked={supplier.hasTradingLicence === true}
                 onChange={() => updateSupplierProfile({ hasTradingLicence: true })}
-                className="text-[#1F5F99] focus:ring-[#1F5F99]"
+                className="text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0]"
               />
               <span>Yes, I'll upload it</span>
             </label>
 
-            <label className="flex items-center gap-2.5 cursor-pointer text-[14px] text-[#10212E] dark:text-white font-medium p-2.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:border-[#1F5F99]">
+            <label className="flex items-center gap-2.5 cursor-pointer text-[14px] text-[#10212E] dark:text-white font-medium p-2.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] hover:border-[#1F5F99]">
               <input
                 type="radio"
                 name="vaultTradingLicence"
                 checked={supplier.hasTradingLicence === false}
                 onChange={() => updateSupplierProfile({ hasTradingLicence: false })}
-                className="text-[#1F5F99] focus:ring-[#1F5F99]"
+                className="text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0]"
               />
               <span>Not required for my business</span>
             </label>
@@ -1059,7 +1059,7 @@ export const SupplierVault: React.FC = () => {
 
           {supplier.hasTradingLicence === false && (
             <div className="pt-2">
-              <label className="text-[12px] font-medium text-[#43525F] dark:text-[#B2C3D2] block mb-1">
+              <label className="text-[12px] font-medium text-[#43525F] dark:text-[#D3E3F2] block mb-1">
                 Reason trading licence is not required (optional):
               </label>
               <input
@@ -1067,13 +1067,13 @@ export const SupplierVault: React.FC = () => {
                 value={supplier.tradingLicenceReason || ''}
                 onChange={(e) => updateSupplierProfile({ tradingLicenceReason: e.target.value })}
                 placeholder="e.g. Professional consultancy exempt under Trade Act 2019"
-                className="w-full sm:max-w-md px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white"
+                className="w-full sm:max-w-md px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white"
               />
             </div>
           )}
 
           {supplier.hasTradingLicence === true && (
-            <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#244157]">
               <DocumentRow
                 title="Trading licence"
                 whyNeeded="Authorizes commercial business operations in your local municipal jurisdiction."
@@ -1144,7 +1144,7 @@ export const SupplierVault: React.FC = () => {
         </div>
 
         {/* Conditional Document Rows */}
-        <div className="pt-6 space-y-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="pt-6 space-y-4 border-t border-[#D5E0EA] dark:border-[#244157]">
           <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
             Conditional requirements & preference evidence
           </h3>
@@ -1295,7 +1295,7 @@ export const SupplierVault: React.FC = () => {
           )}
 
           {conditionalItems.length === 0 && (
-            <div className="p-6 rounded-[8px] border border-dashed border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+            <div className="p-6 rounded-[8px] border border-dashed border-[#D5E0EA] dark:border-[#244157] text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               No conditional requirements active. Switch on business declarations above to reveal relevant document requirements.
             </div>
           )}
@@ -1303,13 +1303,13 @@ export const SupplierVault: React.FC = () => {
       </div>
 
       {/* ================= SECTION 3: Optional extras ================= */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
           <div className="space-y-1">
             <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
               Optional extras
             </h2>
-            <p className="text-[14px] text-[#6B7A87]">
+            <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Additional corporate documentation to enhance buyer evaluation, technical scoring, and financial threshold grading.
             </p>
           </div>
@@ -1325,13 +1325,13 @@ export const SupplierVault: React.FC = () => {
 
         {/* Modal / Selector for adding optional document */}
         {isAddingOptional && (
-          <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+          <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
             <h3 className="font-medium text-[14px] text-[#10212E] dark:text-white">Select optional document type to add</h3>
             <div className="flex items-center gap-3">
               <select
                 value={selectedOptionalType}
                 onChange={(e) => setSelectedOptionalType(e.target.value)}
-                className="flex-1 px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[14px] text-[#10212E] dark:text-white"
+                className="flex-1 px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#10212E] text-[14px] text-[#10212E] dark:text-white"
               >
                 <option value="Company Profile">Company profile</option>
                 <option value="CIPA Company Extract">CIPA company extract</option>
@@ -1354,7 +1354,7 @@ export const SupplierVault: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsAddingOptional(false)}
-                className="px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87] hover:bg-white rounded-[6px] text-[13px] cursor-pointer"
+                className="px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#6B7A87] hover:bg-white rounded-[6px] text-[13px] cursor-pointer dark:text-[#9CB4C9] dark:hover:bg-[#162C3D]"
               >
                 Cancel
               </button>
@@ -1415,7 +1415,7 @@ export const SupplierVault: React.FC = () => {
           )}
 
           {!Boolean(companyProfileDoc) && !Boolean(cipaExtractDoc) && !Boolean(auditedFinancialsDoc) && activeOptionalDocs.length === 0 && (
-            <div className="p-6 rounded-[8px] border border-dashed border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+            <div className="p-6 rounded-[8px] border border-dashed border-[#D5E0EA] dark:border-[#244157] text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               No optional documents selected by default. Click "Add optional document" above to include company profile, extracts, or financial statements.
             </div>
           )}
@@ -1425,21 +1425,21 @@ export const SupplierVault: React.FC = () => {
       {/* ================= UPLOAD / REPLACE DRAWER ================= */}
       {isUploadDrawerOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 flex justify-end transition-opacity">
-          <div className="w-full max-w-xl bg-white dark:bg-[#132635] h-full overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl flex flex-col justify-between">
+          <div className="w-full max-w-xl bg-white dark:bg-[#1C364B] h-full overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl flex flex-col justify-between">
             <div className="space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="flex items-center justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <div>
                   <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                     {replacingDoc ? 'Replace document version' : 'Upload document to vault'}
                   </h2>
-                  <p className="text-[13px] text-[#6B7A87]">
+                  <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     {drawerDocType}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsUploadDrawerOpen(false)}
-                  className="p-2 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer"
+                  className="p-2 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer dark:text-[#9CB4C9]"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1457,7 +1457,7 @@ export const SupplierVault: React.FC = () => {
                       <button
                         type="button"
                         onClick={loadDocumentTypes}
-                        className="px-2.5 py-1 text-[12px] font-medium rounded-[4px] bg-white dark:bg-[#132635] border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-200 hover:bg-rose-100 cursor-pointer shrink-0"
+                        className="px-2.5 py-1 text-[12px] font-medium rounded-[4px] bg-white dark:bg-[#1C364B] border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-200 hover:bg-rose-100 cursor-pointer shrink-0"
                       >
                         Retry
                       </button>
@@ -1467,7 +1467,7 @@ export const SupplierVault: React.FC = () => {
                       value={drawerDocType}
                       disabled={isLoadingDocTypes && dbDocumentTypes.length === 0}
                       onChange={(e) => setDrawerDocType(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A] text-[#10212E] dark:text-white"
+                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#182C3A] text-[#10212E] dark:text-white"
                     >
                       {isLoadingDocTypes && dbDocumentTypes.length === 0 ? (
                         <option value="">Loading document types...</option>
@@ -1486,7 +1486,7 @@ export const SupplierVault: React.FC = () => {
 
                   {drawerDocType === 'Other (Custom)' && (
                     <div className="pt-1">
-                      <label className="block text-[12px] font-medium text-[#6B7A87] pb-1">
+                      <label className="block text-[12px] font-medium text-[#6B7A87] pb-1 dark:text-[#9CB4C9]">
                         Enter custom document type name <span className="text-rose-500">*</span>
                       </label>
                       <input
@@ -1495,7 +1495,7 @@ export const SupplierVault: React.FC = () => {
                         onChange={(e) => setCustomDocType(e.target.value)}
                         placeholder="e.g. Environmental Impact Assessment Certificate"
                         required
-                        className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white text-[13px]"
+                        className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white text-[13px]"
                       />
                     </div>
                   )}
@@ -1514,7 +1514,7 @@ export const SupplierVault: React.FC = () => {
                         setDrawerIdentityType(val);
                         setDrawerDocNumberError(null);
                       }}
-                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
                     >
                       <option value="OMANG">National ID (Omang)</option>
                       <option value="PASSPORT">Passport</option>
@@ -1530,7 +1530,7 @@ export const SupplierVault: React.FC = () => {
                       : isDirectorsIdDrawer && drawerIdentityType === 'PASSPORT'
                       ? 'Passport number'
                       : 'Document or certificate number'}{' '}
-                    <span className="text-[12px] font-normal text-[#6B7A87]">(optional if not applicable)</span>
+                    <span className="text-[12px] font-normal text-[#6B7A87] dark:text-[#9CB4C9]">(optional if not applicable)</span>
                   </label>
                   <input
                     type="text"
@@ -1575,7 +1575,7 @@ export const SupplierVault: React.FC = () => {
                     className={`w-full px-3.5 py-2 rounded-[6px] border bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#1F5F99] ${
                       drawerDocNumberError
                         ? 'border-red-400 dark:border-red-600'
-                        : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                        : 'border-[#D5E0EA] dark:border-[#244157]'
                     }`}
                   />
                   {drawerDocNumberError && (
@@ -1596,7 +1596,7 @@ export const SupplierVault: React.FC = () => {
                       value={drawerIssueDate}
                       onChange={(e) => setDrawerIssueDate(e.target.value)}
                       required
-                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                      className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
                     />
                   </div>
 
@@ -1610,12 +1610,12 @@ export const SupplierVault: React.FC = () => {
                         value={drawerExpiryDate}
                         onChange={(e) => setDrawerExpiryDate(e.target.value)}
                         required
-                        className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                        className="w-full px-3.5 py-2 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
                       />
                     </div>
                   ) : (
                     <div className="space-y-1 flex flex-col justify-end">
-                      <div className="p-2.5 rounded-[6px] bg-[#EAF2FA] dark:bg-[#1E364A] border border-[#BDE0FE] dark:border-[#2C4D63] text-[12px] font-medium text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1.5">
+                      <div className="p-2.5 rounded-[6px] bg-[#EAF2FA] dark:bg-[#244157] border border-[#BDE0FE] dark:border-[#2C4D63] text-[12px] font-medium text-[#1F5F99] dark:text-[#38BDF8] flex items-center gap-1.5">
                         <span>♾️ Does not expire (Perpetual document)</span>
                       </div>
                     </div>
@@ -1658,7 +1658,7 @@ export const SupplierVault: React.FC = () => {
                         ? 'border-[#1F5F99] bg-[#EAF2FA]'
                         : isFileUploaded
                         ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
-                        : 'border-[#D5E0EA] dark:border-[#1E364A] hover:border-[#1F5F99]'
+                        : 'border-[#D5E0EA] dark:border-[#244157] hover:border-[#1F5F99]'
                     }`}
                   >
                     {isFileUploaded ? (
@@ -1673,7 +1673,7 @@ export const SupplierVault: React.FC = () => {
                         <p className="font-semibold text-[#10212E] dark:text-white">
                           Click to select or drag & drop certificate
                         </p>
-                        <p className="text-[12px] text-[#6B7A87]">
+                        <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                           PDF, PNG or JPG up to 10 MB.
                         </p>
                       </div>
@@ -1686,7 +1686,7 @@ export const SupplierVault: React.FC = () => {
                         type="button"
                         disabled={isReadingDocument}
                         onClick={handleReadSelectedFile}
-                        className="px-3 py-1.5 text-[12px] font-medium rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-3 py-1.5 text-[12px] font-medium rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] text-[#1F5F99] dark:text-[#38BDF8] hover:bg-[#EAF2FA] dark:hover:bg-[#244157] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>{isReadingDocument ? 'Reading details…' : 'Read document details (does not verify)'}</span>
@@ -1697,7 +1697,7 @@ export const SupplierVault: React.FC = () => {
                           className={`p-3 rounded-[6px] border text-[12px] ${
                             drawerReadStatus.status === 'Needs review'
                               ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                              : 'bg-[#F7FAFD] dark:bg-[#182C3A] border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2]'
+                              : 'bg-[#F7FAFD] dark:bg-[#182C3A] border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2]'
                           }`}
                         >
                           <span className="font-semibold block">
@@ -1715,13 +1715,13 @@ export const SupplierVault: React.FC = () => {
                 </div>
 
                 {/* Certified Copy Checkbox */}
-                <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={drawerCertifiedCopy}
                       onChange={(e) => setDrawerCertifiedCopy(e.target.checked)}
-                      className="w-4 h-4 text-[#1F5F99] rounded border-[#D5E0EA] focus:ring-[#1F5F99]"
+                      className="w-4 h-4 text-[#1F5F99] rounded border-[#D5E0EA] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                     <span className="font-medium text-[#10212E] dark:text-white text-[13px]">
                       This is a certified true copy
@@ -1730,14 +1730,14 @@ export const SupplierVault: React.FC = () => {
 
                   {drawerCertifiedCopy && (
                     <div className="space-y-1 pt-1">
-                      <label className="block text-[12px] text-[#6B7A87]">
+                      <label className="block text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                         Date certified by Commissioner of Oaths / Police
                       </label>
                       <input
                         type="date"
                         value={drawerCertificationDate}
                         onChange={(e) => setDrawerCertificationDate(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#10212E] text-[13px] text-[#10212E] dark:text-white"
+                        className="w-full px-3 py-1.5 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#10212E] text-[13px] text-[#10212E] dark:text-white"
                       />
                     </div>
                   )}
@@ -1747,11 +1747,11 @@ export const SupplierVault: React.FC = () => {
               </form>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
               <button
                 type="button"
                 onClick={() => setIsUploadDrawerOpen(false)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium cursor-pointer"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] hover:bg-[#F7FAFD] dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium cursor-pointer"
               >
                 Cancel
               </button>
@@ -1770,8 +1770,8 @@ export const SupplierVault: React.FC = () => {
       {/* ================= PREVIEW MODAL ================= */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="w-full max-w-4xl bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white flex items-center gap-2">
                   <span>{previewDoc.documentType}</span>
@@ -1779,35 +1779,35 @@ export const SupplierVault: React.FC = () => {
                     {previewDoc.status}
                   </span>
                 </h3>
-                <p className="text-[13px] text-[#6B7A87]">
+                <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Document #{previewDoc.documentNumber || 'N/A'} · File: {previewDoc.fileName}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}
-                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer"
+                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Document Viewer Screen */}
-            <div className="p-4 sm:p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
-              <div className="flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#1E364A] pb-3">
+            <div className="p-4 sm:p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#244157] space-y-4">
+              <div className="flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#244157] pb-3">
                 <div className="flex items-center gap-2 text-[13px] font-semibold text-[#10212E] dark:text-white">
                   <FileCheck className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
                   <span>Secure Document Vault Viewer</span>
                 </div>
-                <div className="flex items-center gap-2 text-[12px] text-[#6B7A87]">
-                  <span className="font-mono">{previewDoc.fileSize || 'Verified'}</span>
+                <div className="flex items-center gap-2 text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
+                  <span className="tabular-nums">{previewDoc.fileSize || 'Verified'}</span>
                   <span>·</span>
                   <span className="text-emerald-700 dark:text-emerald-400 font-medium">PostgreSQL Binary Store</span>
                 </div>
               </div>
 
               {/* Real Document Rendering */}
-              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] shadow-inner overflow-hidden">
+              <div className="bg-white dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] shadow-inner overflow-hidden">
                 <DocumentVaultPreview
                   blob={previewBlob}
                   objectUrl={previewBlobUrl}
@@ -1824,10 +1824,10 @@ export const SupplierVault: React.FC = () => {
 
               {/* Checksum & Security Fingerprint */}
               {previewDoc.sha256 && (
-                <div className="p-3 bg-white dark:bg-[#10212E] rounded border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[12px] gap-2">
+                <div className="p-3 bg-white dark:bg-[#10212E] rounded border border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[12px] gap-2">
                   <div className="truncate max-w-full">
-                    <span className="text-[#6B7A87]">SHA-256 Checksum: </span>
-                    <span className="font-mono text-[11px] text-[#10212E] dark:text-slate-300">
+                    <span className="text-[#6B7A87] dark:text-[#9CB4C9]">SHA-256 Checksum: </span>
+                    <span className="tabular-nums text-[11px] text-[#10212E] dark:text-slate-300">
                       {previewDoc.sha256}
                     </span>
                   </div>
@@ -1854,7 +1854,7 @@ export const SupplierVault: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium cursor-pointer"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium cursor-pointer"
               >
                 Close
               </button>
@@ -1895,7 +1895,7 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
   const statusInfo = useMemo(() => computeDerivedDocStatus(doc), [doc]);
 
   return (
-    <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">
+    <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1911,16 +1911,16 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
               </span>
             )}
           </div>
-          <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
             {whyNeeded}
           </p>
           {note && (
-            <span className="text-[12px] text-[#6B7A87] italic block">
+            <span className="text-[12px] text-[#6B7A87] italic block dark:text-[#9CB4C9]">
               Note: {note}
             </span>
           )}
           {doc?.expiryDate && (
-            <div className="text-[12px] text-[#6B7A87] flex items-center gap-1.5 pt-0.5">
+            <div className="text-[12px] text-[#6B7A87] flex items-center gap-1.5 pt-0.5 dark:text-[#9CB4C9]">
               <Calendar className="w-3.5 h-3.5" />
               <span>Expiry date: {doc.expiryDate}</span>
               {doc.documentNumber && <span>· Doc #{doc.documentNumber}</span>}
@@ -1934,7 +1934,7 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
               <button
                 type="button"
                 onClick={onView}
-                className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 title="View document"
               >
                 <Eye className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#38BDF8]" />
@@ -1945,7 +1945,7 @@ const DocumentRow: React.FC<DocumentRowProps> = ({
                   type="button"
                   onClick={onDownload}
                   disabled={isDownloading}
-                  className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
+                  className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
                   title="Download file"
                 >
                   <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -2025,7 +2025,7 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
   const prefStatus = useMemo(() => computePreferenceDocStatus(isClaimed, doc), [isClaimed, doc]);
 
   return (
-    <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">
+    <div className="p-4 sm:p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#182C3A]/50 space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -2039,21 +2039,21 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
               <button
                 type="button"
                 onClick={onNavigateToProfile}
-                className="text-[11px] px-2 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] hover:underline cursor-pointer inline-flex items-center gap-1"
+                className="text-[11px] px-2 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] hover:underline cursor-pointer inline-flex items-center gap-1"
                 title="View corresponding preference in Profile"
               >
                 <span>Linked to Profile</span>
               </button>
             )}
           </div>
-          <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
             {whyNeeded}
           </p>
-          <span className="text-[12px] text-[#6B7A87] italic block">
+          <span className="text-[12px] text-[#6B7A87] italic block dark:text-[#9CB4C9]">
             Each buyer decides how to use these claims under BidReady360.
           </span>
           {doc?.expiryDate && (
-            <div className="text-[12px] text-[#6B7A87] flex items-center gap-1.5 pt-0.5">
+            <div className="text-[12px] text-[#6B7A87] flex items-center gap-1.5 pt-0.5 dark:text-[#9CB4C9]">
               <Calendar className="w-3.5 h-3.5" />
               <span>Expiry date: {doc.expiryDate}</span>
             </div>
@@ -2066,7 +2066,7 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
               <button
                 type="button"
                 onClick={onView}
-                className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Eye className="w-3.5 h-3.5" />
                 <span>View</span>
@@ -2076,7 +2076,7 @@ const PreferenceRow: React.FC<PreferenceRowProps> = ({
                   type="button"
                   onClick={onDownload}
                   disabled={isDownloading}
-                  className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] hover:bg-white dark:hover:bg-[#10212E] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   title="Download file"
                 >
                   <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -2135,7 +2135,7 @@ const SwitchCard: React.FC<SwitchCardProps> = ({
   onBadgeClick,
 }) => {
   return (
-    <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#182C3A]/40 flex items-center justify-between gap-3">
+    <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#182C3A]/40 flex items-center justify-between gap-3">
       <div className="space-y-0.5">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-[14px] text-[#10212E] dark:text-white block">
@@ -2145,14 +2145,14 @@ const SwitchCard: React.FC<SwitchCardProps> = ({
             <button
               type="button"
               onClick={onBadgeClick}
-              className="text-[11px] px-2 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] hover:underline cursor-pointer inline-flex items-center gap-0.5"
+              className="text-[11px] px-2 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] hover:underline cursor-pointer inline-flex items-center gap-0.5"
               title="Click to view corresponding setting in Profile"
             >
               {badge}
             </button>
           )}
         </div>
-        <p className="text-[12px] text-[#6B7A87]">
+        <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
           {description}
         </p>
       </div>
@@ -2163,11 +2163,11 @@ const SwitchCard: React.FC<SwitchCardProps> = ({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
-          checked ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+          checked ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#244157]'
         }`}
       >
         <div
-          className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+          className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 dark:bg-[#1C364B] ${
             checked ? 'translate-x-5' : 'translate-x-0'
           }`}
         />

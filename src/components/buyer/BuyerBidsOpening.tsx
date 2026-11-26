@@ -183,21 +183,21 @@ export const BuyerBidsOpening: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Bids & sealed envelope opening
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Statutory sealed-bid protocol under the Public Procurement Act. Price proposals remain cryptographically sealed until an authorized witnessed opening session after closing time.
           </p>
         </div>
       </div>
 
       {/* Mandatory Sealed Bid Safeguard Alert */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 border-l-[#1F5F99] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] border-l-4 border-l-[#1F5F99] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">
-          <div className="text-[#1F5F99] shrink-0 mt-0.5">
+          <div className="text-[#1F5F99] shrink-0 mt-0.5 dark:text-[#6FAEE0]">
             <Lock className="w-5 h-5" strokeWidth={1.5} />
           </div>
           <div className="space-y-1">
@@ -206,7 +206,7 @@ export const BuyerBidsOpening: React.FC = () => {
                 ? `${urgentSealedCallsCount} sealed tender${urgentSealedCallsCount === 1 ? '' : 's'} closing within 3 days`
                 : `${buyerCalls.length} sealed tender${buyerCalls.length === 1 ? '' : 's'} tracked in vault`}
             </h2>
-            <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
               Bids stay sealed until an authorised 2-witness opening ceremony is held after closing time. Pre-closing inspection or tampering is blocked by database triggers.
             </p>
           </div>
@@ -214,7 +214,7 @@ export const BuyerBidsOpening: React.FC = () => {
       </div>
 
       {openingSuccess && (
-        <div className="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-[12px] text-[#065F46] text-[14px] flex items-center gap-2">
+        <div className="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-[12px] text-[#065F46] text-[14px] flex items-center gap-2 dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <CheckCircle2 className="w-5 h-5 text-[#2F8F5B]" />
           <span>
             Opening session executed successfully. Bids have been unsealed, witness register SHA-256 committed to audit log, and financial proposals are now visible to evaluators.
@@ -223,17 +223,17 @@ export const BuyerBidsOpening: React.FC = () => {
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-[#FEF2F2] border border-[#FCA5A5] rounded-[12px] text-[#8E2A1B] text-[14px] flex items-center gap-2">
+        <div className="p-4 bg-[#FEF2F2] border border-[#FCA5A5] rounded-[12px] text-[#8E2A1B] text-[14px] flex items-center gap-2 dark:bg-[#C2412D]/20">
           <AlertCircle className="w-5 h-5 text-[#C2412D]" />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {/* Tender Selection & Status Panel */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <label className="text-[13px] font-medium text-[#6B7A87] block">
+            <label className="text-[13px] font-medium text-[#6B7A87] block dark:text-[#9CB4C9]">
               Select tender call to review envelopes
             </label>
             <select
@@ -242,7 +242,7 @@ export const BuyerBidsOpening: React.FC = () => {
                 setSelectedCallId(e.target.value);
                 setErrorMsg(null);
               }}
-              className="p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] text-[14px] font-semibold text-[#10212E] dark:text-white"
+              className="p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] text-[14px] font-semibold text-[#10212E] dark:text-white"
             >
               {buyerCalls.length === 0 && <option value="">No sealed RFPs found</option>}
               {buyerCalls.map((c) => (
@@ -255,12 +255,12 @@ export const BuyerBidsOpening: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3">
             {isOpened ? (
-              <span className="bg-[#ECFDF5] text-[#2F8F5B] px-3 py-1.5 rounded-[6px] text-[13px] font-semibold flex items-center gap-1.5">
+              <span className="bg-[#ECFDF5] text-[#2F8F5B] px-3 py-1.5 rounded-[6px] text-[13px] font-semibold flex items-center gap-1.5 dark:bg-[#2F8F5B]/20">
                 <Unlock className="w-4 h-4" />
                 <span>Envelopes unsealed & logged</span>
               </span>
             ) : (
-              <span className="bg-[#FEF2F2] text-[#C2412D] px-3 py-1.5 rounded-[6px] text-[13px] font-semibold flex items-center gap-1.5">
+              <span className="bg-[#FEF2F2] text-[#C2412D] px-3 py-1.5 rounded-[6px] text-[13px] font-semibold flex items-center gap-1.5 dark:bg-[#C2412D]/20">
                 <Lock className="w-4 h-4" />
                 <span>Sealed (Locked prior to opening ceremony)</span>
               </span>
@@ -280,7 +280,7 @@ export const BuyerBidsOpening: React.FC = () => {
             )}
 
             {!isOpened && !hasOpeningPermission && (
-              <span className="text-[13px] text-[#6B7A87]">
+              <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Opening restricted to Procurement Officers
               </span>
             )}
@@ -295,12 +295,12 @@ export const BuyerBidsOpening: React.FC = () => {
                 <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
                 <span>Official Opening Ceremony Certificate ({openingSession.protocolType?.replace(/_/g, ' ') || 'Dual-Key Statutory Quorum'})</span>
               </div>
-              <span className="font-mono text-[11px] text-[#065F46]/80 dark:text-[#A7F3D0]/80">
+              <span className="tabular-nums text-[11px] text-[#065F46]/80 dark:text-[#A7F3D0]/80">
                 Opened {new Date(openingSession.openedAt).toLocaleString('en-BW')} · Presiding: {openingSession.conductedByName}
               </span>
             </div>
             {openingSession.registerSha256 && (
-              <div className="text-[12px] font-mono text-[#10212E] dark:text-white bg-white/80 dark:bg-[#10212E]/80 p-2 rounded border border-[#A7F3D0]/60 break-all">
+              <div className="text-[12px] tabular-nums text-[#10212E] dark:text-white bg-white/80 dark:bg-[#10212E]/80 p-2 rounded border border-[#A7F3D0]/60 break-all">
                 Register SHA-256: {openingSession.registerSha256}
               </div>
             )}
@@ -309,14 +309,14 @@ export const BuyerBidsOpening: React.FC = () => {
                 {openingSession.witnesses.map((w: any, idx: number) => (
                   <div
                     key={`${w.userId || w.name}-${idx}`}
-                    className="p-2.5 rounded-[6px] bg-white dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-2"
+                    className="p-2.5 rounded-[6px] bg-white dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-2"
                   >
                     <div>
                       <div className="font-semibold text-[#10212E] dark:text-white">{w.name}</div>
-                      <div className="text-[11px] text-[#6B7A87]">{w.witnessRole}</div>
+                      <div className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">{w.witnessRole}</div>
                     </div>
                     {w.signatureHash && (
-                      <span className="font-mono text-[10px] text-[#2F8F5B]" title={w.signatureHash}>
+                      <span className="tabular-nums text-[10px] text-[#2F8F5B]" title={w.signatureHash}>
                         Sig {String(w.signatureHash).slice(0, 10)}…
                       </span>
                     )}
@@ -328,9 +328,9 @@ export const BuyerBidsOpening: React.FC = () => {
         )}
 
         {/* Bidders Envelope Table */}
-        <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-x-auto">
-          <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-            <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
+        <div className="border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] overflow-x-auto">
+          <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+            <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px] dark:text-[#9CB4C9]">
               <tr>
                 <th className="p-4">Bidder legal name</th>
                 <th className="p-4">CIPA / Receipt</th>
@@ -340,16 +340,16 @@ export const BuyerBidsOpening: React.FC = () => {
                 <th className="p-4">Envelope status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+            <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
               {isLoadingBids ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-[#6B7A87]">
+                  <td colSpan={6} className="p-6 text-center text-[#6B7A87] dark:text-[#9CB4C9]">
                     Loading bid envelopes...
                   </td>
                 </tr>
               ) : bids.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-[#6B7A87]">
+                  <td colSpan={6} className="p-6 text-center text-[#6B7A87] dark:text-[#9CB4C9]">
                     No bid envelopes recorded for this tender call yet.
                   </td>
                 </tr>
@@ -357,14 +357,14 @@ export const BuyerBidsOpening: React.FC = () => {
                 bids.map((b) => (
                   <tr key={b.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
                     <td className="p-4 font-semibold">{b.supplierName}</td>
-                    <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] text-[13px]">
+                    <td className="p-4 text-[#43525F] dark:text-[#D3E3F2] text-[13px]">
                       <div>{b.cipaNumber || '—'}</div>
-                      {b.receiptNumber && <div className="font-mono text-[11px] text-[#6B7A87]">{b.receiptNumber}</div>}
+                      {b.receiptNumber && <div className="tabular-nums text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">{b.receiptNumber}</div>}
                     </td>
-                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2] text-[13px]">
+                    <td className="p-4 tabular-nums text-[#43525F] dark:text-[#D3E3F2] text-[13px]">
                       {b.submittedAt ? new Date(b.submittedAt).toLocaleString() : '—'}
                     </td>
-                    <td className="p-4 text-[12px] text-[#6B7A87] font-mono truncate max-w-[160px]" title={b.payloadSha256 || ''}>
+                    <td className="p-4 text-[12px] text-[#6B7A87] tabular-nums truncate max-w-[160px] dark:text-[#9CB4C9]" title={b.payloadSha256 || ''}>
                       {b.payloadSha256 ? `${String(b.payloadSha256).slice(0, 16)}...` : 'Recorded'}
                     </td>
                     <td className="p-4 text-right font-semibold tabular-nums">
@@ -373,9 +373,9 @@ export const BuyerBidsOpening: React.FC = () => {
                           {b.currency || 'BWP'} {Number(b.totalPrice).toLocaleString()}
                         </span>
                       ) : b.status === 'withdrawn' ? (
-                        <span className="text-[#6B7A87] italic">Withdrawn pre-closing</span>
+                        <span className="text-[#6B7A87] italic dark:text-[#9CB4C9]">Withdrawn pre-closing</span>
                       ) : (
-                        <span className="text-[#6B7A87] italic">[Cryptographically Sealed]</span>
+                        <span className="text-[#6B7A87] italic dark:text-[#9CB4C9]">[Cryptographically Sealed]</span>
                       )}
                     </td>
                     <td className="p-4">
@@ -384,7 +384,7 @@ export const BuyerBidsOpening: React.FC = () => {
                           b.status === 'opened'
                             ? 'bg-[#ECFDF5] text-[#2F8F5B]'
                             : b.status === 'withdrawn'
-                            ? 'bg-slate-100 text-slate-600'
+                            ? 'bg-slate-100 text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2]'
                             : 'bg-[#FEF2F2] text-[#C2412D]'
                         }`}
                       >
@@ -402,21 +402,21 @@ export const BuyerBidsOpening: React.FC = () => {
       {/* Opening Session Modal */}
       {isOpeningSessionOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
-          <div className="w-full max-w-xl bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="space-y-1 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-              <span className="text-[12px] text-[#1F5F99] font-medium">Official dual-key unsealing protocol</span>
+          <div className="w-full max-w-xl bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="space-y-1 pb-3 border-b border-[#D5E0EA] dark:border-[#244157]">
+              <span className="text-[12px] text-[#1F5F99] font-medium dark:text-[#6FAEE0]">Official dual-key unsealing protocol</span>
               <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                 Conduct Bid Opening Ceremony
               </h3>
             </div>
 
             {isBeforeClosing && (
-              <div className="p-3 rounded-[8px] bg-[#FEF2F2] border border-[#FCA5A5] text-[13px] text-[#8E2A1B]">
+              <div className="p-3 rounded-[8px] bg-[#FEF2F2] border border-[#FCA5A5] text-[13px] text-[#8E2A1B] dark:bg-[#C2412D]/20">
                 Notice: The closing deadline ({selectedCall?.closesAt ? new Date(selectedCall.closesAt).toLocaleString() : 'Not set'}) has not elapsed yet. The server will block unsealing before closing time.
               </div>
             )}
 
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               Unsealing decrypts submitted commercial offers for <strong>{selectedCall?.callNumber}</strong> ({submittedBidsCount} sealed envelope{submittedBidsCount === 1 ? '' : 's'}) and requires a quorum of at least <strong>2 distinct witnesses</strong>.
             </p>
 
@@ -429,24 +429,24 @@ export const BuyerBidsOpening: React.FC = () => {
                   type="text"
                   value={officerName}
                   disabled
-                  className="w-full p-2.5 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#6B7A87]"
+                  className="w-full p-2.5 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#6B7A87] dark:text-[#9CB4C9]"
                 />
               </div>
 
               {members.length > 0 && (
                 <div className="space-y-2">
                   <label className="font-medium text-[#10212E] dark:text-white flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-[#1F5F99]" />
+                    <Users className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                     <span>Select organization co-witnesses (select at least 1 additional officer)</span>
                   </label>
-                  <div className="max-h-40 overflow-y-auto divide-y divide-[#D5E0EA] dark:divide-[#1E364A] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
+                  <div className="max-h-40 overflow-y-auto divide-y divide-[#D5E0EA] dark:divide-[#244157] border border-[#D5E0EA] dark:border-[#244157] rounded-[8px]">
                     {members.map((m) => {
                       const isPresiding = m.userId === currentUser?.id;
                       const checked = effectiveMemberWitnesses.has(m.userId);
                       return (
                         <label
                           key={m.userId}
-                          className={`flex items-center justify-between p-2.5 text-[13px] ${isPresiding ? 'bg-[#EAF2FA]/60 dark:bg-[#1E364A]/40' : 'cursor-pointer hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]'}`}
+                          className={`flex items-center justify-between p-2.5 text-[13px] ${isPresiding ? 'bg-[#EAF2FA]/60 dark:bg-[#244157]/40' : 'cursor-pointer hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]'}`}
                         >
                           <div className="flex items-center gap-2.5">
                             <input
@@ -459,7 +459,7 @@ export const BuyerBidsOpening: React.FC = () => {
                               {m.fullName} {isPresiding ? '(Presiding)' : ''}
                             </span>
                           </div>
-                          <span className="text-[11px] font-mono text-[#6B7A87]">{m.roleName}</span>
+                          <span className="text-[11px] tabular-nums text-[#6B7A87] dark:text-[#9CB4C9]">{m.roleName}</span>
                         </label>
                       );
                     })}
@@ -475,7 +475,7 @@ export const BuyerBidsOpening: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setExternalWitnesses((prev) => [...prev, { name: '', witnessRole: 'External Witness' }])}
-                    className="text-xs font-semibold text-[#1F5F99] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    className="text-xs font-semibold text-[#1F5F99] hover:underline inline-flex items-center gap-1 cursor-pointer dark:text-[#6FAEE0]"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add external witness</span>
@@ -493,7 +493,7 @@ export const BuyerBidsOpening: React.FC = () => {
                           prev.map((row, i) => (i === idx ? { ...row, name: e.target.value } : row))
                         )
                       }
-                      className="col-span-6 p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px]"
+                      className="col-span-6 p-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px]"
                     />
                     <input
                       type="text"
@@ -504,12 +504,12 @@ export const BuyerBidsOpening: React.FC = () => {
                           prev.map((row, i) => (i === idx ? { ...row, witnessRole: e.target.value } : row))
                         )
                       }
-                      className="col-span-5 p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px]"
+                      className="col-span-5 p-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px]"
                     />
                     <button
                       type="button"
                       onClick={() => setExternalWitnesses((prev) => prev.filter((_, i) => i !== idx))}
-                      className="col-span-1 p-1.5 text-[#C2412D] hover:bg-rose-50 rounded cursor-pointer"
+                      className="col-span-1 p-1.5 text-[#C2412D] hover:bg-rose-50 rounded cursor-pointer dark:hover:bg-[#C2412D]/20"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -523,11 +523,11 @@ export const BuyerBidsOpening: React.FC = () => {
                   : 'Quorum pending: select at least 2 distinct witnesses to authorize unsealing.'}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#D5E0EA] dark:border-[#244157]">
                 <button
                   type="button"
                   onClick={() => setIsOpeningSessionOpen(false)}
-                  className="px-4 py-2 text-[14px] text-[#43525F] cursor-pointer"
+                  className="px-4 py-2 text-[14px] text-[#43525F] cursor-pointer dark:text-[#D3E3F2]"
                 >
                   Cancel
                 </button>

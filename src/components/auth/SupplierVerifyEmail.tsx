@@ -88,7 +88,7 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
       tagline="Check your email to verify your address and activate your supplier company account."
     >
       <div className="space-y-6 text-center">
-        <div className="w-12 h-12 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3E] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center mx-auto">
+        <div className="w-12 h-12 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3D] text-[#1F5F99] dark:text-[#6FAEE0] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center mx-auto">
           <Mail className="w-6 h-6" strokeWidth={1.5} />
         </div>
 
@@ -96,7 +96,7 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Verify your email address
           </h2>
-          <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] max-w-sm mx-auto leading-relaxed">
+          <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] max-w-sm mx-auto leading-relaxed">
             We sent a verification link and confirmation code to{' '}
             <strong className="text-[#10212E] dark:text-white font-semibold">
               {supplier.email || 'your email'}
@@ -118,17 +118,17 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
         )}
 
         {resendMessage && (
-          <div className="p-3 bg-[#EAF2FA] dark:bg-[#162C3E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] text-left">
+          <div className="p-3 bg-[#EAF2FA] dark:bg-[#162C3D] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] text-left">
             {resendMessage}
           </div>
         )}
 
         <div className="space-y-3">
-          <span className="text-[13px] text-[#6B7A87] block">Enter 6-digit code from email:</span>
+          <span className="text-[13px] text-[#6B7A87] block dark:text-[#9CB4C9]">Enter 6-digit code from email:</span>
           <DigitCodeInput onComplete={handleComplete} disabled={isLoading || isVerified} />
         </div>
 
-        <form onSubmit={handleTokenFormSubmit} className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] text-left space-y-3">
+        <form onSubmit={handleTokenFormSubmit} className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] text-left space-y-3">
           <span className="text-[12px] font-semibold text-[#10212E] dark:text-white block uppercase tracking-wider">
             Or paste verification token
           </span>
@@ -160,7 +160,7 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
           </div>
         )}
 
-        <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3">
+        <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3 dark:text-[#9CB4C9]">
           <div>
             Didn't receive the email?{' '}
             {resendCountdown > 0 ? (
@@ -178,7 +178,7 @@ export const SupplierVerifyEmail: React.FC<SupplierVerifyEmailProps> = ({ onNavi
             )}
           </div>
 
-          <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
             <Button
               type="button"
               variant="secondary"

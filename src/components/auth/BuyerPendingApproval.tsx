@@ -62,7 +62,7 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             {isRejectedOrSuspended ? 'Organization access suspended or rejected' : 'Awaiting administrator approval'}
           </h2>
-          <p className="text-[14px] text-[#6B7A87] leading-relaxed">
+          <p className="text-[14px] text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             {isRejectedOrSuspended ? (
               <>
                 <strong>{registeredBuyerOrgName || 'Your organization'}</strong> ({registeredBuyerEmail || 'official account'}) does not currently have active procuring entity approval. Publishing tenders and managing calls is blocked until reinstated by a platform administrator.
@@ -87,12 +87,12 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
         )}
 
         {/* Three-step timeline */}
-        <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
-          <span className="text-[13px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
+        <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-4">
+          <span className="text-[13px] font-semibold text-[#6B7A87] uppercase tracking-wider block dark:text-[#9CB4C9]">
             Verification status
           </span>
 
-          <div className="space-y-4 relative pl-6 border-l-2 border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="space-y-4 relative pl-6 border-l-2 border-[#D5E0EA] dark:border-[#244157]">
             <div className="relative space-y-0.5">
               <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-[#2F8F5B] text-white flex items-center justify-center text-[10px] font-bold">
                 ✓
@@ -103,7 +103,7 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
                 </span>
                 <span className="text-[12px] text-[#2F8F5B] font-medium">Completed</span>
               </div>
-              <p className="text-[13px] text-[#6B7A87]">
+              <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Official entity name: <strong>{registeredBuyerOrgName || 'Procuring Organization'}</strong>
               </p>
             </div>
@@ -124,22 +124,22 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
                   {isRejectedOrSuspended ? 'Rejected / Suspended' : 'Pending approval'}
                 </span>
               </div>
-              <p className="text-[13px] text-[#6B7A87]">
+              <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 All tender creation, application review, and bid evaluation endpoints are enforced server-side and remain locked until approved in the Admin portal.
               </p>
             </div>
 
             <div className="relative space-y-0.5 opacity-60">
-              <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-600 flex items-center justify-center text-[10px] font-bold">
+              <span className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-600 flex items-center justify-center text-[10px] font-bold dark:text-[#D3E3F2]">
                 3
               </span>
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
                   3. Workspace activation
                 </span>
-                <span className="text-[12px] text-[#6B7A87]">Locked</span>
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">Locked</span>
               </div>
-              <p className="text-[13px] text-[#6B7A87]">
+              <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Once approved by an administrator, click &ldquo;Check approval status&rdquo; below to enter your buyer workspace immediately.
               </p>
             </div>
@@ -147,7 +147,7 @@ export const BuyerPendingApproval: React.FC<BuyerPendingApprovalProps> = ({ onNa
         </div>
 
         {statusNotice && (
-          <div className="p-3 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/40 border border-[#D5E0EA] dark:border-[#1E364A] text-[13px] text-[#10212E] dark:text-[#B2C3D2]">
+          <div className="p-3 rounded-[8px] bg-[#EAF2FA] dark:bg-[#244157]/40 border border-[#D5E0EA] dark:border-[#244157] text-[13px] text-[#10212E] dark:text-[#D3E3F2]">
             {statusNotice}
           </div>
         )}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Logo } from '../common/Logo';
+import { ThemeSwitcher } from '../common/ThemeSwitcher';
 import { RingMotif } from '../ui/RingMotif';
 import { useApp } from '../../context/AppContext';
 import {
@@ -48,7 +49,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
       description: 'Documents are checked against registries so you can submit them with confidence.',
     },
     {
-      icon: <ShieldCheck className="w-5 h-5 text-[#1F5F99]" strokeWidth={1.5} />,
+      icon: <ShieldCheck className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />,
       title: 'You control what you share',
       description: 'You choose which organizations can view your profile and documents.',
     },
@@ -72,7 +73,7 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-white">
+    <div className="min-h-screen flex flex-col lg:flex-row bg-[#EAF2FA]/45 dark:bg-[#10212E] text-[#10212E] dark:text-white">
       {/* ======================================================== */}
       {/* DESKTOP LEFT PANEL: INK BACKGROUND WITH RING MOTIF       */}
       {/* ======================================================== */}
@@ -134,25 +135,27 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
       {/* ======================================================== */}
       {/* RIGHT PANEL: SURFACE WITH BORDERED FORM CARD (MAX 440PX) */}
       {/* ======================================================== */}
-      <div className="flex-1 flex flex-col justify-between p-4 sm:p-8 lg:p-12 overflow-y-auto bg-[#F7FAFD] dark:bg-[#0D1A25]">
+      <div className="flex-1 flex flex-col justify-between p-4 sm:p-8 lg:p-12 overflow-y-auto bg-[#EAF2FA]/45 dark:bg-[#10212E]">
         {/* Top Header Bar on Form Side */}
         <div className="max-w-[440px] w-full mx-auto flex items-center justify-between gap-4 pb-4 sm:pb-6">
           <button
             type="button"
             onClick={handleBack}
-            className="inline-flex items-center gap-1.5 text-[14px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors min-h-[44px]"
+            className="inline-flex items-center gap-1.5 text-[14px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors min-h-[44px] cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
             <span>{backLinkText}</span>
           </button>
 
-          {/* Language Indicator: Defaulted to EN */}
-          <div
-            className="flex items-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#B2C3D2] px-2.5 py-1 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]"
-            title="Language: English (EN)"
-          >
-            <Globe className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
-            <span className="font-semibold text-[#10212E] dark:text-white">EN</span>
+          <div className="flex items-center gap-2">
+            <ThemeSwitcher variant="compact" />
+            <div
+              className="flex items-center gap-1.5 text-[13px] font-medium text-[#43525F] dark:text-[#D3E3F2] px-2.5 py-1.5 rounded-[6px] bg-white dark:bg-[#162C3D] border border-[#D5E0EA] dark:border-[#244157]"
+              title="Language: English (EN)"
+            >
+              <Globe className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
+              <span className="font-semibold text-[#10212E] dark:text-white">EN</span>
+            </div>
           </div>
         </div>
 
@@ -161,15 +164,15 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
           {customLogo || <Logo size="md" />}
         </div>
 
-        {/* Form Card Area: White bordered card, 12px radius, no shadow, max 440px */}
+        {/* Form Card Area: White / Dark elevated bordered card, 12px radius, max 440px */}
         <div className="my-auto py-2 sm:py-4 max-w-[440px] w-full mx-auto">
-          <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 sm:p-8 shadow-none space-y-6">
+          <div className="bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] p-6 sm:p-8 shadow-none space-y-6">
             {children}
           </div>
         </div>
 
         {/* Bottom Footer: Terms and Privacy notice */}
-        <div className="max-w-[440px] w-full mx-auto pt-6 text-center text-[14px] text-[#6B7A87] space-y-2">
+        <div className="max-w-[440px] w-full mx-auto pt-6 text-center text-[14px] text-[#6B7A87] space-y-2 dark:text-[#9CB4C9]">
           {showPoweredBy && (
             <div className="flex items-center justify-center gap-2 pb-1">
               <span>Powered by</span>

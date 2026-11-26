@@ -217,7 +217,7 @@ export const BuyerFormBuilder: React.FC = () => {
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs flex items-center gap-2">
+        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs flex items-center gap-2 dark:bg-[#C2412D]/20">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           <span>{errorMsg}</span>
         </div>
@@ -227,7 +227,7 @@ export const BuyerFormBuilder: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Form Builder Studio
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -247,7 +247,7 @@ export const BuyerFormBuilder: React.FC = () => {
             type="button"
             onClick={() => loadTemplates(selectedTemplateId)}
             disabled={isLoading}
-            className="px-3 py-2.5 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-2.5 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer dark:border-[#244157]"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -274,20 +274,20 @@ export const BuyerFormBuilder: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="p-10 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500">
+        <div className="p-10 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500 dark:bg-[#1C364B] dark:text-[#9CB4C9] dark:border-[#244157]">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Loading saved questionnaire templates...</span>
         </div>
       ) : (
         <>
           {/* Template Selector & Meta */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs dark:bg-[#1C364B] dark:border-[#244157]">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Active Template</label>
+              <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Active Template</label>
               <select
                 value={selectedTemplateId}
                 onChange={(e) => handleSwitchTemplate(e.target.value)}
-                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-[#10212E]"
+                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-[#10212E] dark:bg-[#1C364B] dark:text-white dark:border-[#244157]"
               >
                 {templates.length === 0 && <option value="">Unsaved Draft</option>}
                 {templates.map((t) => (
@@ -299,23 +299,23 @@ export const BuyerFormBuilder: React.FC = () => {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Template Title</label>
+              <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Template Title</label>
               <input
                 type="text"
                 value={templateTitle}
                 onChange={(e) => setTemplateTitle(e.target.value)}
-                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Version Tag</label>
+              <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Version Tag</label>
               <input
                 type="text"
                 value={templateVersion}
                 onChange={(e) => setTemplateVersion(e.target.value)}
                 placeholder="e.g. v1.0"
-                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold"
+                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs tabular-nums font-bold dark:bg-[#1C364B] dark:border-[#244157]"
               />
             </div>
 
@@ -325,7 +325,7 @@ export const BuyerFormBuilder: React.FC = () => {
                   type="button"
                   onClick={handleDeleteTemplate}
                   disabled={isSaving}
-                  className="px-3 py-2 border border-rose-200 text-[#C2412D] hover:bg-rose-50 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-3 py-2 border border-rose-200 text-[#C2412D] hover:bg-rose-50 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 dark:border-[#C2412D]/40 dark:hover:bg-[#C2412D]/20"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Delete Template</span>
@@ -334,13 +334,13 @@ export const BuyerFormBuilder: React.FC = () => {
             </div>
 
             <div className="sm:col-span-4">
-              <label className="block font-semibold text-slate-700 mb-1">Template Description</label>
+              <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Template Description</label>
               <input
                 type="text"
                 value={templateDesc}
                 onChange={(e) => setTemplateDesc(e.target.value)}
                 placeholder="Describe when procurement officers should attach this questionnaire..."
-                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
               />
             </div>
           </div>
@@ -350,7 +350,7 @@ export const BuyerFormBuilder: React.FC = () => {
             {/* Left: Field Editor (7 cols) */}
             <div className="lg:col-span-7 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-heading font-semibold text-base text-[#10212E]">
+                <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
                   Configured Questionnaire Fields ({fields.length})
                 </h3>
                 <button
@@ -365,21 +365,21 @@ export const BuyerFormBuilder: React.FC = () => {
 
               <div className="space-y-4">
                 {fields.length === 0 ? (
-                  <div className="p-8 bg-white border border-dashed border-slate-300 rounded-2xl text-center text-xs text-slate-500">
+                  <div className="p-8 bg-white border border-dashed border-slate-300 rounded-2xl text-center text-xs text-slate-500 dark:bg-[#1C364B] dark:text-[#9CB4C9] dark:border-[#244157]">
                     No fields configured yet. Click "Add Field" to build your tender questionnaire.
                   </div>
                 ) : (
                   fields.map((field, index) => (
                     <div
                       key={field.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-2xs"
+                      className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-2xs dark:bg-[#1C364B] dark:border-[#244157]"
                     >
-                      <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-[#244157]">
                         <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center font-mono">
+                          <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 text-xs font-bold flex items-center justify-center tabular-nums dark:bg-[#162C3D] dark:text-[#D3E3F2]">
                             {index + 1}
                           </span>
-                          <span className="text-xs font-bold text-slate-800">
+                          <span className="text-xs font-bold text-slate-800 dark:text-white">
                             Field: {field.type.toUpperCase()}
                           </span>
                         </div>
@@ -389,7 +389,7 @@ export const BuyerFormBuilder: React.FC = () => {
                             type="button"
                             onClick={() => handleMoveField(index, 'up')}
                             disabled={index === 0}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 rounded hover:bg-slate-100 cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 rounded hover:bg-slate-100 cursor-pointer dark:hover:bg-[#162C3D]"
                             title="Move Up"
                           >
                             <ArrowUp className="w-4 h-4" />
@@ -398,7 +398,7 @@ export const BuyerFormBuilder: React.FC = () => {
                             type="button"
                             onClick={() => handleMoveField(index, 'down')}
                             disabled={index === fields.length - 1}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 rounded hover:bg-slate-100 cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 rounded hover:bg-slate-100 cursor-pointer dark:hover:bg-[#162C3D]"
                             title="Move Down"
                           >
                             <ArrowDown className="w-4 h-4" />
@@ -406,7 +406,7 @@ export const BuyerFormBuilder: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleDeleteField(field.id)}
-                            className="p-1.5 text-slate-400 hover:text-[#C2412D] rounded hover:bg-slate-100 ml-1 cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-[#C2412D] rounded hover:bg-slate-100 ml-1 cursor-pointer dark:hover:bg-[#162C3D]"
                             title="Delete Field"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -416,23 +416,23 @@ export const BuyerFormBuilder: React.FC = () => {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div className="sm:col-span-2">
-                          <label className="block font-semibold text-slate-700 mb-1">Question / Field Label</label>
+                          <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Question / Field Label</label>
                           <input
                             type="text"
                             value={field.label}
                             onChange={(e) => handleUpdateField(field.id, { label: e.target.value })}
-                            className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                            className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                           />
                         </div>
 
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Input Field Type</label>
+                          <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Input Field Type</label>
                           <select
                             value={field.type}
                             onChange={(e) =>
                               handleUpdateField(field.id, { type: e.target.value as FormField['type'] })
                             }
-                            className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                            className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                           >
                             <option value="text">Single-line Text</option>
                             <option value="number">Number</option>
@@ -445,24 +445,24 @@ export const BuyerFormBuilder: React.FC = () => {
                         </div>
 
                         <div>
-                          <label className="block font-semibold text-slate-700 mb-1">Placeholder Text</label>
+                          <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Placeholder Text</label>
                           <input
                             type="text"
                             value={field.placeholder || ''}
                             onChange={(e) => handleUpdateField(field.id, { placeholder: e.target.value })}
                             placeholder="e.g. Enter details..."
-                            className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                            className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                           />
                         </div>
 
                         <div className="sm:col-span-2">
-                          <label className="block font-semibold text-slate-700 mb-1">Guidance / Help Text</label>
+                          <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Guidance / Help Text</label>
                           <input
                             type="text"
                             value={field.helpText || ''}
                             onChange={(e) => handleUpdateField(field.id, { helpText: e.target.value })}
                             placeholder="Brief instructions for bidders..."
-                            className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                            className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                           />
                         </div>
 
@@ -472,15 +472,15 @@ export const BuyerFormBuilder: React.FC = () => {
                             id={`req-${field.id}`}
                             checked={field.required}
                             onChange={(e) => handleUpdateField(field.id, { required: e.target.checked })}
-                            className="rounded border-slate-300 text-[#1F5F99]"
+                            className="rounded border-slate-300 text-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
-                          <label htmlFor={`req-${field.id}`} className="font-semibold text-slate-700">
+                          <label htmlFor={`req-${field.id}`} className="font-semibold text-slate-700 dark:text-[#D3E3F2]">
                             Mandatory Required Field
                           </label>
                         </div>
 
-                        <div className="sm:col-span-2 pt-2 border-t border-slate-100">
-                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                        <div className="sm:col-span-2 pt-2 border-t border-slate-100 dark:border-[#244157]">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5 dark:text-[#9CB4C9]">
                             Conditional Visibility Rules
                           </span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -491,7 +491,7 @@ export const BuyerFormBuilder: React.FC = () => {
                                   conditionalOnFieldId: e.target.value || undefined,
                                 })
                               }
-                              className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                              className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs dark:bg-[#162C3D] dark:border-[#244157]"
                             >
                               <option value="">Always visible (No condition)</option>
                               {fields
@@ -516,7 +516,7 @@ export const BuyerFormBuilder: React.FC = () => {
                                         : e.target.value,
                                   })
                                 }
-                                className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs"
+                                className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs dark:bg-[#162C3D] dark:border-[#244157]"
                               >
                                 <option value="true">Condition: Equals Yes / True</option>
                                 <option value="false">Condition: Equals No / False</option>
@@ -542,7 +542,7 @@ export const BuyerFormBuilder: React.FC = () => {
                         Live Supplier Preview
                       </span>
                     </div>
-                    <span className="font-mono text-xs text-[#E8A33D] font-bold">{templateVersion}</span>
+                    <span className="tabular-nums text-xs text-[#E8A33D] font-bold">{templateVersion}</span>
                   </div>
                   <h3 className="font-heading font-bold text-base text-white">{templateTitle}</h3>
                   <p className="text-xs text-slate-300">
@@ -550,7 +550,7 @@ export const BuyerFormBuilder: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm max-h-[600px] overflow-y-auto text-xs">
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm max-h-[600px] overflow-y-auto text-xs dark:bg-[#1C364B] dark:border-[#244157]">
                   {fields.length === 0 ? (
                     <div className="py-8 text-center text-slate-400">
                       No fields added yet. Add a question to view live preview.
@@ -565,11 +565,11 @@ export const BuyerFormBuilder: React.FC = () => {
                       }
 
                       return (
-                        <div key={field.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
-                          <label className="block font-semibold text-slate-800">
+                        <div key={field.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 dark:bg-[#162C3D] dark:border-[#244157]">
+                          <label className="block font-semibold text-slate-800 dark:text-white">
                             {field.label} {field.required && <span className="text-[#C2412D]">*</span>}
                           </label>
-                          {field.helpText && <p className="text-[11px] text-slate-500">{field.helpText}</p>}
+                          {field.helpText && <p className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">{field.helpText}</p>}
 
                           {field.type === 'text' && (
                             <input
@@ -577,7 +577,7 @@ export const BuyerFormBuilder: React.FC = () => {
                               value={previewValues[field.id] || ''}
                               onChange={(e) => setPreviewValues({ ...previewValues, [field.id]: e.target.value })}
                               placeholder={field.placeholder}
-                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                             />
                           )}
 
@@ -589,7 +589,7 @@ export const BuyerFormBuilder: React.FC = () => {
                                 setPreviewValues({ ...previewValues, [field.id]: Number(e.target.value) })
                               }
                               placeholder={field.placeholder}
-                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-mono"
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs tabular-nums dark:bg-[#1C364B] dark:border-[#244157]"
                             />
                           )}
 
@@ -598,7 +598,7 @@ export const BuyerFormBuilder: React.FC = () => {
                               type="date"
                               value={previewValues[field.id] || ''}
                               onChange={(e) => setPreviewValues({ ...previewValues, [field.id]: e.target.value })}
-                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                             />
                           )}
 
@@ -610,7 +610,7 @@ export const BuyerFormBuilder: React.FC = () => {
                                   name={`preview-${field.id}`}
                                   checked={previewValues[field.id] === true}
                                   onChange={() => setPreviewValues({ ...previewValues, [field.id]: true })}
-                                  className="text-[#1F5F99]"
+                                  className="text-[#1F5F99] dark:text-[#6FAEE0]"
                                 />
                                 <span>Yes</span>
                               </label>
@@ -620,7 +620,7 @@ export const BuyerFormBuilder: React.FC = () => {
                                   name={`preview-${field.id}`}
                                   checked={previewValues[field.id] === false}
                                   onChange={() => setPreviewValues({ ...previewValues, [field.id]: false })}
-                                  className="text-[#1F5F99]"
+                                  className="text-[#1F5F99] dark:text-[#6FAEE0]"
                                 />
                                 <span>No</span>
                               </label>
@@ -631,7 +631,7 @@ export const BuyerFormBuilder: React.FC = () => {
                             <select
                               value={previewValues[field.id] || ''}
                               onChange={(e) => setPreviewValues({ ...previewValues, [field.id]: e.target.value })}
-                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                             >
                               <option value="">Select option...</option>
                               <option value="BW_LOCAL">Option A (Botswana)</option>
@@ -640,7 +640,7 @@ export const BuyerFormBuilder: React.FC = () => {
                           )}
 
                           {field.type === 'file_upload' && (
-                            <div className="p-2.5 border border-dashed border-slate-300 bg-white rounded-lg text-center text-slate-400">
+                            <div className="p-2.5 border border-dashed border-slate-300 bg-white rounded-lg text-center text-slate-400 dark:bg-[#1C364B] dark:border-[#244157]">
                               Supplier file attachment field preview
                             </div>
                           )}
@@ -651,7 +651,7 @@ export const BuyerFormBuilder: React.FC = () => {
                               value={previewValues[field.id] || ''}
                               onChange={(e) => setPreviewValues({ ...previewValues, [field.id]: e.target.value })}
                               placeholder={field.placeholder}
-                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                              className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                             />
                           )}
                         </div>

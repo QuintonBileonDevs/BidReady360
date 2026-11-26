@@ -32,14 +32,14 @@ export const SupplierWelcome: React.FC<SupplierWelcomeProps> = ({ onNavigate }) 
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Welcome to BidReady360
           </h2>
-          <p className="text-[14px] text-[#6B7A87] leading-relaxed">
+          <p className="text-[14px] text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Your supplier profile for <strong>{supplier.legalName}</strong> has been initialized. Here is what you need to complete next:
           </p>
         </div>
 
         {/* Next steps list */}
-        <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3.5 text-[14px]">
-          <span className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white block border-b border-[#D5E0EA] dark:border-[#1E364A] pb-2">
+        <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-3.5 text-[14px]">
+          <span className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white block border-b border-[#D5E0EA] dark:border-[#244157] pb-2">
             Onboarding checklist
           </span>
 
@@ -50,31 +50,31 @@ export const SupplierWelcome: React.FC<SupplierWelcomeProps> = ({ onNavigate }) 
                 <span className="font-semibold text-[#10212E] dark:text-white block">
                   1. Company registration
                 </span>
-                <span className="text-[#6B7A87]">CIPA registration number {supplier.cipaNumber} recorded.</span>
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">CIPA registration number {supplier.cipaNumber} recorded.</span>
               </div>
             </div>
 
             <div className="flex items-start gap-2.5">
-              <div className="w-5 h-5 rounded-full border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center shrink-0 mt-0.5 text-[12px] text-[#6B7A87] font-semibold">
+              <div className="w-5 h-5 rounded-full border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center shrink-0 mt-0.5 text-[12px] text-[#6B7A87] font-semibold dark:text-[#9CB4C9]">
                 2
               </div>
               <div>
                 <span className="font-semibold text-[#10212E] dark:text-white block">
                   2. Upload tax clearance certificate
                 </span>
-                <span className="text-[#6B7A87]">Store your BURS tax clearance in your private document vault.</span>
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Store your BURS tax clearance in your private document vault.</span>
               </div>
             </div>
 
             <div className="flex items-start gap-2.5">
-              <div className="w-5 h-5 rounded-full border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center shrink-0 mt-0.5 text-[12px] text-[#6B7A87] font-semibold">
+              <div className="w-5 h-5 rounded-full border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center shrink-0 mt-0.5 text-[12px] text-[#6B7A87] font-semibold dark:text-[#9CB4C9]">
                 3
               </div>
               <div>
                 <span className="font-semibold text-[#10212E] dark:text-white block">
                   3. Select your service categories
                 </span>
-                <span className="text-[#6B7A87]">Pick the procurement categories matching your trade to see relevant calls.</span>
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Pick the procurement categories matching your trade to see relevant calls.</span>
               </div>
             </div>
           </div>

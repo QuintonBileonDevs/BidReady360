@@ -302,7 +302,7 @@ export const BuyerTeamRoles: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {toastMessage && (
-        <div className="p-4 bg-emerald-50 text-[#2F8F5B] border border-emerald-300 rounded-xl text-xs flex items-center justify-between gap-2">
+        <div className="p-4 bg-emerald-50 text-[#2F8F5B] border border-emerald-300 rounded-xl text-xs flex items-center justify-between gap-2 dark:bg-[#2F8F5B]/20">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{toastMessage}</span>
@@ -314,7 +314,7 @@ export const BuyerTeamRoles: React.FC = () => {
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs flex items-center justify-between gap-2">
+        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs flex items-center justify-between gap-2 dark:bg-[#C2412D]/20">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
@@ -327,13 +327,13 @@ export const BuyerTeamRoles: React.FC = () => {
 
       {/* One-time Invite Link Banner */}
       {generatedInvite && (
-        <div className="p-5 bg-[#EAF2FA] border border-[#1F5F99]/30 rounded-2xl space-y-2.5 text-xs">
+        <div className="p-5 bg-[#EAF2FA] border border-[#1F5F99]/30 rounded-2xl space-y-2.5 text-xs dark:bg-[#162C3D]">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-0.5">
-              <strong className="text-[#10212E] text-sm block">
+              <strong className="text-[#10212E] text-sm block dark:text-white">
                 One-time invitation link for {generatedInvite.email}
               </strong>
-              <p className="text-slate-600">
+              <p className="text-slate-600 dark:text-[#D3E3F2]">
                 Only the SHA-256 hash of this token is stored in the database. Copy and share this link now (expires{' '}
                 {new Date(generatedInvite.expiresAt).toLocaleDateString('en-GB', {
                   day: '2-digit',
@@ -346,13 +346,13 @@ export const BuyerTeamRoles: React.FC = () => {
             <button
               type="button"
               onClick={() => setGeneratedInvite(null)}
-              className="text-slate-500 hover:text-slate-800 cursor-pointer"
+              className="text-slate-500 hover:text-slate-800 cursor-pointer dark:text-[#9CB4C9] dark:hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <code className="flex-1 p-2.5 bg-white border border-slate-300 rounded-lg font-mono text-[11px] text-[#10212E] break-all">
+            <code className="flex-1 p-2.5 bg-white border border-slate-300 rounded-lg tabular-nums text-[11px] text-[#10212E] break-all dark:bg-[#1C364B] dark:text-white dark:border-[#244157]">
               {generatedInvite.url}
             </code>
             <button
@@ -371,15 +371,15 @@ export const BuyerTeamRoles: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] bg-[#EAF2FA] px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] bg-[#EAF2FA] px-2.5 py-0.5 rounded-md dark:bg-[#162C3D] dark:text-[#6FAEE0]">
               Governance & RBAC
             </span>
-            <span className="text-xs text-slate-500">· Approval Limits & Separation of Duties</span>
+            <span className="text-xs text-slate-500 dark:text-[#9CB4C9]">· Approval Limits & Separation of Duties</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900">
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-slate-900 dark:text-white">
             Team Members, Roles & Invitations
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed dark:text-[#D3E3F2]">
             Manage procurement officers, evaluation panel members, and award approvers. Authority limits and role assignments persist directly to PostgreSQL.
           </p>
         </div>
@@ -389,7 +389,7 @@ export const BuyerTeamRoles: React.FC = () => {
             type="button"
             onClick={loadTeam}
             disabled={isLoading}
-            className="px-3.5 py-2.5 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2.5 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer dark:border-[#244157]"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -410,37 +410,37 @@ export const BuyerTeamRoles: React.FC = () => {
 
       {/* KPI Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-        <div className="bg-white border border-slate-200 rounded-2xl p-5">
-          <span className="text-slate-500 block">Total Workspace Members</span>
-          <strong className="text-2xl font-heading font-bold text-[#10212E] mt-1 block">{members.length}</strong>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 dark:bg-[#1C364B] dark:border-[#244157]">
+          <span className="text-slate-500 block dark:text-[#9CB4C9]">Total Workspace Members</span>
+          <strong className="text-2xl font-heading font-bold text-[#10212E] mt-1 block dark:text-white">{members.length}</strong>
           <span className="text-[11px] text-[#2F8F5B]">{activeCount} active seats</span>
         </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-5">
-          <span className="text-slate-500 block">Pending Invitations</span>
-          <strong className="text-2xl font-heading font-bold text-[#1F5F99] mt-1 block">{invitations.length}</strong>
-          <span className="text-[11px] text-slate-500">Token-secured email invites</span>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 dark:bg-[#1C364B] dark:border-[#244157]">
+          <span className="text-slate-500 block dark:text-[#9CB4C9]">Pending Invitations</span>
+          <strong className="text-2xl font-heading font-bold text-[#1F5F99] mt-1 block dark:text-[#6FAEE0]">{invitations.length}</strong>
+          <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">Token-secured email invites</span>
         </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-5">
-          <span className="text-slate-500 block">Configured Roles</span>
-          <strong className="text-2xl font-heading font-bold text-[#10212E] mt-1 block">{roles.length}</strong>
-          <span className="text-[11px] text-slate-500">Enforced across buyer APIs</span>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 dark:bg-[#1C364B] dark:border-[#244157]">
+          <span className="text-slate-500 block dark:text-[#9CB4C9]">Configured Roles</span>
+          <strong className="text-2xl font-heading font-bold text-[#10212E] mt-1 block dark:text-white">{roles.length}</strong>
+          <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">Enforced across buyer APIs</span>
         </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-5">
-          <span className="text-slate-500 block">MFA Protected</span>
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 dark:bg-[#1C364B] dark:border-[#244157]">
+          <span className="text-slate-500 block dark:text-[#9CB4C9]">MFA Protected</span>
           <strong className="text-2xl font-heading font-bold text-[#2F8F5B] mt-1 block">
             {mfaCount} / {members.length}
           </strong>
-          <span className="text-[11px] text-slate-500">Active members with MFA</span>
+          <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">Active members with MFA</span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 text-xs">
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 text-xs dark:border-[#244157]">
         <button
           type="button"
           onClick={() => setActiveTab('members')}
           className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
-            activeTab === 'members' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            activeTab === 'members' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-[#1C364B] dark:text-[#D3E3F2] dark:border-[#244157] dark:hover:bg-[#162C3D]'
           }`}
         >
           <Users className="w-3.5 h-3.5" />
@@ -450,7 +450,7 @@ export const BuyerTeamRoles: React.FC = () => {
           type="button"
           onClick={() => setActiveTab('invitations')}
           className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
-            activeTab === 'invitations' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            activeTab === 'invitations' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-[#1C364B] dark:text-[#D3E3F2] dark:border-[#244157] dark:hover:bg-[#162C3D]'
           }`}
         >
           <Mail className="w-3.5 h-3.5" />
@@ -460,7 +460,7 @@ export const BuyerTeamRoles: React.FC = () => {
           type="button"
           onClick={() => setActiveTab('roles')}
           className={`px-4 py-2 rounded-lg font-semibold inline-flex items-center gap-1.5 cursor-pointer ${
-            activeTab === 'roles' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            activeTab === 'roles' ? 'bg-[#1F5F99] text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-[#1C364B] dark:text-[#D3E3F2] dark:border-[#244157] dark:hover:bg-[#162C3D]'
           }`}
         >
           <Shield className="w-3.5 h-3.5" />
@@ -469,14 +469,14 @@ export const BuyerTeamRoles: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="p-10 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500">
+        <div className="p-10 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500 dark:bg-[#1C364B] dark:text-[#9CB4C9] dark:border-[#244157]">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Loading workspace team directory...</span>
         </div>
       ) : activeTab === 'members' ? (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs dark:bg-[#162C3D] dark:border-[#244157]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -484,13 +484,13 @@ export const BuyerTeamRoles: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search name, email, department..."
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
               />
             </div>
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+              className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
             >
               <option value="ALL">All Roles</option>
               {uniqueRoleNames.map((rn) => (
@@ -502,7 +502,7 @@ export const BuyerTeamRoles: React.FC = () => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+              className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
             >
               <option value="ALL">All Statuses</option>
               <option value="active">Active</option>
@@ -510,11 +510,11 @@ export const BuyerTeamRoles: React.FC = () => {
             </select>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs dark:bg-[#1C364B] dark:border-[#244157]">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                     <th className="py-3 px-4">Member</th>
                     <th className="py-3 px-4">Role & Department</th>
                     <th className="py-3 px-4">Award Authority (BWP)</th>
@@ -522,7 +522,7 @@ export const BuyerTeamRoles: React.FC = () => {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                   {filteredMembers.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="p-8 text-center text-slate-400">
@@ -533,20 +533,20 @@ export const BuyerTeamRoles: React.FC = () => {
                     filteredMembers.map((m) => (
                       <tr key={m.id} className="hover:bg-slate-50/70">
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-[#10212E]">{m.fullName}</div>
-                          <div className="text-[11px] text-slate-500">{m.email}</div>
+                          <div className="font-bold text-[#10212E] dark:text-white">{m.fullName}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">{m.email}</div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] font-semibold">
+                          <span className="px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] font-semibold dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                             {m.roleName}
                           </span>
-                          <div className="text-[11px] text-slate-500 mt-1">
+                          <div className="text-[11px] text-slate-500 mt-1 dark:text-[#9CB4C9]">
                             {m.jobTitle} · {m.department}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4 font-mono">
+                        <td className="py-3.5 px-4 tabular-nums">
                           {m.approvalLimitBWP != null ? (
-                            <span className="font-bold text-[#10212E]">
+                            <span className="font-bold text-[#10212E] dark:text-white">
                               P {Number(m.approvalLimitBWP).toLocaleString()}
                             </span>
                           ) : (
@@ -557,16 +557,16 @@ export const BuyerTeamRoles: React.FC = () => {
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                               m.status === 'active'
-                                ? 'bg-emerald-50 text-[#2F8F5B]'
-                                : 'bg-rose-50 text-[#C2412D]'
+                                ? 'bg-emerald-50 text-[#2F8F5B] dark:bg-[#2F8F5B]/20'
+                                : 'bg-rose-50 text-[#C2412D] dark:bg-[#C2412D]/20'
                             }`}
                           >
                             {m.status}
                           </span>
-                          <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                          <div className="text-[10px] text-slate-500 flex items-center gap-2 dark:text-[#9CB4C9]">
                             <span>{m.mfaEnabled ? 'MFA On' : 'MFA Off'}</span>
                             {m.conflictDeclared && (
-                              <span className="text-amber-700 font-semibold">· COI Declared</span>
+                              <span className="text-amber-700 font-semibold dark:text-[#FCD34D]">· COI Declared</span>
                             )}
                           </div>
                         </td>
@@ -575,7 +575,7 @@ export const BuyerTeamRoles: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => openEditModal(m)}
-                              className="p-1.5 rounded border border-slate-200 text-slate-600 hover:text-[#1F5F99] hover:border-[#1F5F99] cursor-pointer"
+                              className="p-1.5 rounded border border-slate-200 text-slate-600 hover:text-[#1F5F99] hover:border-[#1F5F99] cursor-pointer dark:text-[#D3E3F2] dark:border-[#244157] dark:hover:text-[#6FAEE0]"
                               title="Edit role & approval limit"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -583,14 +583,14 @@ export const BuyerTeamRoles: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleToggleStatus(m)}
-                              className="px-2.5 py-1 rounded border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                              className="px-2.5 py-1 rounded border border-slate-200 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer dark:text-[#D3E3F2] dark:border-[#244157] dark:hover:bg-[#162C3D]"
                             >
                               {m.status === 'active' ? 'Suspend' : 'Reactivate'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmRemoveMember(m)}
-                              className="p-1.5 rounded border border-slate-200 text-slate-500 hover:text-[#C2412D] hover:border-rose-300 cursor-pointer"
+                              className="p-1.5 rounded border border-slate-200 text-slate-500 hover:text-[#C2412D] hover:border-rose-300 cursor-pointer dark:text-[#9CB4C9] dark:border-[#244157]"
                               title="Remove member"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -606,11 +606,11 @@ export const BuyerTeamRoles: React.FC = () => {
           </div>
         </div>
       ) : activeTab === 'invitations' ? (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs dark:bg-[#1C364B] dark:border-[#244157]">
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                   <th className="py-3 px-4">Invited Email</th>
                   <th className="py-3 px-4">Role & Unit</th>
                   <th className="py-3 px-4">Approval Limit</th>
@@ -618,7 +618,7 @@ export const BuyerTeamRoles: React.FC = () => {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                 {invitations.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-slate-400">
@@ -629,23 +629,23 @@ export const BuyerTeamRoles: React.FC = () => {
                   invitations.map((inv) => (
                     <tr key={inv.id} className="hover:bg-slate-50/70">
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-[#10212E]">{inv.email}</div>
-                        <div className="text-[11px] text-slate-500">Invited by {inv.invitedBy}</div>
+                        <div className="font-bold text-[#10212E] dark:text-white">{inv.email}</div>
+                        <div className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">Invited by {inv.invitedBy}</div>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] font-semibold">
+                        <span className="px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] font-semibold dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                           {inv.role}
                         </span>
-                        <div className="text-[11px] text-slate-500 mt-1">
+                        <div className="text-[11px] text-slate-500 mt-1 dark:text-[#9CB4C9]">
                           {inv.jobTitle} · {inv.department}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 font-mono">
+                      <td className="py-3.5 px-4 tabular-nums">
                         {inv.approvalLimitBWP != null
                           ? `P ${Number(inv.approvalLimitBWP).toLocaleString()}`
                           : '—'}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-600">
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-[#D3E3F2]">
                         <div className="inline-flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5 text-slate-400" />
                           <span>
@@ -664,7 +664,7 @@ export const BuyerTeamRoles: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleResendInvite(inv)}
-                            className="px-2.5 py-1 rounded border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1 rounded border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] font-semibold inline-flex items-center gap-1 cursor-pointer dark:text-[#6FAEE0] dark:hover:bg-[#162C3D]"
                           >
                             <Send className="w-3 h-3" />
                             <span>Regenerate Link</span>
@@ -672,7 +672,7 @@ export const BuyerTeamRoles: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleRevokeInvite(inv)}
-                            className="px-2.5 py-1 rounded border border-rose-200 text-[#C2412D] hover:bg-rose-50 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1 rounded border border-rose-200 text-[#C2412D] hover:bg-rose-50 font-semibold inline-flex items-center gap-1 cursor-pointer dark:border-[#C2412D]/40 dark:hover:bg-[#C2412D]/20"
                           >
                             <XCircle className="w-3 h-3" />
                             <span>Revoke</span>
@@ -689,21 +689,21 @@ export const BuyerTeamRoles: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           {roles.map((r) => (
-            <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3">
+            <div key={r.id} className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 dark:bg-[#1C364B] dark:border-[#244157]">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="font-heading font-bold text-sm text-[#10212E]">{r.name}</h3>
-                  <p className="text-slate-500 mt-0.5">{r.description || 'Organization role'}</p>
+                  <h3 className="font-heading font-bold text-sm text-[#10212E] dark:text-white">{r.name}</h3>
+                  <p className="text-slate-500 mt-0.5 dark:text-[#9CB4C9]">{r.description || 'Organization role'}</p>
                 </div>
-                <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                <span className="tabular-nums text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2]">
                   {r.code}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-600">
-                <Lock className="w-3.5 h-3.5 text-[#1F5F99]" />
+              <div className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-[#D3E3F2]">
+                <Lock className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" />
                 <span>
                   Default Award Limit:{' '}
-                  <strong className="font-mono text-[#10212E]">
+                  <strong className="tabular-nums text-[#10212E] dark:text-white">
                     {r.approvalLimitBWP != null
                       ? `P ${Number(r.approvalLimitBWP).toLocaleString()}`
                       : 'None / Inherited'}
@@ -715,7 +715,7 @@ export const BuyerTeamRoles: React.FC = () => {
                   {r.permissions.map((perm) => (
                     <span
                       key={perm}
-                      className="px-2 py-0.5 rounded bg-[#F7FAFD] border border-slate-200 font-mono text-[10px] text-slate-700"
+                      className="px-2 py-0.5 rounded bg-[#F7FAFD] border border-slate-200 tabular-nums text-[10px] text-slate-700 dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]"
                     >
                       {perm}
                     </span>
@@ -730,9 +730,9 @@ export const BuyerTeamRoles: React.FC = () => {
       {/* Invite Modal */}
       {isInviteModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-heading font-bold text-base text-[#10212E]">Invite Organization Member</h3>
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs dark:bg-[#1C364B] dark:border-[#244157]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-[#244157]">
+              <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">Invite Organization Member</h3>
               <button
                 type="button"
                 onClick={() => setIsInviteModalOpen(false)}
@@ -743,22 +743,22 @@ export const BuyerTeamRoles: React.FC = () => {
             </div>
             <form onSubmit={handleInviteSubmit} className="space-y-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Work Email *</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Work Email *</label>
                 <input
                   type="email"
                   required
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder="officer@organization.gov.bw"
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Assigned Role *</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Assigned Role *</label>
                 <select
                   value={inviteRoleId}
                   onChange={(e) => setInviteRoleId(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -769,26 +769,26 @@ export const BuyerTeamRoles: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Department</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Department</label>
                   <input
                     type="text"
                     value={inviteDepartment}
                     onChange={(e) => setInviteDepartment(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Job Title</label>
                   <input
                     type="text"
                     value={inviteJobTitle}
                     onChange={(e) => setInviteJobTitle(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                   />
                 </div>
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">
                   Award Approval Limit (BWP, optional)
                 </label>
                 <input
@@ -798,14 +798,14 @@ export const BuyerTeamRoles: React.FC = () => {
                   value={inviteLimitBWP}
                   onChange={(e) => setInviteLimitBWP(e.target.value)}
                   placeholder="e.g. 500000"
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs tabular-nums dark:border-[#244157]"
                 />
               </div>
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer"
+                  className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer dark:text-[#D3E3F2] dark:border-[#244157]"
                 >
                   Cancel
                 </button>
@@ -825,11 +825,11 @@ export const BuyerTeamRoles: React.FC = () => {
       {/* Edit Member Modal */}
       {editingMember && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs dark:bg-[#1C364B] dark:border-[#244157]">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-[#244157]">
               <div>
-                <h3 className="font-heading font-bold text-base text-[#10212E]">Edit Member Permissions</h3>
-                <p className="text-slate-500">{editingMember.fullName}</p>
+                <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">Edit Member Permissions</h3>
+                <p className="text-slate-500 dark:text-[#9CB4C9]">{editingMember.fullName}</p>
               </div>
               <button
                 type="button"
@@ -841,11 +841,11 @@ export const BuyerTeamRoles: React.FC = () => {
             </div>
             <form onSubmit={handleSaveEdit} className="space-y-3">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Role</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Role</label>
                 <select
                   value={editRoleId}
                   onChange={(e) => setEditRoleId(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                 >
                   {roles.map((r) => (
                     <option key={r.id} value={r.id}>
@@ -856,26 +856,26 @@ export const BuyerTeamRoles: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Department</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Department</label>
                   <input
                     type="text"
                     value={editDepartment}
                     onChange={(e) => setEditDepartment(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Job Title</label>
                   <input
                     type="text"
                     value={editJobTitle}
                     onChange={(e) => setEditJobTitle(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                   />
                 </div>
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Award Approval Limit (BWP)</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Award Approval Limit (BWP)</label>
                 <input
                   type="number"
                   min={0}
@@ -883,7 +883,7 @@ export const BuyerTeamRoles: React.FC = () => {
                   value={editLimitBWP}
                   onChange={(e) => setEditLimitBWP(e.target.value)}
                   placeholder="Leave blank for role default"
-                  className="w-full p-2 border border-slate-300 rounded-lg text-xs font-mono"
+                  className="w-full p-2 border border-slate-300 rounded-lg text-xs tabular-nums dark:border-[#244157]"
                 />
               </div>
               <label className="flex items-center gap-2 pt-1 cursor-pointer">
@@ -891,15 +891,15 @@ export const BuyerTeamRoles: React.FC = () => {
                   type="checkbox"
                   checked={editConflictDeclared}
                   onChange={(e) => setEditConflictDeclared(e.target.checked)}
-                  className="rounded border-slate-300 text-[#1F5F99]"
+                  className="rounded border-slate-300 text-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                 />
-                <span className="font-semibold text-slate-700">Annual Conflict of Interest (COI) Declared</span>
+                <span className="font-semibold text-slate-700 dark:text-[#D3E3F2]">Annual Conflict of Interest (COI) Declared</span>
               </label>
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setEditingMember(null)}
-                  className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer"
+                  className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer dark:text-[#D3E3F2] dark:border-[#244157]"
                 >
                   Cancel
                 </button>
@@ -919,16 +919,16 @@ export const BuyerTeamRoles: React.FC = () => {
       {/* Confirm Remove Modal */}
       {confirmRemoveMember && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs">
-            <h3 className="font-heading font-bold text-base text-[#10212E]">Remove team member?</h3>
-            <p className="text-slate-600 leading-relaxed">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-xl text-xs dark:bg-[#1C364B] dark:border-[#244157]">
+            <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">Remove team member?</h3>
+            <p className="text-slate-600 leading-relaxed dark:text-[#D3E3F2]">
               Removing <strong>{confirmRemoveMember.fullName}</strong> ({confirmRemoveMember.email}) will revoke their access to this buyer workspace immediately.
             </p>
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmRemoveMember(null)}
-                className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer"
+                className="px-3.5 py-2 border border-slate-200 rounded-lg text-slate-600 cursor-pointer dark:text-[#D3E3F2] dark:border-[#244157]"
               >
                 Cancel
               </button>

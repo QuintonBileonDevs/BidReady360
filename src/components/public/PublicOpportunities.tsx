@@ -127,7 +127,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
   return (
     <div className="space-y-8 py-2">
       {/* Editorial Page Header */}
-      <div className="relative border-b border-[#D5E0EA] dark:border-[#1E364A] pb-8 overflow-hidden">
+      <div className="relative border-b border-[#D5E0EA] dark:border-[#244157] pb-8 overflow-hidden">
         <RingMotif size={360} dotAngle={35} opacity={0.3} position="top-right" />
 
         <div className="max-w-2xl space-y-3 relative z-10">
@@ -139,7 +139,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
             Tenders & Calls for Expression of Interest
           </h1>
 
-          <p className="text-sm text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+          <p className="text-sm text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
             Browse published procurement opportunities across Botswana town councils, parastatals, and commercial buyers. Apply with your verified Supplier Passport.
           </p>
         </div>
@@ -152,7 +152,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
         {/* ======================================================== */}
         <div className="hidden lg:block lg:col-span-4 space-y-6">
           <Card variant="surface" padding="md" className="space-y-5">
-            <div className="flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#1E364A] pb-3">
+            <div className="flex items-center justify-between border-b border-[#D5E0EA] dark:border-[#244157] pb-3">
               <span className="text-xs font-heading font-semibold text-[#10212E] dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
                 <span>Filter Opportunities</span>
@@ -160,7 +160,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="text-xs text-[#6B7A87] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0]"
+                className="text-xs text-[#6B7A87] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] dark:text-[#9CB4C9]"
               >
                 Clear all
               </button>
@@ -183,14 +183,14 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                     className={`w-full text-left px-2.5 py-1.5 rounded-[6px] text-xs transition-colors flex items-center justify-between ${
                       selectedCategory === cat
                         ? 'bg-[#1F5F99] text-white font-semibold'
-                        : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3E]'
+                        : 'text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D]'
                     }`}
                   >
                     <span className="truncate">{cat}</span>
                     {cat === 'All' ? (
-                      <span className="text-[10px] opacity-75 font-mono">{calls.length}</span>
+                      <span className="text-[10px] opacity-75 tabular-nums">{calls.length}</span>
                     ) : (
-                      <span className="text-[10px] opacity-75 font-mono">
+                      <span className="text-[10px] opacity-75 tabular-nums">
                         {calls.filter((c) => c.category === cat).length}
                       </span>
                     )}
@@ -200,7 +200,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
             </div>
 
             {/* Opportunity Type Filter */}
-            <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
               <label className="text-xs font-semibold text-[#10212E] dark:text-white block">
                 Procurement Format
               </label>
@@ -216,7 +216,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                     className={`px-2.5 py-1 rounded-[6px] text-xs font-medium transition-colors ${
                       selectedType === type
                         ? 'bg-[#1F5F99] text-white font-semibold shadow-subtle'
-                        : 'bg-white dark:bg-[#132635] text-[#43525F] dark:text-[#B2C3D2] border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD]'
+                        : 'bg-white dark:bg-[#1C364B] text-[#43525F] dark:text-[#D3E3F2] border border-[#D5E0EA] dark:border-[#244157] hover:bg-[#F7FAFD] dark:hover:bg-[#162C3D]'
                     }`}
                   >
                     {type}
@@ -226,7 +226,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
             </div>
 
             {/* Organization Dropdown */}
-            <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
               <Select
                 label="Procuring Entity"
                 value={selectedOrg}
@@ -250,7 +250,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
         {/* ======================================================== */}
         <div className="lg:col-span-8 space-y-4">
           {invitations.length > 0 && (
-            <Card variant="surface" padding="sm" className="border-[#1F5F99]/30 bg-[#EAF2FA]/60 dark:bg-[#1E364A]/40 space-y-2">
+            <Card variant="surface" padding="sm" className="border-[#1F5F99]/30 bg-[#EAF2FA]/60 dark:bg-[#244157]/40 space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold text-[#1F5F99] dark:text-[#6FAEE0]">
                 <MailCheck className="w-4 h-4" />
                 <span>You have {invitations.length} formal tender invitation{invitations.length === 1 ? '' : 's'}</span>
@@ -260,10 +260,10 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                   <div
                     key={inv.id || inv.callId}
                     onClick={() => onSelectCall(inv.callId)}
-                    className="flex items-center justify-between gap-3 p-2 rounded-[6px] bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-xs cursor-pointer hover:border-[#1F5F99]"
+                    className="flex items-center justify-between gap-3 p-2 rounded-[6px] bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] text-xs cursor-pointer hover:border-[#1F5F99]"
                   >
                     <div className="min-w-0">
-                      <span className="font-mono text-[11px] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold">
+                      <span className="tabular-nums text-[11px] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold">
                         {inv.referenceNo}
                       </span>{' '}
                       <span className="font-medium text-[#10212E] dark:text-white truncate">
@@ -298,9 +298,9 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
               <button
                 type="button"
                 onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
-                className="lg:hidden h-10 px-3.5 rounded-[6px] bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-xs font-semibold text-[#10212E] dark:text-white flex items-center gap-1.5"
+                className="lg:hidden h-10 px-3.5 rounded-[6px] bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] text-xs font-semibold text-[#10212E] dark:text-white flex items-center gap-1.5"
               >
-                <SlidersHorizontal className="w-4 h-4 text-[#1F5F99]" strokeWidth={1.5} />
+                <SlidersHorizontal className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
                 <span>Filters</span>
               </button>
 
@@ -308,7 +308,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="h-10 px-3 rounded-[6px] bg-white dark:bg-[#132635] text-xs font-medium text-[#10212E] dark:text-white border border-[#D5E0EA] dark:border-[#1E364A] focus:border-[#1F5F99]"
+                className="h-10 px-3 rounded-[6px] bg-white dark:bg-[#1C364B] text-xs font-medium text-[#10212E] dark:text-white border border-[#D5E0EA] dark:border-[#244157] focus:border-[#1F5F99]"
               >
                 <option value="deadline">Sort: Closing Date (Soonest)</option>
                 <option value="value">Sort: Estimated Budget (High to Low)</option>
@@ -320,14 +320,14 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
           {/* Mobile Collapsible Filter Drawer / Bottom Sheet */}
           {isMobileFilterOpen && (
             <Card variant="surface" padding="md" className="lg:hidden space-y-4 border-hairline">
-              <div className="flex items-center justify-between pb-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="flex items-center justify-between pb-2 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <span className="text-xs font-heading font-semibold uppercase text-[#10212E] dark:text-white">
                   Filter Active Opportunities
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsMobileFilterOpen(false)}
-                  className="text-[#6B7A87]"
+                  className="text-[#6B7A87] dark:text-[#9CB4C9]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -359,7 +359,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                 <button
                   type="button"
                   onClick={handleClearFilters}
-                  className="text-xs text-[#6B7A87]"
+                  className="text-xs text-[#6B7A87] dark:text-[#9CB4C9]"
                 >
                   Reset all
                 </button>
@@ -377,7 +377,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
           {/* Active Filter Chips Bar */}
           {(selectedCategory !== 'All' || selectedType !== 'All' || selectedOrg !== 'All' || searchTerm) && (
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-[#6B7A87]">Active filters:</span>
+              <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Active filters:</span>
               {selectedCategory !== 'All' && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0]">
                   Category: {selectedCategory}
@@ -399,7 +399,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="text-[#6B7A87] hover:underline ml-1"
+                className="text-[#6B7A87] hover:underline ml-1 dark:text-[#9CB4C9]"
               >
                 Clear all
               </button>
@@ -422,9 +422,9 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
           ) : (
             <div className="space-y-4">
               {/* Desktop Table View */}
-              <div className="hidden md:block overflow-hidden rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] shadow-subtle">
+              <div className="hidden md:block overflow-hidden rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] shadow-subtle">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-[#F7FAFD] dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87] uppercase font-semibold text-[11px]">
+                  <thead className="bg-[#F7FAFD] dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#244157] text-[#6B7A87] uppercase font-semibold text-[11px] dark:text-[#9CB4C9]">
                     <tr>
                       <th className="py-3 px-4 font-semibold">Tender Details</th>
                       <th className="py-3 px-4 font-semibold">Procuring Entity</th>
@@ -434,7 +434,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                       <th className="py-3 px-4 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+                  <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157]">
                     {paginatedCalls.map((call) => {
                       const days = getDaysRemaining(call.closingDate);
                       const isUrgent = days <= 5 && days >= 0;
@@ -446,7 +446,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                           className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]/70 cursor-pointer transition-colors group"
                         >
                           <td className="py-3.5 px-4 space-y-1 max-w-[280px]">
-                            <span className="font-mono text-[10px] text-[#6B7A87] block">
+                            <span className="tabular-nums text-[10px] text-[#6B7A87] block dark:text-[#9CB4C9]">
                               {call.callNumber}
                             </span>
                             <span className="font-heading font-semibold text-xs text-[#10212E] dark:text-white group-hover:text-[#1F5F99] dark:group-hover:text-[#6FAEE0] line-clamp-2 leading-snug">
@@ -454,7 +454,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                             </span>
                           </td>
 
-                          <td className="py-3.5 px-4 text-[#43525F] dark:text-[#B2C3D2]">
+                          <td className="py-3.5 px-4 text-[#43525F] dark:text-[#D3E3F2]">
                             <div className="flex items-center gap-1.5 max-w-[180px]">
                               <span
                                 className="w-2 h-2 rounded-full shrink-0"
@@ -469,7 +469,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                                 {call.organizationName}
                               </span>
                             </div>
-                            <span className="text-[10px] text-[#6B7A87]">{call.category}</span>
+                            <span className="text-[10px] text-[#6B7A87] dark:text-[#9CB4C9]">{call.category}</span>
                           </td>
 
                           <td className="py-3.5 px-4">
@@ -478,14 +478,14 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                             </Badge>
                           </td>
 
-                          <td className="py-3.5 px-4 font-mono text-[#10212E] dark:text-white font-medium">
+                          <td className="py-3.5 px-4 tabular-nums text-[#10212E] dark:text-white font-medium">
                             {call.estimatedBudgetBWP
                               ? `BWP ${(call.estimatedBudgetBWP / 1000).toLocaleString()}k`
                               : 'Disclosed in Call'}
                           </td>
 
                           <td className="py-3.5 px-4 space-y-0.5">
-                            <span className="font-mono text-[#10212E] dark:text-white block">
+                            <span className="tabular-nums text-[#10212E] dark:text-white block">
                               {call.closingDate}
                             </span>
                             <span
@@ -523,7 +523,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                       className="space-y-3"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] text-[#6B7A87]">
+                        <span className="tabular-nums text-[10px] text-[#6B7A87] dark:text-[#9CB4C9]">
                           {call.callNumber}
                         </span>
                         <Badge variant={call.type === 'RFP' ? 'pula' : 'neutral'} size="sm">
@@ -535,9 +535,9 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                         {call.title}
                       </h3>
 
-                      <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] grid grid-cols-2 gap-2 text-xs">
+                      <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] grid grid-cols-2 gap-2 text-xs">
                         <div>
-                          <span className="text-[10px] text-[#6B7A87] block">Procuring Entity</span>
+                          <span className="text-[10px] text-[#6B7A87] block dark:text-[#9CB4C9]">Procuring Entity</span>
                           <span className="text-[#10212E] dark:text-white truncate flex items-center gap-1.5">
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
@@ -552,8 +552,8 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                           </span>
                         </div>
                         <div>
-                          <span className="text-[10px] text-[#6B7A87] block">Closing Date</span>
-                          <span className="font-mono text-[#10212E] dark:text-white">{call.closingDate}</span>
+                          <span className="text-[10px] text-[#6B7A87] block dark:text-[#9CB4C9]">Closing Date</span>
+                          <span className="tabular-nums text-[#10212E] dark:text-white">{call.closingDate}</span>
                         </div>
                       </div>
                     </Card>
@@ -562,18 +562,18 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
               </div>
 
               {/* Pagination Controls */}
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6B7A87]">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#6B7A87] dark:text-[#9CB4C9]">
                 <div>
                   Showing{' '}
-                  <span className="font-semibold text-[#10212E] dark:text-white font-mono">
+                  <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {(currentPage - 1) * itemsPerPage + 1}
                   </span>{' '}
                   to{' '}
-                  <span className="font-semibold text-[#10212E] dark:text-white font-mono">
+                  <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {Math.min(currentPage * itemsPerPage, filteredCalls.length)}
                   </span>{' '}
                   of{' '}
-                  <span className="font-semibold text-[#10212E] dark:text-white font-mono">
+                  <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {filteredCalls.length}
                   </span>{' '}
                   opportunities
@@ -590,7 +590,7 @@ export const PublicOpportunities: React.FC<PublicOpportunitiesProps> = ({ onSele
                     Previous
                   </Button>
 
-                  <span className="px-2 font-mono font-medium text-[#10212E] dark:text-white">
+                  <span className="px-2 tabular-nums font-medium text-[#10212E] dark:text-white">
                     {currentPage} / {totalPages}
                   </span>
 

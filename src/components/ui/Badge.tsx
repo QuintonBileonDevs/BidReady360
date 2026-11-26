@@ -24,17 +24,17 @@ export const Badge: React.FC<BadgeProps> = ({
 
   const variantStyles = {
     verified:
-      'bg-[#ECFDF5] dark:bg-[#065F46]/25 text-[#065F46] dark:text-[#6EE7B7] border border-[#A7F3D0] dark:border-[#065F46]/40',
+      'bg-[#ECFDF5] dark:bg-[#2F8F5B]/20 text-[#2F8F5B] dark:text-[#6EE7B7] border border-[#A7F3D0] dark:border-[#2F8F5B]/40',
     warning:
-      'bg-[#FFFBEB] dark:bg-[#92400E]/25 text-[#92400E] dark:text-[#FCD34D] border border-[#FDE68A] dark:border-[#92400E]/40',
+      'bg-[#FFFBEB] dark:bg-[#E8A33D]/20 text-[#92400E] dark:text-[#FCD34D] border border-[#FDE68A] dark:border-[#E8A33D]/40',
     alert:
-      'bg-[#FEF2F2] dark:bg-[#991B1B]/25 text-[#991B1B] dark:text-[#FCA5A5] border border-[#FECACA] dark:border-[#991B1B]/40',
+      'bg-[#FEF2F2] dark:bg-[#C2412D]/20 text-[#C2412D] dark:text-[#FCA5A5] border border-[#FECACA] dark:border-[#C2412D]/40',
     pula:
-      'bg-[#EAF2FA] dark:bg-[#1F5F99]/25 text-[#1F5F99] dark:text-[#6FAEE0] border border-[#C9D9E8] dark:border-[#1F5F99]/40',
+      'bg-[#EAF2FA] dark:bg-[#6FAEE0]/20 text-[#1F5F99] dark:text-[#6FAEE0] border border-[#C9D9E8] dark:border-[#6FAEE0]/35',
     neutral:
-      'bg-[#F7FAFD] dark:bg-[#16283A] text-[#43525F] dark:text-[#B2C3D2] border border-[#D5E0EA] dark:border-[#1E364A]',
+      'bg-[#EAF2FA]/70 dark:bg-[#162C3D] text-[#43525F] dark:text-[#D3E3F2] border border-[#D5E0EA] dark:border-[#244157]',
     outline:
-      'bg-transparent text-[#43525F] dark:text-[#B2C3D2] border border-[#D5E0EA] dark:border-[#1E364A]',
+      'bg-transparent text-[#43525F] dark:text-[#D3E3F2] border border-[#D5E0EA] dark:border-[#244157]',
   };
 
   return (

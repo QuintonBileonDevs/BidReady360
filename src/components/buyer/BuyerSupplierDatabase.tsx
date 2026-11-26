@@ -132,28 +132,28 @@ export const BuyerSupplierDatabase: React.FC = () => {
 
   const renderConsentBadge = (status: string) => {
     if (status === 'active') {
-      return <span className="text-[10px] font-semibold bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded">Active Consent</span>;
+      return <span className="text-[10px] font-semibold bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded dark:bg-[#2F8F5B]/20">Active Consent</span>;
     }
     if (status === 'revoked') {
-      return <span className="text-[10px] font-semibold bg-rose-50 text-[#C2412D] px-2 py-0.5 rounded">Consent Revoked</span>;
+      return <span className="text-[10px] font-semibold bg-rose-50 text-[#C2412D] px-2 py-0.5 rounded dark:bg-[#C2412D]/20">Consent Revoked</span>;
     }
     if (status === 'expired') {
-      return <span className="text-[10px] font-semibold bg-amber-50 text-amber-900 px-2 py-0.5 rounded">Consent Expired</span>;
+      return <span className="text-[10px] font-semibold bg-amber-50 text-amber-900 px-2 py-0.5 rounded dark:bg-[#E8A33D]/20">Consent Expired</span>;
     }
-    return <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">No Direct Consent</span>;
+    return <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded dark:bg-[#162C3D] dark:text-[#D3E3F2]">No Direct Consent</span>;
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {toastMessage && (
-        <div className="p-4 bg-emerald-50 text-[#2F8F5B] border border-emerald-300 rounded-xl text-xs flex items-center gap-2">
+        <div className="p-4 bg-emerald-50 text-[#2F8F5B] border border-emerald-300 rounded-xl text-xs flex items-center gap-2 dark:bg-[#2F8F5B]/20">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs">
+        <div className="p-4 bg-rose-50 text-[#C2412D] border border-rose-300 rounded-xl text-xs dark:bg-[#C2412D]/20">
           {errorMsg}
         </div>
       )}
@@ -162,7 +162,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Central Roster
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">· {suppliers.length} Active Suppliers Tracked</span>
@@ -180,7 +180,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
             type="button"
             onClick={loadSuppliers}
             disabled={isLoading}
-            className="px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 border border-slate-200 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer dark:border-[#244157]"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -198,7 +198,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs dark:bg-[#162C3D] dark:border-[#244157]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -206,14 +206,14 @@ export const BuyerSupplierDatabase: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by company name, city, or category..."
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
           />
         </div>
 
         <select
           value={selectedCategory}
           onChange={(e) => setSelectedCategory(e.target.value)}
-          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
         >
           <option value="ALL">All Supply Categories</option>
           {categoriesAvailable.map((cat) => (
@@ -226,7 +226,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
         <select
           value={selectedCitizenFilter}
           onChange={(e) => setSelectedCitizenFilter(e.target.value)}
-          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
         >
           <option value="ALL">All Ownership Types</option>
           <option value="100">100% Citizen-Owned Only (CEEP)</option>
@@ -234,9 +234,9 @@ export const BuyerSupplierDatabase: React.FC = () => {
       </div>
 
       {/* Suppliers Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs dark:bg-[#1C364B] dark:border-[#244157]">
         {isLoading ? (
-          <div className="p-10 flex items-center justify-center gap-2 text-xs text-slate-500">
+          <div className="p-10 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-[#9CB4C9]">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span>Loading consent-scoped supplier directory...</span>
           </div>
@@ -244,7 +244,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                   <th className="py-3 px-4">Supplier / Trading Name</th>
                   <th className="py-3 px-4">Consent Scope</th>
                   <th className="py-3 px-4">CIPA UIN & TIN</th>
@@ -254,7 +254,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                   <th className="py-3 px-4 text-right">Profile</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                 {filteredSuppliers.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-slate-400">
@@ -265,12 +265,12 @@ export const BuyerSupplierDatabase: React.FC = () => {
                   filteredSuppliers.map((sup) => (
                     <tr key={sup.id} className="hover:bg-slate-50/70">
                       <td className="py-3.5 px-4">
-                        <div className="font-bold text-[#10212E]">{sup.legalName}</div>
-                        <span className="text-[11px] text-slate-500">
+                        <div className="font-bold text-[#10212E] dark:text-white">{sup.legalName}</div>
+                        <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                           {sup.tradingName || sup.city || 'Botswana'}
                         </span>
                         {sup.isApprovedRoster && (
-                          <span className="ml-2 text-[10px] bg-emerald-50 text-[#2F8F5B] px-1.5 py-0.5 rounded font-semibold">
+                          <span className="ml-2 text-[10px] bg-emerald-50 text-[#2F8F5B] px-1.5 py-0.5 rounded font-semibold dark:bg-[#2F8F5B]/20">
                             Approved Roster
                           </span>
                         )}
@@ -279,15 +279,15 @@ export const BuyerSupplierDatabase: React.FC = () => {
                       <td className="py-3.5 px-4 space-y-1">
                         {renderConsentBadge(sup.consentStatus)}
                         {sup.hasSubmittedApplication && (
-                          <span className="block text-[10px] text-[#1F5F99] font-medium">
+                          <span className="block text-[10px] text-[#1F5F99] font-medium dark:text-[#6FAEE0]">
                             Submitted Applicant
                           </span>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono">
+                      <td className="py-3.5 px-4 tabular-nums">
                         {sup.cipaNumber ? (
-                          <div className="text-slate-800 font-bold">{sup.cipaNumber}</div>
+                          <div className="text-slate-800 font-bold dark:text-white">{sup.cipaNumber}</div>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 italic">
                             <Lock className="w-3 h-3" /> [Consent restricted]
@@ -302,7 +302,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                         {Array.isArray(sup.categories) && sup.categories.length > 0 ? (
                           <div className="flex flex-wrap gap-1 max-w-[200px]">
                             {sup.categories.slice(0, 2).map((c: string) => (
-                              <span key={c} className="text-[10px] bg-[#EAF2FA] text-[#1F5F99] px-1.5 py-0.5 rounded">
+                              <span key={c} className="text-[10px] bg-[#EAF2FA] text-[#1F5F99] px-1.5 py-0.5 rounded dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                                 {c}
                               </span>
                             ))}
@@ -313,11 +313,11 @@ export const BuyerSupplierDatabase: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="font-bold text-[#2F8F5B] block font-mono">
+                        <span className="font-bold text-[#2F8F5B] block tabular-nums">
                           {sup.citizenOwnedPercentage ?? 0}% Citizen
                         </span>
                         {sup.eddCertified && (
-                          <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded dark:bg-[#162C3D] dark:text-[#9CB4C9]">
                             EDD Active
                           </span>
                         )}
@@ -331,7 +331,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleInspectProfile(sup.id)}
-                          className="px-3 py-1.5 rounded-lg border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] font-semibold inline-flex items-center gap-1.5 cursor-pointer dark:text-[#6FAEE0] dark:hover:bg-[#162C3D]"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Inspect</span>
@@ -349,15 +349,15 @@ export const BuyerSupplierDatabase: React.FC = () => {
       {/* Consent-Scoped Supplier Profile Modal */}
       {inspectingSupplierId && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-xs">
-            <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-xs dark:bg-[#1C364B] dark:border-[#244157]">
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between dark:border-[#244157]">
               <div className="flex items-center gap-2.5">
-                <Building2 className="w-5 h-5 text-[#1F5F99]" />
+                <Building2 className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0]" />
                 <div>
-                  <h3 className="font-heading font-bold text-base text-[#10212E]">
+                  <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
                     {inspectedProfile?.legalName || 'Supplier Profile Inspection'}
                   </h3>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                     Consent-scoped dossier · Access event recorded to supplier audit ledger
                   </span>
                 </div>
@@ -376,55 +376,55 @@ export const BuyerSupplierDatabase: React.FC = () => {
 
             <div className="p-6 overflow-y-auto space-y-6">
               {isLoadingProfile ? (
-                <div className="py-12 flex items-center justify-center gap-2 text-slate-500">
+                <div className="py-12 flex items-center justify-center gap-2 text-slate-500 dark:text-[#9CB4C9]">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Loading consent-scoped dossier...</span>
                 </div>
               ) : inspectedProfile ? (
                 <>
                   {/* Consent Status Banner */}
-                  <div className="p-3.5 rounded-xl bg-[#F7FAFD] border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                  <div className="p-3.5 rounded-xl bg-[#F7FAFD] border border-slate-200 flex flex-wrap items-center justify-between gap-2 dark:bg-[#162C3D] dark:border-[#244157]">
                     <div className="flex items-center gap-2">
                       {renderConsentBadge(inspectedProfile.consentStatus)}
                       {inspectedProfile.consentExpiresAt && (
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                           Expires {String(inspectedProfile.consentExpiresAt).slice(0, 10)}
                         </span>
                       )}
                     </div>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                       {inspectedProfile.city || 'Botswana'} · {inspectedProfile.citizenOwnedPercentage ?? 0}% Citizen Owned
                     </span>
                   </div>
 
                   {/* Company Details */}
                   <div className="space-y-2">
-                    <h4 className="font-heading font-bold text-sm text-[#10212E]">Company Details</h4>
+                    <h4 className="font-heading font-bold text-sm text-[#10212E] dark:text-white">Company Details</h4>
                     {inspectedProfile.scopes?.companyDetails ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 dark:bg-[#162C3D] dark:border-[#244157]">
                         <div>
-                          <span className="text-slate-500 block">CIPA UIN</span>
-                          <strong className="font-mono text-[#10212E]">{inspectedProfile.cipaNumber || '—'}</strong>
+                          <span className="text-slate-500 block dark:text-[#9CB4C9]">CIPA UIN</span>
+                          <strong className="tabular-nums text-[#10212E] dark:text-white">{inspectedProfile.cipaNumber || '—'}</strong>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">BURS TIN</span>
-                          <strong className="font-mono text-[#10212E]">{inspectedProfile.tinNumber || '—'}</strong>
+                          <span className="text-slate-500 block dark:text-[#9CB4C9]">BURS TIN</span>
+                          <strong className="tabular-nums text-[#10212E] dark:text-white">{inspectedProfile.tinNumber || '—'}</strong>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Contact Email</span>
-                          <strong className="text-[#10212E]">{inspectedProfile.email || '—'}</strong>
+                          <span className="text-slate-500 block dark:text-[#9CB4C9]">Contact Email</span>
+                          <strong className="text-[#10212E] dark:text-white">{inspectedProfile.email || '—'}</strong>
                         </div>
                         <div>
-                          <span className="text-slate-500 block">Phone</span>
-                          <strong className="text-[#10212E]">{inspectedProfile.phone || '—'}</strong>
+                          <span className="text-slate-500 block dark:text-[#9CB4C9]">Phone</span>
+                          <strong className="text-[#10212E] dark:text-white">{inspectedProfile.phone || '—'}</strong>
                         </div>
                         <div className="sm:col-span-2">
-                          <span className="text-slate-500 block">Physical Address</span>
-                          <strong className="text-[#10212E]">{inspectedProfile.physicalAddress || '—'}</strong>
+                          <span className="text-slate-500 block dark:text-[#9CB4C9]">Physical Address</span>
+                          <strong className="text-[#10212E] dark:text-white">{inspectedProfile.physicalAddress || '—'}</strong>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 inline-flex items-center gap-2 w-full">
+                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 inline-flex items-center gap-2 w-full dark:bg-[#162C3D] dark:text-[#9CB4C9] dark:border-[#244157]">
                         <Lock className="w-4 h-4 shrink-0" />
                         <span>Company statutory details are not shared under the supplier's current consent scope.</span>
                       </div>
@@ -433,22 +433,22 @@ export const BuyerSupplierDatabase: React.FC = () => {
 
                   {/* Directors & Beneficial Owners */}
                   <div className="space-y-2">
-                    <h4 className="font-heading font-bold text-sm text-[#10212E] inline-flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-[#1F5F99]" />
+                    <h4 className="font-heading font-bold text-sm text-[#10212E] inline-flex items-center gap-1.5 dark:text-white">
+                      <Users className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                       <span>Directors & Beneficial Owners</span>
                     </h4>
                     {inspectedProfile.scopes?.directorsOwners ? (
                       Array.isArray(inspectedProfile.directors) && inspectedProfile.directors.length > 0 ? (
-                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl dark:border-[#244157] dark:divide-[#244157]">
                           {inspectedProfile.directors.map((d: any) => (
                             <div key={d.id} className="p-3 flex items-center justify-between">
                               <div>
-                                <div className="font-bold text-[#10212E]">{d.fullName}</div>
-                                <span className="text-[11px] text-slate-500">
+                                <div className="font-bold text-[#10212E] dark:text-white">{d.fullName}</div>
+                                <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                                   {d.role} · {d.citizenship || 'Citizenship not specified'}
                                 </span>
                               </div>
-                              <span className="font-mono font-bold text-[#1F5F99]">
+                              <span className="tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0]">
                                 {d.ownershipPercentage ?? 0}%
                               </span>
                             </div>
@@ -458,7 +458,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                         <p className="text-slate-400">No directors recorded on supplier profile.</p>
                       )
                     ) : (
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 inline-flex items-center gap-2 w-full">
+                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 inline-flex items-center gap-2 w-full dark:bg-[#162C3D] dark:text-[#9CB4C9] dark:border-[#244157]">
                         <Lock className="w-4 h-4 shrink-0" />
                         <span>Directors & ownership records require supplier consent.</span>
                       </div>
@@ -467,23 +467,23 @@ export const BuyerSupplierDatabase: React.FC = () => {
 
                   {/* Past Projects */}
                   <div className="space-y-2">
-                    <h4 className="font-heading font-bold text-sm text-[#10212E] inline-flex items-center gap-1.5">
-                      <Briefcase className="w-4 h-4 text-[#1F5F99]" />
+                    <h4 className="font-heading font-bold text-sm text-[#10212E] inline-flex items-center gap-1.5 dark:text-white">
+                      <Briefcase className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                       <span>Past Projects & References</span>
                     </h4>
                     {inspectedProfile.scopes?.pastProjects ? (
                       Array.isArray(inspectedProfile.pastProjects) && inspectedProfile.pastProjects.length > 0 ? (
-                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl dark:border-[#244157] dark:divide-[#244157]">
                           {inspectedProfile.pastProjects.map((p: any) => (
                             <div key={p.id} className="p-3 flex items-center justify-between gap-3">
                               <div>
-                                <div className="font-bold text-[#10212E]">{p.title}</div>
-                                <span className="text-[11px] text-slate-500">
+                                <div className="font-bold text-[#10212E] dark:text-white">{p.title}</div>
+                                <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                                   Client: {p.clientName} {p.year ? `· ${p.year}` : ''}
                                 </span>
                               </div>
                               {p.valueBwp != null && (
-                                <span className="font-mono font-bold text-[#2F8F5B]">
+                                <span className="tabular-nums font-bold text-[#2F8F5B]">
                                   P {Number(p.valueBwp).toLocaleString()}
                                 </span>
                               )}
@@ -494,7 +494,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                         <p className="text-slate-400">No past projects listed.</p>
                       )
                     ) : (
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 inline-flex items-center gap-2 w-full">
+                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 inline-flex items-center gap-2 w-full dark:bg-[#162C3D] dark:text-[#9CB4C9] dark:border-[#244157]">
                         <Lock className="w-4 h-4 shrink-0" />
                         <span>Past project history requires supplier consent.</span>
                       </div>
@@ -503,17 +503,17 @@ export const BuyerSupplierDatabase: React.FC = () => {
 
                   {/* Shared Documents */}
                   <div className="space-y-2">
-                    <h4 className="font-heading font-bold text-sm text-[#10212E] inline-flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-[#1F5F99]" />
+                    <h4 className="font-heading font-bold text-sm text-[#10212E] inline-flex items-center gap-1.5 dark:text-white">
+                      <FileText className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                       <span>Shared Compliance Documents ({inspectedProfile.documents?.length || 0})</span>
                     </h4>
                     {Array.isArray(inspectedProfile.documents) && inspectedProfile.documents.length > 0 ? (
-                      <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                      <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl dark:border-[#244157] dark:divide-[#244157]">
                         {inspectedProfile.documents.map((doc: any) => (
                           <div key={doc.id} className="p-3 flex items-center justify-between gap-3">
                             <div>
-                              <div className="font-bold text-[#10212E]">{doc.documentType}</div>
-                              <span className="text-[11px] text-slate-500">
+                              <div className="font-bold text-[#10212E] dark:text-white">{doc.documentType}</div>
+                              <span className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                                 {doc.fileName} · Status: {doc.status}
                                 {doc.expiryDate ? ` · Expires ${String(doc.expiryDate).slice(0, 10)}` : ''}
                               </span>
@@ -522,7 +522,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                               type="button"
                               disabled={isOpeningDocId === (doc.versionId || doc.id)}
                               onClick={() => handlePreviewDocument(doc)}
-                              className="px-3 py-1.5 rounded-lg bg-[#EAF2FA] text-[#1F5F99] hover:bg-[#d8e8f7] font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              className="px-3 py-1.5 rounded-lg bg-[#EAF2FA] text-[#1F5F99] hover:bg-[#d8e8f7] font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 dark:bg-[#162C3D] dark:text-[#6FAEE0]"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>{isOpeningDocId === (doc.versionId || doc.id) ? 'Opening...' : 'View'}</span>
@@ -531,7 +531,7 @@ export const BuyerSupplierDatabase: React.FC = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500">
+                      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 dark:bg-[#162C3D] dark:text-[#9CB4C9] dark:border-[#244157]">
                         No vault documents are shared with your organization under the active consent scope.
                       </div>
                     )}
@@ -546,18 +546,18 @@ export const BuyerSupplierDatabase: React.FC = () => {
       {/* Document Preview Overlay */}
       {previewDoc && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-4xl w-full h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between text-xs">
-              <strong className="text-sm text-[#10212E]">{previewDoc.title}</strong>
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-4xl w-full h-[85vh] flex flex-col overflow-hidden shadow-2xl dark:bg-[#1C364B] dark:border-[#244157]">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between text-xs dark:border-[#244157]">
+              <strong className="text-sm text-[#10212E] dark:text-white">{previewDoc.title}</strong>
               <button
                 type="button"
                 onClick={closePreviewDoc}
-                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-600 cursor-pointer dark:text-[#D3E3F2] dark:hover:bg-[#162C3D]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 bg-slate-100 overflow-hidden">
+            <div className="flex-1 bg-slate-100 overflow-hidden dark:bg-[#162C3D]">
               {previewDoc.mimeType.startsWith('image/') ? (
                 <img src={previewDoc.url} alt={previewDoc.title} className="w-full h-full object-contain" />
               ) : (

@@ -32,10 +32,10 @@ export const BuyerCallsByStageChart: React.FC<BuyerChartsProps> = ({ calls = [] 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-[14px]">
-        <span className="font-medium text-[#43525F] dark:text-[#B2C3D2]">
+        <span className="font-medium text-[#43525F] dark:text-[#D3E3F2]">
           Procurement pipeline breakdown
         </span>
-        <span className="text-[13px] text-[#6B7A87]">{calls.length} total calls</span>
+        <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">{calls.length} total calls</span>
       </div>
 
       <div className="space-y-2.5 pt-1">
@@ -47,7 +47,7 @@ export const BuyerCallsByStageChart: React.FC<BuyerChartsProps> = ({ calls = [] 
                 <span className="text-[#10212E] dark:text-white font-medium">{st.label}</span>
                 <span className="font-semibold tabular-nums text-[#10212E] dark:text-white">{st.count}</span>
               </div>
-              <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3E] rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3D] rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{ width: `${widthPercent}%`, backgroundColor: st.color }}
@@ -104,7 +104,7 @@ export const BuyerSpendByCategoryChart: React.FC<BuyerChartsProps> = ({ calls = 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between text-[14px]">
-        <span className="font-medium text-[#43525F] dark:text-[#B2C3D2]">
+        <span className="font-medium text-[#43525F] dark:text-[#D3E3F2]">
           {awards.length > 0 ? 'Awarded value by category (BWP Millions)' : 'Estimated pipeline budget by category (BWP Millions)'}
         </span>
         <span className="text-[13px] text-[#2F8F5B] font-semibold tabular-nums">
@@ -113,11 +113,11 @@ export const BuyerSpendByCategoryChart: React.FC<BuyerChartsProps> = ({ calls = 
       </div>
 
       {categories.length === 0 ? (
-        <div className="h-[210px] flex items-center justify-center text-[13px] text-[#6B7A87] border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
+        <div className="h-[210px] flex items-center justify-center text-[13px] text-[#6B7A87] border border-dashed border-[#D5E0EA] dark:border-[#244157] rounded-[8px] dark:text-[#9CB4C9]">
           No budgeted calls or awards recorded yet for this organization.
         </div>
       ) : (
-        <div className="h-[210px] flex items-end justify-between gap-4 pt-6 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-2">
+        <div className="h-[210px] flex items-end justify-between gap-4 pt-6 border-b border-[#D5E0EA] dark:border-[#244157] pb-2">
           {categories.map((cat, idx) => {
             const barHeight = Math.max(12, (cat.spendM / maxSpend) * 150);
             return (
@@ -134,7 +134,7 @@ export const BuyerSpendByCategoryChart: React.FC<BuyerChartsProps> = ({ calls = 
                   className="w-full max-w-[48px] rounded-t-[4px] transition-all hover:opacity-90"
                   style={{ height: `${barHeight}px`, backgroundColor: cat.color }}
                 />
-                <span className="text-[12px] text-[#6B7A87] text-center line-clamp-1 max-w-[80px]" title={cat.label}>
+                <span className="text-[12px] text-[#6B7A87] text-center line-clamp-1 max-w-[80px] dark:text-[#9CB4C9]" title={cat.label}>
                   {cat.label.split(' ')[0]}
                 </span>
 

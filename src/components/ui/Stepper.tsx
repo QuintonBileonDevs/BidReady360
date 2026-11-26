@@ -3,7 +3,7 @@ import React from 'react';
 export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) => {
   return (
     <div
-      className={`animate-pulse bg-[#EAF2FA] dark:bg-[#162C3E] rounded-[6px] ${className}`}
+      className={`animate-pulse bg-[#EAF2FA] dark:bg-[#1C364B] rounded-[6px] ${className}`}
     />
   );
 };
@@ -42,20 +42,20 @@ export const Stepper: React.FC<StepperProps> = ({
               onClick={() => onStepClick && onStepClick(index)}
               className={`p-3.5 rounded-[8px] border text-left transition-all ${
                 isCurrent
-                  ? 'border-[#1F5F99] bg-[#EAF2FA]/50 dark:bg-[#1F5F99]/15'
+                  ? 'border-[#1F5F99] dark:border-[#6FAEE0] bg-[#EAF2FA]/60 dark:bg-[#6FAEE0]/15'
                   : isComplete
-                  ? 'border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635]'
-                  : 'border-transparent bg-[#F7FAFD] dark:bg-[#10212E] opacity-60'
+                  ? 'border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B]'
+                  : 'border-transparent bg-[#EAF2FA]/45 dark:bg-[#162C3D] opacity-70'
               } ${onStepClick ? 'cursor-pointer' : 'cursor-default'}`}
             >
               <div className="flex items-center gap-2 mb-1">
                 <span
-                  className={`w-5 h-5 rounded-[4px] font-mono text-[11px] font-semibold flex items-center justify-center ${
+                  className={`w-5 h-5 rounded-[4px] font-heading tabular-nums text-[11px] font-semibold flex items-center justify-center ${
                     isCurrent
-                      ? 'bg-[#1F5F99] text-white'
+                      ? 'bg-[#1F5F99] text-white dark:bg-[#6FAEE0] dark:text-[#10212E]'
                       : isComplete
                       ? 'bg-[#2F8F5B] text-white'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      : 'bg-[#D5E0EA] dark:bg-[#244157] text-[#43525F] dark:text-[#D3E3F2]'
                   }`}
                 >
                   {isComplete ? '✓' : index + 1}
@@ -71,7 +71,7 @@ export const Stepper: React.FC<StepperProps> = ({
                 </span>
               </div>
               {step.description && (
-                <p className="text-[11px] text-[#6B7A87] leading-tight pl-7">
+                <p className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9] leading-tight pl-7">
                   {step.description}
                 </p>
               )}

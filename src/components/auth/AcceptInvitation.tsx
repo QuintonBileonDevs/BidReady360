@@ -120,14 +120,14 @@ export const AcceptInvitation: React.FC<AcceptInvitationProps> = ({ onNavigate }
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Activate your account
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Accept your workspace invitation by setting your account password.
           </p>
         </div>
 
         {loadingInvite ? (
-          <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+          <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
+            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span>Verifying invitation details...</span>
           </div>
         ) : loadError || !invitation ? (
@@ -168,29 +168,29 @@ export const AcceptInvitation: React.FC<AcceptInvitationProps> = ({ onNavigate }
         ) : (
           <>
             {/* Live Invitation Details Summary Card */}
-            <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3 text-[14px]">
-              <div className="flex items-center gap-2 font-semibold text-[#10212E] dark:text-white pb-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-3 text-[14px]">
+              <div className="flex items-center gap-2 font-semibold text-[#10212E] dark:text-white pb-2 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <Building2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
                 <span>{invitation.tenantName}</span>
               </div>
 
               <div className="space-y-2 text-[14px]">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[#6B7A87]">Invited by:</span>
+                  <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Invited by:</span>
                   <span className="font-medium text-[#10212E] dark:text-white text-right">
                     {invitation.inviterName}
                   </span>
                 </div>
 
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[#6B7A87]">Assigned role:</span>
+                  <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Assigned role:</span>
                   <span className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] text-right">
                     {invitation.roleName}
                   </span>
                 </div>
 
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[#6B7A87]">Account email:</span>
+                  <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Account email:</span>
                   <span className="text-[#10212E] dark:text-white text-right">
                     {invitation.email}
                   </span>

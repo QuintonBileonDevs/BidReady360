@@ -299,18 +299,18 @@ export const SupplierConsent: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* 1. Header with Single Primary Action in Pula Deep */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-[14px] font-semibold text-[#1F5F99] bg-[#EAF2FA] dark:bg-[#1E364A] dark:text-[#6FAEE0] px-3 py-1 rounded-[4px]">
+            <span className="text-[14px] font-semibold text-[#1F5F99] bg-[#EAF2FA] dark:bg-[#244157] dark:text-[#6FAEE0] px-3 py-1 rounded-[4px]">
               Data sovereignty
             </span>
-            <span className="text-[14px] text-[#6B7A87]">· Controlled access</span>
+            <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">· Controlled access</span>
           </div>
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Sharing and consent
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Control which buying organizations can view your credentials and inspect statutory access logs.
           </p>
         </div>
@@ -329,7 +329,7 @@ export const SupplierConsent: React.FC = () => {
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px]">
+        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px] dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
             <span>{toastMessage}</span>
@@ -337,7 +337,7 @@ export const SupplierConsent: React.FC = () => {
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer"
+            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer dark:text-[#6EE7B7]"
           >
             ✕
           </button>
@@ -345,7 +345,7 @@ export const SupplierConsent: React.FC = () => {
       )}
 
       {errorMessage && (
-        <div className="p-4 rounded-[12px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] flex items-center justify-between gap-3 text-[14px]">
+        <div className="p-4 rounded-[12px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] flex items-center justify-between gap-3 text-[14px] dark:bg-[#C2412D]/20">
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-5 h-5 text-[#C2412D] shrink-0" />
             <span>{errorMessage}</span>
@@ -385,16 +385,16 @@ export const SupplierConsent: React.FC = () => {
       )}
 
       {/* 2. Explainer Card in Plain Words */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center shrink-0">
             <Lock className="w-5 h-5" />
           </div>
           <div className="space-y-1">
             <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               You decide what each organization can see. You can change this at any time.
             </h2>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               No organization can browse your vault or inspect your certificates without your explicit permission. You choose the exact categories, documents, and timeframes.
             </p>
           </div>
@@ -403,32 +403,32 @@ export const SupplierConsent: React.FC = () => {
 
       {/* 3. Figures Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-5 space-y-1.5">
-          <span className="text-[14px] text-[#6B7A87] block">Authorized organizations</span>
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-5 space-y-1.5">
+          <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">Authorized organizations</span>
           <div className="font-heading font-semibold text-[28px] text-[#10212E] dark:text-white tabular-nums">
             {activeGrants.length}
           </div>
-          <span className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] block">
+          <span className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] block">
             Active permissions agreements
           </span>
         </div>
 
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-5 space-y-1.5">
-          <span className="text-[14px] text-[#6B7A87] block">Tied active applications</span>
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-5 space-y-1.5">
+          <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">Tied active applications</span>
           <div className="font-heading font-semibold text-[28px] text-[#10212E] dark:text-white tabular-nums">
             {consentGrants.reduce((sum, g) => sum + (g.tiedApplicationNumbers?.length || 0), 0)}
           </div>
-          <span className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] block">
+          <span className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] block">
             Tender bids relying on active permissions
           </span>
         </div>
 
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-5 space-y-1.5">
-          <span className="text-[14px] text-[#6B7A87] block">Recent inspections</span>
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-5 space-y-1.5">
+          <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">Recent inspections</span>
           <div className="font-heading font-semibold text-[28px] text-[#10212E] dark:text-white tabular-nums">
             {activitiesList.length}
           </div>
-          <span className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] block">
+          <span className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] block">
             Access events logged in audit ledger
           </span>
         </div>
@@ -440,7 +440,7 @@ export const SupplierConsent: React.FC = () => {
           <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
             Organizations with access
           </h2>
-          <span className="text-[14px] text-[#6B7A87]">
+          <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Showing {consentGrants.length} sharing agreements
           </span>
         </div>
@@ -468,19 +468,19 @@ export const SupplierConsent: React.FC = () => {
             return (
               <div
                 key={grant.id}
-                className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-5 transition-all ${
+                className={`bg-white dark:bg-[#1C364B] rounded-[12px] border p-6 space-y-5 transition-all ${
                   isActive
-                    ? 'border-[#D5E0EA] dark:border-[#1E364A]'
-                    : 'border-[#D5E0EA]/60 dark:border-[#1E364A]/60 bg-[#F7FAFD]/50 opacity-75'
+                    ? 'border-[#D5E0EA] dark:border-[#244157]'
+                    : 'border-[#D5E0EA]/60 dark:border-[#244157]/60 bg-[#F7FAFD]/50 opacity-75'
                 }`}
               >
                 {/* Header row: Organization info & Revoke action */}
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                   <div className="flex items-start gap-3.5">
                     <div
                       className={`p-2.5 rounded-[8px] shrink-0 ${
                         isActive
-                          ? 'bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#6FAEE0]'
+                          ? 'bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#244157] dark:text-[#6FAEE0]'
                           : 'bg-[#F7FAFD] text-[#6B7A87]'
                       }`}
                     >
@@ -495,7 +495,7 @@ export const SupplierConsent: React.FC = () => {
                         <StatusChip status={grant.status} />
                       </div>
 
-                      <div className="flex items-center gap-3 text-[14px] text-[#6B7A87] flex-wrap">
+                      <div className="flex items-center gap-3 text-[14px] text-[#6B7A87] flex-wrap dark:text-[#9CB4C9]">
                         <span>Access granted on {grant.grantedAt}</span>
                         <span>·</span>
                         <span>
@@ -514,8 +514,8 @@ export const SupplierConsent: React.FC = () => {
                       </div>
 
                       {grant.purpose && (
-                        <div className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] pt-0.5">
-                          <span className="text-[#6B7A87]">Purpose: </span>
+                        <div className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] pt-0.5">
+                          <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Purpose: </span>
                           <span>{grant.purpose}</span>
                         </div>
                       )}
@@ -530,13 +530,13 @@ export const SupplierConsent: React.FC = () => {
                           setRevokeReason('');
                           setRevokingGrant(grant);
                         }}
-                        className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#C2412D] hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#C2412D] hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <XCircle className="w-4 h-4" />
                         <span>Revoke</span>
                       </button>
                     ) : (
-                      <span className="text-[14px] text-[#6B7A87] italic font-medium px-2 py-1">
+                      <span className="text-[14px] text-[#6B7A87] italic font-medium px-2 py-1 dark:text-[#9CB4C9]">
                         {grant.status === 'Expired' ? 'Grant expired' : 'Access revoked'}
                       </span>
                     )}
@@ -551,28 +551,28 @@ export const SupplierConsent: React.FC = () => {
 
                   <div className="flex flex-wrap gap-2">
                     {grant.scope.companyDetails && (
-                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
+                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-[#2F8F5B]" />
                         <span>Company details</span>
                       </span>
                     )}
 
                     {grant.scope.directorsOwners && (
-                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
+                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-[#2F8F5B]" />
                         <span>Directors and owners</span>
                       </span>
                     )}
 
                     {grant.scope.pastProjects && (
-                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
+                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-[#2F8F5B]" />
                         <span>Past projects</span>
                       </span>
                     )}
 
                     {grant.scope.selectedDocuments && (
-                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
+                      <span className="px-3 py-1 bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#10212E] dark:text-white font-medium inline-flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-[#2F8F5B]" />
                         <span>Selected documents ({grant.selectedDocumentNames?.length || 0})</span>
                       </span>
@@ -580,8 +580,8 @@ export const SupplierConsent: React.FC = () => {
                   </div>
 
                   {grant.scope.selectedDocuments && grant.selectedDocumentNames && grant.selectedDocumentNames.length > 0 && (
-                    <div className="pl-1 pt-1 space-y-1 text-[#43525F] dark:text-[#B2C3D2]">
-                      <span className="text-[#6B7A87] block text-[14px]">Shared certificates:</span>
+                    <div className="pl-1 pt-1 space-y-1 text-[#43525F] dark:text-[#D3E3F2]">
+                      <span className="text-[#6B7A87] block text-[14px] dark:text-[#9CB4C9]">Shared certificates:</span>
                       <ul className="list-disc list-inside space-y-0.5">
                         {grant.selectedDocumentNames.map((docName) => (
                           <li key={docName}>{docName}</li>
@@ -593,16 +593,16 @@ export const SupplierConsent: React.FC = () => {
 
                 {/* Tied Applications Banner & Warning */}
                 {hasTiedApps && (
-                  <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/50 border border-[#D5E0EA] dark:border-[#1E364A] flex items-start gap-2.5 text-[14px]">
+                  <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#244157]/50 border border-[#D5E0EA] dark:border-[#244157] flex items-start gap-2.5 text-[14px]">
                     <FileText className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0] mt-0.5 shrink-0" />
                     <div>
                       <strong className="text-[#10212E] dark:text-white font-semibold">
                         Tied to active tender submission:
                       </strong>
-                      <span className="text-[#43525F] dark:text-[#B2C3D2] ml-1.5">
+                      <span className="text-[#43525F] dark:text-[#D3E3F2] ml-1.5">
                         {grant.tiedApplicationNumbers?.join(', ')}.
                       </span>
-                      <span className="text-[#6B7A87] block mt-0.5">
+                      <span className="text-[#6B7A87] block mt-0.5 dark:text-[#9CB4C9]">
                         This organization is currently reviewing your submitted bid under this tender call.
                       </span>
                     </div>
@@ -615,12 +615,12 @@ export const SupplierConsent: React.FC = () => {
       </div>
 
       {/* 5. Activity List Section */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
           <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
             Recent activity
           </h2>
-          <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
             Detailed inspection log recording when organizations accessed your profile or verified your documents.
           </p>
         </div>
@@ -629,23 +629,23 @@ export const SupplierConsent: React.FC = () => {
           {activitiesList.map((item) => (
             <div
               key={item.id}
-              className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/60 dark:bg-[#10212E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px]"
+              className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/60 dark:bg-[#10212E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px]"
             >
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center shrink-0 mt-0.5">
+                <div className="w-8 h-8 rounded-full bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center shrink-0 mt-0.5">
                   <Eye className="w-4 h-4" />
                 </div>
                 <div className="space-y-0.5">
                   <p className="text-[#10212E] dark:text-white">
                     <strong>{item.organizationName}</strong> {item.action} on {item.dateStr}.
                   </p>
-                  <span className="text-[#6B7A87] text-[14px] block tabular-nums">
+                  <span className="text-[#6B7A87] text-[14px] block tabular-nums dark:text-[#9CB4C9]">
                     Logged at {item.timestamp} · IP: {item.ipAddress}
                   </span>
                 </div>
               </div>
 
-              <span className="text-[14px] text-[#2F8F5B] bg-[#ECFDF5] px-2.5 py-0.5 rounded font-medium shrink-0 self-start sm:self-center">
+              <span className="text-[14px] text-[#2F8F5B] bg-[#ECFDF5] px-2.5 py-0.5 rounded font-medium shrink-0 self-start sm:self-center dark:bg-[#2F8F5B]/20">
                 Verified
               </span>
             </div>
@@ -665,21 +665,21 @@ export const SupplierConsent: React.FC = () => {
           />
 
           {/* Drawer Container */}
-          <div className="relative w-full max-w-xl bg-white dark:bg-[#132635] shadow-2xl h-full flex flex-col z-10 border-l border-[#D5E0EA] dark:border-[#1E364A] overflow-y-auto">
+          <div className="relative w-full max-w-xl bg-white dark:bg-[#1C364B] shadow-2xl h-full flex flex-col z-10 border-l border-[#D5E0EA] dark:border-[#244157] overflow-y-auto">
             {/* Header */}
-            <div className="p-6 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+            <div className="p-6 border-b border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
               <div>
                 <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   Share with an organization
                 </h2>
-                <span className="text-[14px] text-[#6B7A87]">
+                <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Authorize a buying organization to view your credentials
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsShareDrawerOpen(false)}
-                className="p-2 rounded-full text-[#6B7A87] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
+                className="p-2 rounded-full text-[#6B7A87] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -695,7 +695,7 @@ export const SupplierConsent: React.FC = () => {
                 <select
                   value={selectedOrgId}
                   onChange={(e) => setSelectedOrgId(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 >
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
@@ -710,70 +710,70 @@ export const SupplierConsent: React.FC = () => {
                 <label className="font-semibold text-[#10212E] dark:text-white block">
                   What to share *
                 </label>
-                <div className="space-y-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] p-4 bg-[#F7FAFD]/40 dark:bg-[#10212E]/40">
+                <div className="space-y-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] p-4 bg-[#F7FAFD]/40 dark:bg-[#10212E]/40">
                   <label className="flex items-start gap-2.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={shareCompanyDetails}
                       onChange={(e) => setShareCompanyDetails(e.target.checked)}
-                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                     <div>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         Company details
                       </span>
-                      <span className="text-[#6B7A87] text-[14px]">
+                      <span className="text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
                         Legal name, registration number, registered address, and primary contacts.
                       </span>
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-[#D5E0EA]/60 dark:border-[#1E364A]/60">
+                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-[#D5E0EA]/60 dark:border-[#244157]/60">
                     <input
                       type="checkbox"
                       checked={shareDirectorsOwners}
                       onChange={(e) => setShareDirectorsOwners(e.target.checked)}
-                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                     <div>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         Directors and owners
                       </span>
-                      <span className="text-[#6B7A87] text-[14px]">
+                      <span className="text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
                         Beneficial ownership percentages, citizenship, and identity verification status.
                       </span>
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-[#D5E0EA]/60 dark:border-[#1E364A]/60">
+                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-[#D5E0EA]/60 dark:border-[#244157]/60">
                     <input
                       type="checkbox"
                       checked={sharePastProjects}
                       onChange={(e) => setSharePastProjects(e.target.checked)}
-                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                     <div>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         Past projects
                       </span>
-                      <span className="text-[#6B7A87] text-[14px]">
+                      <span className="text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
                         Track record of completed works, contract values, and reference officer contacts.
                       </span>
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-[#D5E0EA]/60 dark:border-[#1E364A]/60">
+                  <label className="flex items-start gap-2.5 cursor-pointer pt-2 border-t border-[#D5E0EA]/60 dark:border-[#244157]/60">
                     <input
                       type="checkbox"
                       checked={shareSelectedDocs}
                       onChange={(e) => setShareSelectedDocs(e.target.checked)}
-                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                     <div>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         Selected documents
                       </span>
-                      <span className="text-[#6B7A87] text-[14px]">
+                      <span className="text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
                         Choose specific statutory certificates and compliance policies from your vault.
                       </span>
                     </div>
@@ -804,7 +804,7 @@ export const SupplierConsent: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] p-3 space-y-2 max-h-48 overflow-y-auto">
+                  <div className="border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] p-3 space-y-2 max-h-48 overflow-y-auto">
                     {documents.map((doc) => {
                       const isChecked = pickedDocNames.includes(doc.documentType);
 
@@ -826,13 +826,13 @@ export const SupplierConsent: React.FC = () => {
                                   );
                                 }
                               }}
-                              className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                              className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                             />
                             <div>
                               <span className="font-medium text-[#10212E] dark:text-white block">
                                 {doc.documentType}
                               </span>
-                              <span className="text-[#6B7A87] text-[14px]">
+                              <span className="text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
                                 {doc.fileName} · {doc.status}
                               </span>
                             </div>
@@ -850,12 +850,12 @@ export const SupplierConsent: React.FC = () => {
                   <label className="font-semibold text-[#10212E] dark:text-white block">
                     Access expiry date
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-[14px] text-[#6B7A87]">
+                  <label className="flex items-center gap-2 cursor-pointer text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     <input
                       type="checkbox"
                       checked={hasExpiryDate}
                       onChange={(e) => setHasExpiryDate(e.target.checked)}
-                      className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                      className="rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                     <span>Set expiry date</span>
                   </label>
@@ -866,10 +866,10 @@ export const SupplierConsent: React.FC = () => {
                     type="date"
                     value={expiryDateInput}
                     onChange={(e) => setExpiryDateInput(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white tabular-nums"
+                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white tabular-nums"
                   />
                 ) : (
-                  <div className="p-3 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87] text-[14px]">
+                  <div className="p-3 rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
                     No expiry date set. Access remains active until you click Revoke.
                   </div>
                 )}
@@ -886,26 +886,26 @@ export const SupplierConsent: React.FC = () => {
                   placeholder="e.g. Tender qualification for GRC/2026/W04 Clinic Expansion"
                   value={purposeLine}
                   onChange={(e) => setPurposeLine(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
 
               {/* 6. Plain Summary Before Confirming */}
-              <div className="p-4 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+              <div className="p-4 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
                 <strong className="font-semibold text-[#10212E] dark:text-white block">
                   Summary before confirming:
                 </strong>
-                <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   {plainSummaryText}
                 </p>
               </div>
 
               {/* Drawer Footer Actions */}
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsShareDrawerOpen(false)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
+                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -927,20 +927,20 @@ export const SupplierConsent: React.FC = () => {
           ========================================================================= */}
       {revokingGrant && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in text-[14px]">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in text-[14px]">
+            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div className="space-y-1">
                 <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   Revoke organization access?
                 </h3>
-                <span className="text-[#6B7A87]">
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">
                   {revokingGrant.organizationName}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setRevokingGrant(null)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
+                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -948,7 +948,7 @@ export const SupplierConsent: React.FC = () => {
 
             {/* Explanation of what changes */}
             <div className="space-y-3">
-              <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+              <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                 If you revoke access, <strong>{revokingGrant.organizationName}</strong> will immediately lose the ability to inspect your company details, directors and beneficial owners, past projects, and all selected compliance certificates.
               </p>
 
@@ -970,7 +970,7 @@ export const SupplierConsent: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] text-[#6B7A87]">
+                <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] text-[#6B7A87] dark:text-[#9CB4C9]">
                   No active tender submissions are currently tied to this grant. You can reinstate access at any time.
                 </div>
               )}
@@ -984,17 +984,17 @@ export const SupplierConsent: React.FC = () => {
                   value={revokeReason}
                   onChange={(e) => setRevokeReason(e.target.value)}
                   placeholder="e.g. Tender completed or updating compliance credentials"
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setRevokingGrant(null)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
               >
                 Keep access
               </button>

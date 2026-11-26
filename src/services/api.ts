@@ -361,7 +361,7 @@ export const callsApi = {
 // Notifications API
 // ---------------------------------------------------------------------
 export const notificationsApi = {
-  async list(limit = 50) {
+  async list(limit = 100) {
     return apiRequest<any[]>(`/api/notifications?limit=${encodeURIComponent(String(limit))}`, { cache: 'no-store' });
   },
 
@@ -371,6 +371,46 @@ export const notificationsApi = {
 
   async markRead(id: string) {
     return apiRequest<{ success: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+  },
+
+  async markUnread(id: string) {
+    return apiRequest<{ success: boolean }>(`/api/notifications/${encodeURIComponent(id)}/unread`, { method: 'PATCH' });
+  },
+
+  async setStarred(id: string, starred: boolean) {
+    return apiRequest<{ success: boolean; starred: boolean }>(
+      `/api/notifications/${encodeURIComponent(id)}/star`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ starred }),
+      }
+    );
+  },
+
+  async setArchived(id: string, archived: boolean) {
+    return apiRequest<{ success: boolean; archived: boolean }>(
+      `/api/notifications/${encodeURIComponent(id)}/archive`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ archived }),
+      }
+    );
+  },
+
+  async deleteNotification(id: string) {
+    return apiRequest<{ success: boolean }>(`/api/notifications/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async bulkAction(
+    ids: string[],
+    action: 'read' | 'unread' | 'star' | 'unstar' | 'archive' | 'unarchive' | 'delete'
+  ) {
+    return apiRequest<{ success: boolean; updatedCount: number }>('/api/notifications/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids, action }),
+    });
   },
 
   async markAllRead() {

@@ -171,7 +171,7 @@ export const BuyerAwards: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Contract Award Studio
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">· Separation of Duties & Delegation Enforcement</span>
@@ -196,18 +196,18 @@ export const BuyerAwards: React.FC = () => {
       </div>
 
       {/* Recommend Award Form */}
-      <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 sm:p-8 space-y-6 text-xs">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-[#1E364A] pb-3">
+      <div className="bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-2xl p-6 sm:p-8 space-y-6 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-[#244157] pb-3">
           <div>
             <h2 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
               Recommend Contract Award (Opened Bids Only)
             </h2>
-            <p className="text-slate-500">Select a tender call with formally unsealed bids to submit a statutory award recommendation.</p>
+            <p className="text-slate-500 dark:text-[#9CB4C9]">Select a tender call with formally unsealed bids to submit a statutory award recommendation.</p>
           </div>
           <select
             value={selectedCallId}
             onChange={(e) => setSelectedCallId(e.target.value)}
-            className="p-2 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#1E364A] rounded-lg text-xs font-semibold text-slate-900 dark:text-white"
+            className="p-2 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#244157] rounded-lg text-xs font-semibold text-slate-900 dark:text-white"
           >
             {calls.length === 0 && <option value="">No tender calls</option>}
             {calls.map((c) => (
@@ -235,7 +235,7 @@ export const BuyerAwards: React.FC = () => {
                 <select
                   value={selectedBidId}
                   onChange={(e) => handleSelectBid(e.target.value)}
-                  className="w-full p-2.5 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#1E364A] rounded-lg font-semibold text-slate-900 dark:text-white"
+                  className="w-full p-2.5 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#244157] rounded-lg font-semibold text-slate-900 dark:text-white"
                 >
                   {bids.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -256,7 +256,7 @@ export const BuyerAwards: React.FC = () => {
                   required
                   value={awardValue}
                   onChange={(e) => setAwardValue(Number(e.target.value))}
-                  className="w-full p-2.5 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#1E364A] rounded-lg font-mono font-bold text-sm text-[#1F5F99]"
+                  className="w-full p-2.5 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#244157] rounded-lg tabular-nums font-bold text-sm text-[#1F5F99] dark:text-[#6FAEE0]"
                 />
               </div>
 
@@ -270,7 +270,7 @@ export const BuyerAwards: React.FC = () => {
                   value={justification}
                   onChange={(e) => setJustification(e.target.value)}
                   placeholder="Detail composite evaluation score, technical compliance, and value-for-money rationale..."
-                  className="w-full p-3 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#1E364A] rounded-lg text-xs text-[#10212E] dark:text-white"
+                  className="w-full p-3 bg-white dark:bg-[#10212E] border border-slate-300 dark:border-[#244157] rounded-lg text-xs text-[#10212E] dark:text-white"
                 />
               </div>
             </div>
@@ -290,13 +290,13 @@ export const BuyerAwards: React.FC = () => {
       </div>
 
       {/* Award Queue & Independent Approval Sign-off */}
-      <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 sm:p-8 space-y-5 text-xs">
+      <div className="bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-2xl p-6 sm:p-8 space-y-5 text-xs">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
               Submitted Award Recommendations ({awards.length})
             </h2>
-            <p className="text-slate-500">
+            <p className="text-slate-500 dark:text-[#9CB4C9]">
               Statutory separation of duties prevents the recommending officer from approving their own submission.
             </p>
           </div>
@@ -314,19 +314,19 @@ export const BuyerAwards: React.FC = () => {
               return (
                 <div
                   key={aw.id}
-                  className="p-5 rounded-xl border border-slate-200 dark:border-[#1E364A] bg-slate-50/50 dark:bg-[#10212E]/50 space-y-3"
+                  className="p-5 rounded-xl border border-slate-200 dark:border-[#244157] bg-slate-50/50 dark:bg-[#10212E]/50 space-y-3"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-[#1F5F99]">{aw.callNumber}</span>
+                        <span className="tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0]">{aw.callNumber}</span>
                         <span className="text-slate-400">·</span>
                         <span className="font-bold text-sm text-[#10212E] dark:text-white">{aw.supplierName}</span>
                       </div>
                       <div className="text-slate-600 dark:text-slate-300 mt-0.5">{aw.callTitle}</div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono font-bold text-sm text-[#10212E] dark:text-white">
+                      <span className="tabular-nums font-bold text-sm text-[#10212E] dark:text-white">
                         {aw.currency || 'BWP'} {Number(aw.awardValue || 0).toLocaleString()}
                       </span>
                       <StatusChip status={statusLabel(aw.status)} />
@@ -334,12 +334,12 @@ export const BuyerAwards: React.FC = () => {
                   </div>
 
                   {aw.justification && (
-                    <p className="text-slate-700 dark:text-slate-300 bg-white dark:bg-[#132635] p-3 rounded-lg border border-slate-200 dark:border-[#1E364A]">
+                    <p className="text-slate-700 dark:text-slate-300 bg-white dark:bg-[#1C364B] p-3 rounded-lg border border-slate-200 dark:border-[#244157]">
                       {aw.justification}
                     </p>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-500">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                     <div>
                       Recommended by: <strong className="text-slate-800 dark:text-slate-200">{aw.recommendedByName || 'Procurement Officer'}</strong>
                     </div>
@@ -354,7 +354,7 @@ export const BuyerAwards: React.FC = () => {
                   </div>
 
                   {isPending && (
-                    <div className="pt-3 border-t border-slate-200 dark:border-[#1E364A] space-y-2.5">
+                    <div className="pt-3 border-t border-slate-200 dark:border-[#244157] space-y-2.5">
                       {isSelfDrafter ? (
                         <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-center gap-2">
                           <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -363,7 +363,7 @@ export const BuyerAwards: React.FC = () => {
                           </span>
                         </div>
                       ) : !canApprove ? (
-                        <div className="text-slate-500 italic">
+                        <div className="text-slate-500 italic dark:text-[#9CB4C9]">
                           Approval or rejection is restricted to authorized Approver or Organization Admin roles within delegation limits.
                         </div>
                       ) : (
@@ -375,13 +375,13 @@ export const BuyerAwards: React.FC = () => {
                             onChange={(e) =>
                               setDecisionComments((prev) => ({ ...prev, [aw.id]: e.target.value }))
                             }
-                            className="flex-1 p-2 bg-white dark:bg-[#132635] border border-slate-300 dark:border-[#1E364A] rounded-lg text-xs"
+                            className="flex-1 p-2 bg-white dark:bg-[#1C364B] border border-slate-300 dark:border-[#244157] rounded-lg text-xs"
                           />
                           <button
                             type="button"
                             disabled={decidingAwardId === aw.id}
                             onClick={() => handleDecision(aw.id, 'rejected')}
-                            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-semibold rounded-lg inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-semibold rounded-lg inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40"
                           >
                             <XCircle className="w-4 h-4" />
                             <span>Reject</span>
@@ -408,7 +408,7 @@ export const BuyerAwards: React.FC = () => {
 
       {/* Generated Contracts Register */}
       {contracts.length > 0 && (
-        <div className="bg-white dark:bg-[#132635] border border-slate-200 dark:border-[#1E364A] rounded-2xl p-6 sm:p-8 space-y-4 text-xs">
+        <div className="bg-white dark:bg-[#1C364B] border border-slate-200 dark:border-[#244157] rounded-2xl p-6 sm:p-8 space-y-4 text-xs">
           <div className="flex items-center gap-2">
             <FileCheck2 className="w-4 h-4 text-[#2F8F5B]" />
             <h2 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
@@ -416,7 +416,7 @@ export const BuyerAwards: React.FC = () => {
             </h2>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 dark:border-[#1E364A] rounded-xl">
+          <div className="overflow-x-auto border border-slate-200 dark:border-[#244157] rounded-xl">
             <table className="w-full text-left">
               <thead className="bg-slate-50 dark:bg-[#10212E] text-slate-600 dark:text-slate-300 font-semibold">
                 <tr>
@@ -427,13 +427,13 @@ export const BuyerAwards: React.FC = () => {
                   <th className="p-3">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[#1E364A]">
+              <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                 {contracts.map((ct) => (
                   <tr key={ct.id}>
-                    <td className="p-3 font-mono font-bold text-[#1F5F99]">{ct.contractNo}</td>
+                    <td className="p-3 tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0]">{ct.contractNo}</td>
                     <td className="p-3 text-slate-800 dark:text-white">{ct.title}</td>
                     <td className="p-3 text-slate-600 dark:text-slate-300">{ct.supplierName}</td>
-                    <td className="p-3 text-right font-mono font-bold">
+                    <td className="p-3 text-right tabular-nums font-bold">
                       {ct.currency || 'BWP'} {Number(ct.contractValue || 0).toLocaleString()}
                     </td>
                     <td className="p-3 capitalize text-[#2F8F5B] font-semibold">

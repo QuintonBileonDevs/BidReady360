@@ -78,7 +78,7 @@ export const DigitCodeInput: React.FC<DigitCodeInputProps> = ({
           disabled={disabled}
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
-          className="w-11 h-12 sm:w-12 sm:h-12 text-center text-xl font-heading font-semibold rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:border-[#1F5F99] focus:outline-none focus:ring-2 focus:ring-[#1F5F99]/20 transition-all tabular-nums"
+          className="w-11 h-12 sm:w-12 sm:h-12 text-center text-xl font-heading font-semibold rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:border-[#1F5F99] focus:outline-none focus:ring-2 focus:ring-[#1F5F99]/20 transition-all tabular-nums"
           aria-label={`Digit ${i + 1}`}
         />
       ))}

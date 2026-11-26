@@ -135,12 +135,12 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Procuring organizations
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Approve pending buyer registrations, enforce gatekeeping before tender publishing, and manage institutional access.
           </p>
         </div>
@@ -148,7 +148,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
           type="button"
           onClick={loadOrganizations}
           disabled={isLoading}
-          className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+          className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto dark:hover:bg-[#162C3D]"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -163,7 +163,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
       )}
 
       {feedback && (
-        <div className="p-3.5 rounded-[8px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2">
+        <div className="p-3.5 rounded-[8px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2 dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <CheckCircle2 className="w-4 h-4 text-[#2F8F5B] shrink-0" />
           <span>{feedback}</span>
         </div>
@@ -171,7 +171,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
 
       {/* Tabs and Search Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-1">
+        <div className="flex items-center gap-2 border-b border-[#D5E0EA] dark:border-[#244157] pb-1">
           <button
             type="button"
             onClick={() => setActiveTab('Pending')}
@@ -208,32 +208,32 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
         </div>
 
         <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2 dark:text-[#9CB4C9]" />
           <input
             type="text"
             placeholder="Search by name, ref, officer..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white text-[14px]"
+            className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white text-[14px]"
           />
         </div>
       </div>
 
       {/* Organizations Table Card */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] overflow-hidden">
         {isLoading ? (
-          <div className="p-12 flex items-center justify-center gap-2 text-[#6B7A87] text-[14px]">
-            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+          <div className="p-12 flex items-center justify-center gap-2 text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
+            <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span>Loading procuring organizations...</span>
           </div>
         ) : filteredOrgs.length === 0 ? (
-          <div className="p-12 text-center text-[#6B7A87] text-[15px]">
+          <div className="p-12 text-center text-[#6B7A87] text-[15px] dark:text-[#9CB4C9]">
             No organizations found in the {activeTab.toLowerCase()} category.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
+            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px] dark:text-[#9CB4C9]">
                 <tr>
                   <th className="p-4">Organization name</th>
                   <th className="p-4">Entity type</th>
@@ -244,7 +244,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
                 {filteredOrgs.map((org) => {
                   const bucket = getOrgTabBucket(org);
                   const isBusy = busyId === org.id;
@@ -254,22 +254,22 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                         <button
                           type="button"
                           onClick={() => setSelectedOrg(org)}
-                          className="hover:text-[#1F5F99] text-left cursor-pointer"
+                          className="hover:text-[#1F5F99] text-left cursor-pointer dark:hover:text-[#6FAEE0]"
                         >
                           {org.name}
                         </button>
                       </td>
-                      <td className="p-4 text-[#43525F] dark:text-[#B2C3D2] capitalize">
+                      <td className="p-4 text-[#43525F] dark:text-[#D3E3F2] capitalize">
                         {(org.organizationType || 'organization').replace(/_/g, ' ')}
                       </td>
-                      <td className="p-4 font-sans text-[#43525F] dark:text-[#B2C3D2]">
+                      <td className="p-4 font-sans text-[#43525F] dark:text-[#D3E3F2]">
                         {org.registrationNumber || '—'}
                       </td>
-                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2]">
+                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#D3E3F2]">
                         {formatDate(org.createdAt)}
                       </td>
                       <td className="p-4">
-                        <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium">
+                        <span className="bg-[#EAF2FA] text-[#1F5F99] text-[12px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                           {org.planName}
                         </span>
                       </td>
@@ -305,7 +305,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                                   setReasonText('');
                                   setReasonModal({ mode: 'reject', org });
                                 }}
-                                className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 text-[13px] font-medium rounded-[4px] cursor-pointer disabled:opacity-50"
+                                className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 text-[13px] font-medium rounded-[4px] cursor-pointer disabled:opacity-50 dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40"
                               >
                                 Reject
                               </button>
@@ -314,7 +314,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                           <button
                             type="button"
                             onClick={() => setSelectedOrg(org)}
-                            className="px-3 py-1 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white text-[13px] font-medium rounded-[4px] cursor-pointer"
+                            className="px-3 py-1 border border-[#D5E0EA] dark:border-[#244157] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white text-[13px] font-medium rounded-[4px] cursor-pointer"
                           >
                             Details
                           </button>
@@ -332,10 +332,10 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
       {/* Organization Detail Drawer */}
       {selectedOrg && (
         <div className="fixed inset-0 z-50 flex justify-end bg-[#10212E]/60 backdrop-blur-xs">
-          <div className="w-full max-w-lg bg-white dark:bg-[#132635] h-full shadow-lg p-6 overflow-y-auto space-y-6 text-[14px]">
-            <div className="flex items-center justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="w-full max-w-lg bg-white dark:bg-[#1C364B] h-full shadow-lg p-6 overflow-y-auto space-y-6 text-[14px]">
+            <div className="flex items-center justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div className="space-y-1">
-                <span className="text-[12px] text-[#6B7A87]">Organization profile</span>
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">Organization profile</span>
                 <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   {selectedOrg.name}
                 </h3>
@@ -343,7 +343,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedOrg(null)}
-                className="text-[#6B7A87] hover:text-[#10212E] text-[18px] p-1 cursor-pointer"
+                className="text-[#6B7A87] hover:text-[#10212E] text-[18px] p-1 cursor-pointer dark:text-[#9CB4C9] dark:hover:text-white"
               >
                 ✕
               </button>
@@ -352,23 +352,23 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E]">
                 <div>
-                  <span className="text-[12px] text-[#6B7A87] block">Account status</span>
+                  <span className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Account status</span>
                   <span className="font-semibold text-[#10212E] dark:text-white capitalize">{selectedOrg.status}</span>
                 </div>
                 <div>
-                  <span className="text-[12px] text-[#6B7A87] block">Verification</span>
+                  <span className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Verification</span>
                   <span className="font-semibold text-[#10212E] dark:text-white capitalize">
                     {selectedOrg.verificationStatus.replace(/_/g, ' ')}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[12px] text-[#6B7A87] block">Registration / Gazette ref</span>
+                  <span className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Registration / Gazette ref</span>
                   <span className="font-semibold text-[#10212E] dark:text-white">
                     {selectedOrg.registrationNumber || '—'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[12px] text-[#6B7A87] block">Authorized officers</span>
+                  <span className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Authorized officers</span>
                   <span className="font-semibold text-[#10212E] dark:text-white">
                     {selectedOrg.membersCount} member{selectedOrg.membersCount === 1 ? '' : 's'}
                   </span>
@@ -383,7 +383,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
 
               <div className="space-y-2">
                 <span className="font-semibold text-[#10212E] dark:text-white block">Lead officer contact</span>
-                <div className="p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] space-y-1 text-[13px]">
+                <div className="p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] space-y-1 text-[13px]">
                   <div><strong>Name:</strong> {selectedOrg.contactPerson || '—'}</div>
                   <div><strong>Email:</strong> {selectedOrg.leadEmail || selectedOrg.contactEmail || '—'}</div>
                   <div><strong>Location:</strong> {[selectedOrg.city, selectedOrg.district].filter(Boolean).join(', ') || '—'}</div>
@@ -394,15 +394,15 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                 </div>
               </div>
 
-              <div className="p-4 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] space-y-2">
+              <div className="p-4 border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] space-y-2">
                 <span className="font-semibold text-[#10212E] dark:text-white block">Support access</span>
-                <p className="text-[13px] text-[#6B7A87]">
+                <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Launch a logged diagnostic support session for this organization. A ticket reference and written reason are required.
                 </p>
                 <button
                   type="button"
                   onClick={() => setSupportTarget({ id: selectedOrg.id, name: selectedOrg.name })}
-                  className="w-full py-2 border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] rounded-[6px] font-medium text-[13px] flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full py-2 border border-[#1F5F99] text-[#1F5F99] hover:bg-[#EAF2FA] rounded-[6px] font-medium text-[13px] flex items-center justify-center gap-1.5 cursor-pointer dark:text-[#6FAEE0] dark:hover:bg-[#162C3D]"
                 >
                   <Lock className="w-3.5 h-3.5" />
                   <span>Start logged support session</span>
@@ -410,7 +410,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
               </div>
 
               {/* Action buttons */}
-              <div className="space-y-2 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="space-y-2 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
                 {getOrgTabBucket(selectedOrg) === 'Pending' && (
                   <>
                     <button
@@ -428,7 +428,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                         setReasonText('');
                         setReasonModal({ mode: 'reject', org: selectedOrg });
                       }}
-                      className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-medium rounded-[6px] cursor-pointer disabled:opacity-50"
+                      className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-medium rounded-[6px] cursor-pointer disabled:opacity-50 dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40"
                     >
                       Reject registration...
                     </button>
@@ -442,7 +442,7 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
                       setReasonText('');
                       setReasonModal({ mode: 'suspend', org: selectedOrg });
                     }}
-                    className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-medium rounded-[6px] cursor-pointer disabled:opacity-50"
+                    className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-medium rounded-[6px] cursor-pointer disabled:opacity-50 dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40"
                   >
                     Suspend organization access...
                   </button>
@@ -468,14 +468,14 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
           <form
             onSubmit={handleConfirmReasonAction}
-            className="w-full max-w-md bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4"
+            className="w-full max-w-md bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4"
           >
             <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               {reasonModal.mode === 'reject'
                 ? `Reject organization: ${reasonModal.org.name}`
                 : `Suspend organization: ${reasonModal.org.name}`}
             </h3>
-            <p className="text-[13px] text-[#6B7A87]">
+            <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
               {reasonModal.mode === 'reject'
                 ? 'Provide the official rejection reason. This will be recorded in the audit trail and shown to the buyer organization.'
                 : 'Specify the reason for suspending tender operations for this procuring entity.'}
@@ -486,13 +486,13 @@ export const AdminOrganizations: React.FC<AdminOrganizationsProps> = ({
               value={reasonText}
               onChange={(e) => setReasonText(e.target.value)}
               placeholder="e.g. Unverified Gazette registration reference or missing authorization letter."
-              className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+              className="w-full p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
             />
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setReasonModal(null)}
-                className="px-4 py-2 text-[14px] text-[#43525F] dark:text-[#B2C3D2] cursor-pointer"
+                className="px-4 py-2 text-[14px] text-[#43525F] dark:text-[#D3E3F2] cursor-pointer"
               >
                 Cancel
               </button>

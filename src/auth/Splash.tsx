@@ -38,31 +38,32 @@ export const Splash: React.FC = () => {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{
-        backgroundColor: 'rgba(234, 242, 250, 0.7)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[#EAF2FA]/75 dark:bg-[#10212E]/80 backdrop-blur-md"
     >
       <div
         ref={cardRef}
         tabIndex={-1}
-        className="w-full max-w-[360px] bg-white rounded-xl shadow-lg p-7 text-center flex flex-col items-center outline-none"
+        className="w-full max-w-[360px] bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-xl shadow-lg p-7 text-center flex flex-col items-center outline-none"
       >
         <div className="sr-only" role="status" aria-live="polite">
           {getHeading()}. {getSubtext()}
         </div>
 
         <div className="relative w-16 h-16 flex items-center justify-center mb-5" aria-hidden="true">
-          <svg className={`w-16 h-16 ${!isError ? 'animate-spin' : ''}`} viewBox="0 0 56 56" fill="none">
-             <circle cx="28" cy="28" r="22" stroke={isError ? "#C2412D" : "#1F5F99"} strokeWidth="4" strokeLinecap="round" strokeDasharray="115 25" />
+          <svg
+            className={`w-16 h-16 ${!isError ? 'animate-spin' : ''} ${
+              isError ? 'text-[#C2412D]' : 'text-[#1F5F99] dark:text-[#6FAEE0]'
+            }`}
+            viewBox="0 0 56 56"
+            fill="none"
+          >
+            <circle cx="28" cy="28" r="22" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeDasharray="115 25" />
           </svg>
           <div className="absolute w-3 h-3 rounded-full bg-[#E8A33D]" />
         </div>
 
-        <h2 className="text-lg font-semibold text-[#10212E] mb-1">{getHeading()}</h2>
-        <p className="text-[15px] text-[#10212E] leading-relaxed mb-6">{getSubtext()}</p>
+        <h2 className="font-heading text-lg font-semibold text-[#10212E] dark:text-white mb-1">{getHeading()}</h2>
+        <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed mb-6">{getSubtext()}</p>
 
         {isError && (
           <div className="flex gap-3">

@@ -237,7 +237,7 @@ export const SupplierSignup: React.FC<SupplierSignupProps> = ({ onNavigate }) =>
         </form>
 
         {/* Bottom Switcher Link */}
-        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
           Already have an account?{' '}
           <button
             type="button"

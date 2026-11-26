@@ -703,8 +703,8 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
   if (!selectedCall) {
     return (
-      <div className="bg-white dark:bg-[#132635] p-12 text-center rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
-        <p className="text-[14px] text-[#6B7A87]">Please select a tender call to begin application.</p>
+      <div className="bg-white dark:bg-[#1C364B] p-12 text-center rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] space-y-4">
+        <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">Please select a tender call to begin application.</p>
         <button
           onClick={onCancel}
           className="px-4 py-2 bg-[#1F5F99] text-white rounded-[6px] text-[14px]"
@@ -721,7 +721,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           1. HEADER SUMMARISING THE CALL
           ========================================================================= */}
       <div
-        className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 p-6 space-y-4"
+        className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] border-l-4 p-6 space-y-4"
         style={{
           borderLeftColor:
             selectedCall.orgBrandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(selectedCall.orgBrandPrimaryColor)
@@ -744,9 +744,9 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 {selectedCall.organizationName}
               </span>
               {selectedCall.orgBrandSubtext && (
-                <span className="text-[13px] text-[#6B7A87]">{selectedCall.orgBrandSubtext}</span>
+                <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">{selectedCall.orgBrandSubtext}</span>
               )}
-              <span className="text-[14px] text-[#6B7A87]">· Tender ref: {selectedCall.callNumber}</span>
+              <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">· Tender ref: {selectedCall.callNumber}</span>
               <StatusChip status={selectedCall.type} />
             </div>
 
@@ -755,18 +755,18 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </h1>
 
             {selectedCall.orgWelcomeNotice && (
-              <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] px-3 py-2">
+              <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] px-3 py-2">
                 {selectedCall.orgWelcomeNotice}
               </p>
             )}
 
-            <div className="flex items-center gap-4 text-[14px] text-[#6B7A87] flex-wrap">
+            <div className="flex items-center gap-4 text-[14px] text-[#6B7A87] flex-wrap dark:text-[#9CB4C9]">
               <span className="inline-flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-[#1F5F99]" />
+                <Calendar className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                 <span>Closing on {selectedCall.closingDate}</span>
               </span>
               <span className="inline-flex items-center gap-1.5 font-medium text-[#10212E] dark:text-white tabular-nums">
-                <Clock className="w-4 h-4 text-[#D97706]" />
+                <Clock className="w-4 h-4 text-[#D97706] dark:text-[#FCD34D]" />
                 <span>{selectedCall.daysRemaining} days left</span>
               </span>
               <span>·</span>
@@ -778,7 +778,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             <button
               type="button"
               onClick={() => setIsRequirementsDrawerOpen(true)}
-              className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] hover:bg-white text-[14px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] rounded-[6px] inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#10212E] hover:bg-white text-[14px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] rounded-[6px] inline-flex items-center gap-1.5 cursor-pointer transition-colors dark:hover:bg-[#162C3D]"
             >
               <ExternalLink className="w-4 h-4" />
               <span>Link to requirements</span>
@@ -843,7 +843,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
         {liveAddenda.some((ad) => !ad.acknowledged) && (
           <div className="p-4 rounded-[12px] bg-[#FFFBEB] dark:bg-[#92400E]/20 border border-[#FDE68A] dark:border-[#92400E]/50 space-y-2.5 text-[14px]">
             <div className="flex items-start gap-2.5">
-              <AlertTriangle className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-[#D97706] shrink-0 mt-0.5 dark:text-[#FCD34D]" />
               <div className="space-y-1 flex-1">
                 <span className="font-semibold text-[#92400E] dark:text-[#FCD34D] block">
                   Published Tender Addenda — Please review and acknowledge
@@ -861,9 +861,9 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                       >
                         <div className="space-y-0.5">
                           <div className="font-semibold text-[#10212E] dark:text-white">
-                            {ad.title} <span className="font-mono text-[11px] text-[#6B7A87]">({ad.issuedDate})</span>
+                            {ad.title} <span className="tabular-nums text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">({ad.issuedDate})</span>
                           </div>
-                          <p className="text-[#43525F] dark:text-[#B2C3D2] text-xs">{ad.summary}</p>
+                          <p className="text-[#43525F] dark:text-[#D3E3F2] text-xs">{ad.summary}</p>
                         </div>
                         <button
                           type="button"
@@ -882,7 +882,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
         )}
 
         {/* Stepper Progress Bar & Autosave Status */}
-        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Mobile Compact Step Header */}
           <div className="md:hidden flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
@@ -893,7 +893,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 Step {currentStep} of 5: {stepLabels[currentStep - 1]?.title}
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[14px] text-[#6B7A87]">
+            <div className="flex items-center gap-1.5 text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B]" />
               <span>Saved</span>
             </div>
@@ -913,7 +913,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                         ? 'bg-[#1F5F99] text-white'
                         : isCompleted
                         ? 'bg-[#ECFDF5] text-[#2F8F5B] border border-[#2F8F5B]'
-                        : 'bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] border border-[#D5E0EA] dark:border-[#1E364A]'
+                        : 'bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] border border-[#D5E0EA] dark:border-[#244157]'
                     }`}
                   >
                     {isCompleted ? <Check className="w-4 h-4" /> : st.number}
@@ -935,7 +935,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             })}
           </div>
 
-          <div className="hidden md:flex items-center gap-2 text-[14px] text-[#6B7A87] shrink-0">
+          <div className="hidden md:flex items-center gap-2 text-[14px] text-[#6B7A87] shrink-0 dark:text-[#9CB4C9]">
             <CheckCircle2 className="w-4 h-4 text-[#2F8F5B]" />
             <span>Saved just now</span>
           </div>
@@ -946,12 +946,12 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           STEP 1: CHECK ELIGIBILITY
           ========================================================================= */}
       {currentStep === 1 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
               Step 1: Check eligibility
             </h2>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
               Automatic verification of your corporate standing and vault compliance certificates against tender requirements.
             </p>
           </div>
@@ -961,7 +961,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             {eligibilityChecklist.map((item) => (
               <div
                 key={item.id}
-                className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/50 dark:bg-[#10212E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[14px]"
+                className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/50 dark:bg-[#10212E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[14px]"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2.5 flex-wrap">
@@ -979,8 +979,8 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                     </span>
                     <StatusChip status={item.status} />
                   </div>
-                  <p className="text-[#43525F] dark:text-[#B2C3D2]">{item.description}</p>
-                  <span className="text-[#6B7A87] block">{item.note}</span>
+                  <p className="text-[#43525F] dark:text-[#D3E3F2]">{item.description}</p>
+                  <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">{item.note}</span>
                 </div>
 
                 {/* Direct Action if Missing or Expired */}
@@ -1016,11 +1016,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           )}
 
           {/* Footer Navigation */}
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] cursor-pointer dark:hover:bg-[#162C3D]"
             >
               Cancel application
             </button>
@@ -1032,7 +1032,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               className={`px-5 py-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 transition-colors ${
                 mandatoryItemsPassed
                   ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white cursor-pointer'
-                  : 'bg-[#D5E0EA] dark:bg-[#1E364A] text-[#6B7A87] cursor-not-allowed'
+                  : 'bg-[#D5E0EA] dark:bg-[#244157] text-[#6B7A87] cursor-not-allowed'
               }`}
             >
               <span>Choose what to share</span>
@@ -1046,24 +1046,24 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           STEP 2: CHOOSE WHAT TO SHARE
           ========================================================================= */}
       {currentStep === 2 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
               Step 2: Choose what to share
             </h2>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
               Select which verified certificates from your digital vault to package with this tender submission.
             </p>
           </div>
 
           {/* Version freezing note */}
-          <div className="p-4 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/50 border border-[#D5E0EA] dark:border-[#1E364A] flex items-start gap-3 text-[14px]">
+          <div className="p-4 rounded-[8px] bg-[#EAF2FA] dark:bg-[#244157]/50 border border-[#D5E0EA] dark:border-[#244157] flex items-start gap-3 text-[14px]">
             <Info className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0 mt-0.5" />
             <div className="space-y-1">
               <strong className="text-[#10212E] dark:text-white font-semibold block">
                 Version snapshot note
               </strong>
-              <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+              <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                 A specific version of each selected document is packaged with this submission. Later edits or renewals in your vault will not alter the certified copy sent to the evaluation committee.
               </p>
             </div>
@@ -1080,8 +1080,8 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   key={doc.id}
                   className={`p-4 rounded-[8px] border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[14px] cursor-pointer transition-colors ${
                     isChecked
-                      ? 'border-[#1F5F99] bg-[#EAF2FA]/20 dark:bg-[#1E364A]/30'
-                      : 'border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/30 hover:border-[#1F5F99]/60'
+                      ? 'border-[#1F5F99] bg-[#EAF2FA]/20 dark:bg-[#244157]/30'
+                      : 'border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/30 hover:border-[#1F5F99]/60'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -1095,7 +1095,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                           setSelectedDocIds(selectedDocIds.filter((id) => id !== doc.id));
                         }
                       }}
-                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                      className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
 
                     <div className="space-y-0.5">
@@ -1103,18 +1103,18 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                         <span className="font-semibold text-[#10212E] dark:text-white">
                           {doc.documentType}
                         </span>
-                        <span className="bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] px-2 py-0.5 rounded text-[14px] font-medium">
+                        <span className="bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] px-2 py-0.5 rounded text-[14px] font-medium">
                           Version {currentVersionNumber}
                         </span>
                         <StatusChip status={doc.status} />
                       </div>
-                      <span className="text-[#6B7A87] block">
+                      <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">
                         File: {doc.fileName} · Cert #{doc.documentNumber} · Expires {doc.expiryDate}
                       </span>
                     </div>
                   </div>
 
-                  <span className="text-[#6B7A87] text-[14px] self-start sm:self-center">
+                  <span className="text-[#6B7A87] text-[14px] self-start sm:self-center dark:text-[#9CB4C9]">
                     {isChecked ? 'Included in submission bundle' : 'Not attached'}
                   </span>
                 </label>
@@ -1123,11 +1123,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           </div>
 
           {/* Footer Navigation */}
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
             <button
               type="button"
               onClick={() => setCurrentStep(1)}
-              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] inline-flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] inline-flex items-center gap-1.5 cursor-pointer dark:hover:bg-[#162C3D]"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to eligibility</span>
@@ -1149,12 +1149,12 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           STEP 3: ANSWER QUESTIONS (CUSTOM FORM & BOQ)
           ========================================================================= */}
       {currentStep === 3 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
               Step 3: Answer questions
             </h2>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
               Complete {selectedCall.organizationName}'s statutory procurement questionnaire and commercial schedule.
             </p>
           </div>
@@ -1180,7 +1180,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                     </label>
 
                     {field.helpText && (
-                      <span className="text-[#6B7A87] text-[14px] block mb-1">
+                      <span className="text-[#6B7A87] text-[14px] block mb-1 dark:text-[#9CB4C9]">
                         {field.helpText}
                       </span>
                     )}
@@ -1200,7 +1200,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                           setAutosaveTime('Just now');
                         }}
                         placeholder={field.placeholder || 'Enter text response...'}
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     )}
 
@@ -1212,7 +1212,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                           setFormAnswers({ ...formAnswers, [field.id]: Number(e.target.value) });
                           setAutosaveTime('Just now');
                         }}
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white tabular-nums focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white tabular-nums focus:outline-none focus:border-[#1F5F99]"
                       />
                     )}
 
@@ -1223,7 +1223,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                           setFormAnswers({ ...formAnswers, [field.id]: e.target.value });
                           setAutosaveTime('Just now');
                         }}
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       >
                         <option value="">Select option...</option>
                         {field.options?.map((opt) => (
@@ -1245,7 +1245,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                               setFormAnswers({ ...formAnswers, [field.id]: true });
                               setAutosaveTime('Just now');
                             }}
-                            className="text-[#1F5F99] focus:ring-[#1F5F99]"
+                            className="text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0]"
                           />
                           <span className="font-medium text-[#10212E] dark:text-white">Yes</span>
                         </label>
@@ -1258,7 +1258,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                               setFormAnswers({ ...formAnswers, [field.id]: false });
                               setAutosaveTime('Just now');
                             }}
-                            className="text-[#1F5F99] focus:ring-[#1F5F99]"
+                            className="text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0]"
                           />
                           <span className="font-medium text-[#10212E] dark:text-white">No</span>
                         </label>
@@ -1273,16 +1273,16 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                           setFormAnswers({ ...formAnswers, [field.id]: e.target.value });
                           setAutosaveTime('Just now');
                         }}
-                        className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     )}
 
                     {field.type === 'file_upload' && (
-                      <div className="p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 flex items-center justify-between">
-                        <span className="text-[#6B7A87]">
+                      <div className="p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 flex items-center justify-between">
+                        <span className="text-[#6B7A87] dark:text-[#9CB4C9]">
                           {formAnswers[field.id] || 'Attached via digital vault bundle'}
                         </span>
-                        <span className="text-[#1F5F99] font-medium">Included</span>
+                        <span className="text-[#1F5F99] font-medium dark:text-[#6FAEE0]">Included</span>
                       </div>
                     )}
 
@@ -1299,19 +1299,19 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
           {/* Pricing Schedule BOQ (if RFP) */}
           {selectedCall.type === 'RFP' && lineItemsState.length > 0 && (
-            <div className="pt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
+            <div className="pt-6 border-t border-[#D5E0EA] dark:border-[#244157] space-y-4">
               <div>
                 <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                   Commercial pricing schedule (Bill of Quantities)
                 </h3>
-                <span className="text-[14px] text-[#6B7A87]">
+                <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Enter unit rates in BWP. Figures are sealed until public tender opening.
                 </span>
               </div>
 
-              <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
-                <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-                  <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium">
+              <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#244157] rounded-[8px]">
+                <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+                  <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium dark:text-[#9CB4C9]">
                     <tr>
                       <th className="p-3.5">#</th>
                       <th className="p-3.5">Description</th>
@@ -1320,10 +1320,10 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                       <th className="p-3.5 text-right">Total (BWP)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+                  <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
                     {lineItemsState.map((item) => (
                       <tr key={item.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
-                        <td className="p-3.5 text-[#6B7A87] tabular-nums">{item.itemNumber}</td>
+                        <td className="p-3.5 text-[#6B7A87] tabular-nums dark:text-[#9CB4C9]">{item.itemNumber}</td>
                         <td className="p-3.5 font-medium">{item.description}</td>
                         <td className="p-3.5 text-right tabular-nums">
                           {item.quantity} {item.unit}
@@ -1337,7 +1337,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                               handleUnitPriceChange(item.id, Number(e.target.value))
                             }
                             placeholder="0.00"
-                            className="w-32 px-2.5 py-1 text-right border border-[#D5E0EA] dark:border-[#1E364A] rounded-[4px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white font-medium tabular-nums focus:outline-none focus:border-[#1F5F99]"
+                            className="w-32 px-2.5 py-1 text-right border border-[#D5E0EA] dark:border-[#244157] rounded-[4px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white font-medium tabular-nums focus:outline-none focus:border-[#1F5F99]"
                           />
                         </td>
                         <td className="p-3.5 text-right font-heading font-semibold text-[#10212E] dark:text-white tabular-nums">
@@ -1346,9 +1346,9 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-[#F7FAFD] dark:bg-[#10212E] border-t-2 border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white text-[14px]">
+                  <tfoot className="bg-[#F7FAFD] dark:bg-[#10212E] border-t-2 border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white text-[14px]">
                     <tr>
-                      <td colSpan={4} className="p-3 text-right font-medium text-[#6B7A87]">
+                      <td colSpan={4} className="p-3 text-right font-medium text-[#6B7A87] dark:text-[#9CB4C9]">
                         Subtotal offer:
                       </td>
                       <td className="p-3 text-right font-heading font-semibold tabular-nums">
@@ -1356,14 +1356,14 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                       </td>
                     </tr>
                     <tr>
-                      <td colSpan={4} className="p-3 text-right font-medium text-[#6B7A87]">
+                      <td colSpan={4} className="p-3 text-right font-medium text-[#6B7A87] dark:text-[#9CB4C9]">
                         14% statutory VAT:
                       </td>
                       <td className="p-3 text-right font-heading font-semibold tabular-nums">
                         BWP {vatAmountBWP.toLocaleString()}
                       </td>
                     </tr>
-                    <tr className="border-t border-[#D5E0EA] dark:border-[#1E364A]">
+                    <tr className="border-t border-[#D5E0EA] dark:border-[#244157]">
                       <td colSpan={4} className="p-4 text-right font-semibold text-[#10212E] dark:text-white">
                         Grand total proposal:
                       </td>
@@ -1378,11 +1378,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           )}
 
           {/* Footer Navigation */}
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
             <button
               type="button"
               onClick={() => setCurrentStep(2)}
-              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] inline-flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] inline-flex items-center gap-1.5 cursor-pointer dark:hover:bg-[#162C3D]"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to shared documents</span>
@@ -1408,19 +1408,19 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           STEP 4: REVIEW (SINGLE-PAGE SUMMARY WITH EDIT LINKS)
           ========================================================================= */}
       {currentStep === 4 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+          <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
               Step 4: Review proposal
             </h2>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
               Carefully inspect your submission summary before providing your statutory declaration and final submission.
             </p>
           </div>
 
           <div className="space-y-6 text-[14px]">
             {/* Part 1: Eligibility Summary with Edit Link */}
-            <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3">
+            <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-[#2F8F5B]" />
@@ -1440,7 +1440,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                 {eligibilityChecklist.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-2 rounded bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A]">
+                  <div key={item.id} className="flex items-center justify-between p-2 rounded bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157]">
                     <span className="font-medium text-[#10212E] dark:text-white">{item.title}</span>
                     <StatusChip status={item.status} />
                   </div>
@@ -1449,10 +1449,10 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </div>
 
             {/* Part 2: Shared Documents Summary with Edit Link */}
-            <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3">
+            <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <FileCheck className="w-5 h-5 text-[#1F5F99]" />
+                  <FileCheck className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
                     Packaged vault documents ({selectedDocIds.length})
                   </h3>
@@ -1474,13 +1474,13 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   return (
                     <div
                       key={doc.id}
-                      className="p-2.5 rounded bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between text-[14px]"
+                      className="p-2.5 rounded bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between text-[14px]"
                     >
                       <span className="font-medium text-[#10212E] dark:text-white">
                         {doc.documentType} ({doc.fileName})
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className="bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#6FAEE0] px-2 py-0.5 rounded text-[14px] font-medium">
+                        <span className="bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#244157] dark:text-[#6FAEE0] px-2 py-0.5 rounded text-[14px] font-medium">
                           Version {doc.versionHistory ? doc.versionHistory.length : 1}
                         </span>
                         <StatusChip status={doc.status} />
@@ -1492,10 +1492,10 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </div>
 
             {/* Part 3: Answered Questions with Edit Link */}
-            <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3">
+            <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <HelpCircle className="w-5 h-5 text-[#1F5F99]" />
+                  <HelpCircle className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
                     Questionnaire & proposal responses
                   </h3>
@@ -1514,9 +1514,9 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 {formTemplate?.fields.map((field) => (
                   <div
                     key={field.id}
-                    className="p-3 rounded bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1"
+                    className="p-3 rounded bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] space-y-1"
                   >
-                    <span className="text-[#6B7A87] block">{field.label}:</span>
+                    <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">{field.label}:</span>
                     <strong className="text-[#10212E] dark:text-white font-medium block">
                       {String(formAnswers[field.id] || '—')}
                     </strong>
@@ -1527,12 +1527,12 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
 
             {/* Part 4: Commercial Pricing (if RFP) */}
             {selectedCall.type === 'RFP' && lineItemsState.length > 0 && (
-              <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 flex items-center justify-between">
+              <div className="p-5 rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 flex items-center justify-between">
                 <div>
                   <h3 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
                     Commercial offer (Sealed)
                   </h3>
-                  <span className="text-[#6B7A87]">
+                  <span className="text-[#6B7A87] dark:text-[#9CB4C9]">
                     Includes {lineItemsState.length} BOQ items + 14% statutory VAT
                   </span>
                 </div>
@@ -1553,7 +1553,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   required
                   checked={declarationAgreed}
                   onChange={(e) => setDeclarationAgreed(e.target.checked)}
-                  className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99]"
+                  className="mt-1 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                 />
                 <div className="space-y-1">
                   <strong className="text-[#92400E] dark:text-amber-300 font-semibold block">
@@ -1609,11 +1609,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           )}
 
           {/* Footer Navigation */}
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
             <button
               type="button"
               onClick={() => setCurrentStep(3)}
-              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] inline-flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] inline-flex items-center gap-1.5 cursor-pointer dark:hover:bg-[#162C3D]"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to questions</span>
@@ -1633,7 +1633,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               className={`px-6 py-2.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 transition-colors ${
                 declarationAgreed && supplier.emailVerified && !isCallTradingLicenceBlocked && !isSubmitting
                   ? 'bg-[#1F5F99] hover:bg-[#184c7a] text-white cursor-pointer shadow-sm'
-                  : 'bg-[#D5E0EA] dark:bg-[#1E364A] text-[#6B7A87] cursor-not-allowed'
+                  : 'bg-[#D5E0EA] dark:bg-[#244157] text-[#6B7A87] cursor-not-allowed'
               }`}
             >
               <Lock className="w-4 h-4" />
@@ -1647,47 +1647,47 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           STEP 5: SUBMIT (CONFIRMATION SCREEN)
           ========================================================================= */}
       {currentStep === 5 && submittedReceipt && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-10 space-y-8 animate-fade-in text-[14px]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-10 space-y-8 animate-fade-in text-[14px]">
           {/* Header Banner */}
-          <div className="text-center space-y-2 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
-            <div className="w-16 h-16 rounded-full bg-[#ECFDF5] text-[#2F8F5B] flex items-center justify-center mx-auto mb-3">
+          <div className="text-center space-y-2 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
+            <div className="w-16 h-16 rounded-full bg-[#ECFDF5] text-[#2F8F5B] flex items-center justify-center mx-auto mb-3 dark:bg-[#2F8F5B]/20">
               <CheckCircle2 className="w-10 h-10" />
             </div>
             <h2 className="font-heading font-semibold text-[26px] text-[#10212E] dark:text-white">
               Application submitted successfully
             </h2>
-            <p className="text-[#43525F] dark:text-[#B2C3D2] max-w-lg mx-auto">
+            <p className="text-[#43525F] dark:text-[#D3E3F2] max-w-lg mx-auto">
               Your sealed tender proposal has been recorded in the central procurement register.
             </p>
           </div>
 
           {/* Receipt Details Card */}
-          <div className="p-6 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
+          <div className="p-6 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1">
-                <span className="text-[#6B7A87] block">Receipt number</span>
+                <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">Receipt number</span>
                 <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white block tabular-nums">
                   {submittedReceipt.receiptNumber}
                 </span>
               </div>
 
               <div className="space-y-1">
-                <span className="text-[#6B7A87] block">Date and time</span>
+                <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">Date and time</span>
                 <span className="font-medium text-[#10212E] dark:text-white block tabular-nums">
                   {submittedReceipt.submittedAt}
                 </span>
               </div>
 
               <div className="space-y-1">
-                <span className="text-[#6B7A87] block">Procuring entity</span>
+                <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">Procuring entity</span>
                 <span className="font-medium text-[#10212E] dark:text-white block">
                   {selectedCall.organizationName}
                 </span>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]">
-              <span className="text-[#6B7A87]">Sealed cryptographic hash:</span>
+            <div className="pt-3 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]">
+              <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Sealed cryptographic hash:</span>
               <span className="font-medium text-[#10212E] dark:text-white tabular-nums">
                 {submittedReceipt.sealedHash}
               </span>
@@ -1701,38 +1701,38 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] space-y-1.5">
-                <div className="w-7 h-7 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] font-heading font-semibold text-[14px] flex items-center justify-center">
+              <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] space-y-1.5">
+                <div className="w-7 h-7 rounded-full bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] font-heading font-semibold text-[14px] flex items-center justify-center">
                   1
                 </div>
                 <strong className="font-semibold text-[#10212E] dark:text-white block">
                   Automated compliance check
                 </strong>
-                <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   The registry automatically verifies your packaged certificates against BURS, PPRA, and CIPA databases.
                 </p>
               </div>
 
-              <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] space-y-1.5">
-                <div className="w-7 h-7 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] font-heading font-semibold text-[14px] flex items-center justify-center">
+              <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] space-y-1.5">
+                <div className="w-7 h-7 rounded-full bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] font-heading font-semibold text-[14px] flex items-center justify-center">
                   2
                 </div>
                 <strong className="font-semibold text-[#10212E] dark:text-white block">
                   Committee evaluation
                 </strong>
-                <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   The evaluation panel unseals and scores technical submissions once the tender closing deadline arrives.
                 </p>
               </div>
 
-              <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] space-y-1.5">
-                <div className="w-7 h-7 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] font-heading font-semibold text-[14px] flex items-center justify-center">
+              <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] space-y-1.5">
+                <div className="w-7 h-7 rounded-full bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] font-heading font-semibold text-[14px] flex items-center justify-center">
                   3
                 </div>
                 <strong className="font-semibold text-[#10212E] dark:text-white block">
                   Notice of decision
                 </strong>
-                <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   You will receive email notifications and dashboard updates if clarification questions are asked or when awards are announced.
                 </p>
               </div>
@@ -1740,11 +1740,11 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           </div>
 
           {/* Action buttons including "Withdraw application" */}
-          <div className="pt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="pt-6 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <button
               type="button"
               onClick={() => setIsWithdrawDialogOpen(true)}
-              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#C2412D] hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-[6px] font-medium text-[14px] inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#C2412D] hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-[6px] font-medium text-[14px] inline-flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <XCircle className="w-4 h-4" />
               <span>Withdraw application</span>
@@ -1788,7 +1788,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   });
                   setStepperNotice(`Receipt ${submittedReceipt.receiptNumber} downloaded.`);
                 }}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] rounded-[6px] font-medium text-[14px] inline-flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] rounded-[6px] font-medium text-[14px] inline-flex items-center gap-1.5 cursor-pointer dark:hover:bg-[#162C3D]"
               >
                 <Download className="w-4 h-4" />
                 <span>Download receipt</span>
@@ -1817,20 +1817,20 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
             onClick={() => setIsRequirementsDrawerOpen(false)}
           />
 
-          <div className="relative w-full max-w-xl bg-white dark:bg-[#132635] shadow-2xl h-full flex flex-col z-10 border-l border-[#D5E0EA] dark:border-[#1E364A] overflow-y-auto">
-            <div className="p-6 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+          <div className="relative w-full max-w-xl bg-white dark:bg-[#1C364B] shadow-2xl h-full flex flex-col z-10 border-l border-[#D5E0EA] dark:border-[#244157] overflow-y-auto">
+            <div className="p-6 border-b border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
               <div>
                 <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   Tender requirements specification
                 </h2>
-                <span className="text-[14px] text-[#6B7A87]">
+                <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {selectedCall.organizationName} · {selectedCall.callNumber}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsRequirementsDrawerOpen(false)}
-                className="p-2 rounded-full text-[#6B7A87] hover:bg-[#F7FAFD] cursor-pointer"
+                className="p-2 rounded-full text-[#6B7A87] hover:bg-[#F7FAFD] cursor-pointer dark:text-[#9CB4C9] dark:hover:bg-[#162C3D]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1841,7 +1841,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 <span className="font-semibold text-[#10212E] dark:text-white block">
                   Tender scope summary
                 </span>
-                <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   {selectedCall.summary}
                 </p>
               </div>
@@ -1850,7 +1850,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 <span className="font-semibold text-[#10212E] dark:text-white block">
                   Mandatory certificate requirements
                 </span>
-                <ul className="list-disc list-inside space-y-1 text-[#43525F] dark:text-[#B2C3D2]">
+                <ul className="list-disc list-inside space-y-1 text-[#43525F] dark:text-[#D3E3F2]">
                   {selectedCall.requiredDocumentTypes.map((req) => (
                     <li key={req}>{req}</li>
                   ))}
@@ -1861,17 +1861,17 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 <span className="font-semibold text-[#10212E] dark:text-white block">
                   Procuring entity details
                 </span>
-                <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
+                <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
                   <strong className="text-[#10212E] dark:text-white font-medium block">
                     {selectedCall.organizationName}
                   </strong>
-                  <span className="text-[#6B7A87] block">Civic Centre, Supply Chain Directorate</span>
-                  <span className="text-[#6B7A87] block">Location: {selectedCall.location}</span>
+                  <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">Civic Centre, Supply Chain Directorate</span>
+                  <span className="text-[#6B7A87] block dark:text-[#9CB4C9]">Location: {selectedCall.location}</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t border-[#D5E0EA] dark:border-[#1E364A] flex justify-end">
+            <div className="p-6 border-t border-[#D5E0EA] dark:border-[#244157] flex justify-end">
               <button
                 type="button"
                 onClick={() => setIsRequirementsDrawerOpen(false)}
@@ -1889,18 +1889,18 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           ========================================================================= */}
       {quickUploadDocType && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-md w-full p-6 space-y-6 shadow-xl animate-fade-in text-[14px]">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-md w-full p-6 space-y-6 shadow-xl animate-fade-in text-[14px]">
+            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   Upload certificate
                 </h3>
-                <span className="text-[#6B7A87]">{quickUploadDocType}</span>
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">{quickUploadDocType}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setQuickUploadDocType(null)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] cursor-pointer"
+                className="p-1 text-[#6B7A87] hover:text-[#10212E] cursor-pointer dark:text-[#9CB4C9] dark:hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1917,7 +1917,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   placeholder="e.g. TCC-2026-BURS-8849"
                   value={quickUploadDocNumber}
                   onChange={(e) => setQuickUploadDocNumber(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
 
@@ -1934,7 +1934,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 />
                 <div
                   onClick={() => quickUploadInputRef.current?.click()}
-                  className="p-4 border-2 border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center cursor-pointer hover:border-[#1F5F99] transition-colors bg-[#F7FAFD] dark:bg-[#10212E]"
+                  className="p-4 border-2 border-dashed border-[#D5E0EA] dark:border-[#244157] rounded-[8px] text-center cursor-pointer hover:border-[#1F5F99] transition-colors bg-[#F7FAFD] dark:bg-[#10212E]"
                 >
                   {quickUploadFileName ? (
                     <div className="flex items-center justify-center gap-2 text-emerald-600 dark:text-emerald-400 font-medium">
@@ -1947,7 +1947,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                       <p className="text-[14px] font-medium text-[#10212E] dark:text-white">
                         Click to browse actual document from your device
                       </p>
-                      <p className="text-[12px] text-[#6B7A87]">
+                      <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                         PDF, PNG, JPG, DOC up to 10 MB
                       </p>
                     </div>
@@ -1961,16 +1961,16 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                 </div>
               )}
 
-              <div className="p-3 bg-[#EAF2FA] dark:bg-[#1E364A]/50 rounded-[6px] text-[#1F5F99] dark:text-[#6FAEE0] text-[14px] flex items-center gap-2">
+              <div className="p-3 bg-[#EAF2FA] dark:bg-[#244157]/50 rounded-[6px] text-[#1F5F99] dark:text-[#6FAEE0] text-[14px] flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>Document will be stored in your digital vault as Pending review until verified by procurement officers.</span>
               </div>
 
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setQuickUploadDocType(null)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
+                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] cursor-pointer dark:hover:bg-[#162C3D]"
                 >
                   Cancel
                 </button>
@@ -1993,27 +1993,27 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
           ========================================================================= */}
       {isWithdrawDialogOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in text-[14px]">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in text-[14px]">
+            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div className="space-y-1">
                 <h3 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   Withdraw tender application?
                 </h3>
-                <span className="text-[#6B7A87]">
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">
                   {selectedCall.callNumber}: {selectedCall.title}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsWithdrawDialogOpen(false)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] cursor-pointer"
+                className="p-1 text-[#6B7A87] hover:text-[#10212E] cursor-pointer dark:text-[#9CB4C9] dark:hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+              <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                 Are you sure you want to withdraw your bid for <strong>{selectedCall.title}</strong>? Once withdrawn, your sealed proposal will be removed from evaluation and the committee will be notified. This action cannot be undone.
               </p>
 
@@ -2026,7 +2026,7 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
                   value={withdrawReason}
                   onChange={(e) => setWithdrawReason(e.target.value)}
                   placeholder="e.g. Revised capacity or schedule conflict prior to closing"
-                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[13px]"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[13px]"
                 />
               </div>
 
@@ -2041,12 +2041,12 @@ export const SupplierApplicationStepper: React.FC<SupplierApplicationStepperProp
               </div>
             </div>
 
-            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
               <button
                 type="button"
                 disabled={isWithdrawing}
                 onClick={() => setIsWithdrawDialogOpen(false)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] cursor-pointer disabled:opacity-50 dark:hover:bg-[#162C3D]"
               >
                 Keep application
               </button>

@@ -61,7 +61,7 @@ export const ResetPassword: React.FC<ResetPasswordProps> = ({ onNavigate }) => {
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Create new password
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Your new password will take effect immediately and sign out all existing sessions.
           </p>
         </div>

@@ -167,12 +167,12 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
   return (
     <div className="space-y-12">
       {/* 1. Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Platform overview
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             {todayFormatted} · Last updated {lastUpdatedText}
           </p>
         </div>
@@ -181,7 +181,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
           type="button"
           onClick={() => fetchOverview(true)}
           disabled={isRefreshing}
-          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#132635] rounded-[6px] text-[15px] font-medium transition-colors inline-flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
+          className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] rounded-[6px] text-[15px] font-medium transition-colors inline-flex items-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -205,15 +205,15 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
       )}
 
       {feedback && (
-        <div className="p-4 rounded-[10px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2">
+        <div className="p-4 rounded-[10px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2 dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <CheckCircle2 className="w-4 h-4 text-[#2F8F5B] shrink-0" />
           <span>{feedback}</span>
         </div>
       )}
 
       {isLoading && !overview ? (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-12 flex items-center justify-center gap-3 text-[#6B7A87]">
-          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-12 flex items-center justify-center gap-3 text-[#6B7A87] dark:text-[#9CB4C9]">
+          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
           <span className="text-[15px]">Loading live platform metrics...</span>
         </div>
       ) : (
@@ -229,15 +229,14 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                 <div
                   key={item.id}
                   onClick={() => onNavigateTab(item.targetTab)}
-                  className={`bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] ${
-                    item.count > 0 ? `border-l-4 ${item.colorBorder}` : ''
-                  } p-4 flex flex-col justify-between hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors cursor-pointer group`}
+                  className={`bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] ${
+                    item.count > 0 ? `border-l-4 ${item.colorBorder}` : '' } p-4 flex flex-col justify-between hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors cursor-pointer group`}
                 >
                   <div className="space-y-1">
                     <div className="font-heading font-semibold text-[28px] text-[#10212E] dark:text-white leading-tight tabular-nums">
                       {item.count}
                     </div>
-                    <div className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-snug">
+                    <div className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-snug">
                       {item.label}
                     </div>
                   </div>
@@ -260,9 +259,9 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
               {keyMetrics.map((metric) => (
                 <div
                   key={metric.id}
-                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-2"
+                  className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-2"
                 >
-                  <div className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+                  <div className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
                     {metric.label}
                   </div>
                   <div className="font-heading font-semibold text-[32px] text-[#10212E] dark:text-white tabular-nums leading-none">
@@ -282,14 +281,14 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
 
           {/* 4. Two Charts Side-by-Side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
               <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Platform growth
               </h3>
               <AdminGrowthChart data={overview?.monthlyGrowth} />
             </div>
 
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
               <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Invoiced revenue
               </h3>
@@ -300,20 +299,20 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
           {/* 5. Three Action Panels Side-by-Side */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
             {/* Panel 1: Organizations awaiting approval */}
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
                     Organizations awaiting approval
                   </h3>
-                  <span className="bg-[#FFFBEB] text-[#92400E] text-[13px] px-2 py-0.5 rounded-[4px] font-medium">
+                  <span className="bg-[#FFFBEB] text-[#92400E] text-[13px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#E8A33D]/20 dark:text-[#FCD34D]">
                     {kpis?.pendingOrgsCount ?? 0} pending
                   </span>
                 </div>
 
-                <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+                <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157]">
                   {!overview?.pendingOrgs.length ? (
-                    <div className="py-6 text-center text-[13px] text-[#6B7A87]">
+                    <div className="py-6 text-center text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       All buyer organization registrations have been reviewed.
                     </div>
                   ) : (
@@ -323,7 +322,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                           <span className="font-semibold text-[15px] text-[#10212E] dark:text-white block">
                             {org.name}
                           </span>
-                          <span className="text-[13px] text-[#6B7A87]">
+                          <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                             {org.type || 'Procuring entity'} · {formatShortDate(org.createdAt)}
                           </span>
                         </div>
@@ -339,7 +338,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                           <button
                             type="button"
                             onClick={() => onNavigateTab('organizations')}
-                            className="px-3 py-1 border border-[#D5E0EA] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[13px] font-medium rounded-[4px] transition-colors cursor-pointer"
+                            className="px-3 py-1 border border-[#D5E0EA] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[13px] font-medium rounded-[4px] transition-colors cursor-pointer dark:border-[#244157]"
                           >
                             Review
                           </button>
@@ -350,7 +349,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-4">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-4">
                 <button
                   type="button"
                   onClick={() => onNavigateTab('organizations')}
@@ -362,32 +361,32 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
             </div>
 
             {/* Panel 2: Verification queue summary */}
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
                     Verification queue
                   </h3>
-                  <span className="bg-[#EAF2FA] text-[#1F5F99] text-[13px] px-2 py-0.5 rounded-[4px] font-medium">
+                  <span className="bg-[#EAF2FA] text-[#1F5F99] text-[13px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                     {kpis?.verificationQueueCount ?? 0} in queue
                   </span>
                 </div>
 
                 <div className="space-y-3 text-[14px]">
                   <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between">
-                    <span className="text-[#43525F] dark:text-[#B2C3D2]">Directors awaiting KYC</span>
+                    <span className="text-[#43525F] dark:text-[#D3E3F2]">Directors awaiting KYC</span>
                     <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                       {kpis?.pendingPeopleCount ?? 0}
                     </span>
                   </div>
                   <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between">
-                    <span className="text-[#43525F] dark:text-[#B2C3D2]">Vault documents pending</span>
+                    <span className="text-[#43525F] dark:text-[#D3E3F2]">Vault documents pending</span>
                     <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                       {kpis?.pendingDocumentsCount ?? 0}
                     </span>
                   </div>
                   <div className="p-3 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between">
-                    <span className="text-[#43525F] dark:text-[#B2C3D2]">Suppliers pending review</span>
+                    <span className="text-[#43525F] dark:text-[#D3E3F2]">Suppliers pending review</span>
                     <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                       {kpis?.pendingSuppliersCount ?? 0}
                     </span>
@@ -395,7 +394,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-4">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-4">
                 <button
                   type="button"
                   onClick={() => onNavigateTab('verification')}
@@ -407,20 +406,20 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
             </div>
 
             {/* Panel 3: Open risk flags */}
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading font-semibold text-[16px] text-[#10212E] dark:text-white">
                     Open risk flags
                   </h3>
-                  <span className="bg-[#FEF2F2] text-[#C2412D] text-[13px] px-2 py-0.5 rounded-[4px] font-medium">
+                  <span className="bg-[#FEF2F2] text-[#C2412D] text-[13px] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#C2412D]/20">
                     {kpis?.openRiskFlagsCount ?? 0} active
                   </span>
                 </div>
 
-                <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+                <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157]">
                   {!overview?.openRiskFlags.length ? (
-                    <div className="py-6 text-center text-[13px] text-[#6B7A87]">
+                    <div className="py-6 text-center text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       No open risk flags detected.
                     </div>
                   ) : (
@@ -440,7 +439,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                             {flag.severity}
                           </span>
                         </div>
-                        <p className="text-[13px] text-[#6B7A87] line-clamp-2">
+                        <p className="text-[13px] text-[#6B7A87] line-clamp-2 dark:text-[#9CB4C9]">
                           {flag.details?.description || flag.flagType.replace(/_/g, ' ')}
                         </p>
                       </div>
@@ -449,7 +448,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-4">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-4">
                 <button
                   type="button"
                   onClick={() => onNavigateTab('risk-debarments')}
@@ -462,7 +461,7 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
           </div>
 
           {/* 6. Recent Audit Trail */}
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Recent audit events
@@ -477,11 +476,11 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
             </div>
 
             {!overview?.recentAuditEvents.length ? (
-              <div className="py-6 text-center text-[13px] text-[#6B7A87]">
+              <div className="py-6 text-center text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 No audit events recorded yet.
               </div>
             ) : (
-              <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[14px]">
+              <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[14px]">
                 {overview.recentAuditEvents.map((evt) => (
                   <div
                     key={evt.id}
@@ -493,12 +492,12 @@ export const AdminOverview: React.FC<AdminOverviewProps> = ({
                         <span className="text-[#10212E] dark:text-white font-medium mr-2">
                           {evt.action}
                         </span>
-                        <span className="text-[#43525F] dark:text-[#B2C3D2] text-[13px] break-words">
+                        <span className="text-[#43525F] dark:text-[#D3E3F2] text-[13px] break-words">
                           {evt.details}
                         </span>
                       </div>
                     </div>
-                    <div className="text-[13px] text-[#6B7A87] shrink-0">
+                    <div className="text-[13px] text-[#6B7A87] shrink-0 dark:text-[#9CB4C9]">
                       {evt.actorName} · {evt.timestamp}
                     </div>
                   </div>

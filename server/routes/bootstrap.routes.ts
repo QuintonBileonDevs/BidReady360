@@ -191,7 +191,7 @@ router.get(['/', '/bootstrap', '/auth/bootstrap'], requireAuth, async (req: Requ
           tenantType: activeTenant.tenantType === 'supplier' ? 'supplier' : 'organization',
           tenantId: activeTenant.tenantId,
         },
-        50
+        100
       )
       .catch(() => []);
 

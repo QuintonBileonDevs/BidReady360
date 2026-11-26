@@ -89,13 +89,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-white p-4 sm:p-8">
+    <div className="min-h-screen flex flex-col justify-between bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white p-4 sm:p-8">
       {/* Top Header Bar */}
       <div className="max-w-[440px] w-full mx-auto flex items-center justify-between pb-4">
         <button
           type="button"
           onClick={() => onNavigate('about')}
-          className="inline-flex items-center gap-1.5 text-[14px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors cursor-pointer min-h-[44px]"
+          className="inline-flex items-center gap-1.5 text-[14px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors cursor-pointer min-h-[44px]"
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.5} />
           <span>Back to website</span>
@@ -113,7 +113,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
           <Logo size="lg" className="justify-center" />
         </div>
 
-        <div className="bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] p-6 sm:p-8 shadow-sm space-y-6">
           {/* Header Block */}
           <div className="space-y-1.5">
             <span className="inline-block px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] text-[12px] font-semibold tracking-wide uppercase">
@@ -122,19 +122,19 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
             <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
               Admin sign in
             </h2>
-            <p className="text-[14px] text-[#6B7A87]">
+            <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Restricted gateway for system administrators, auditors, and platform oversight.
             </p>
           </div>
 
           {/* Quick Demo Shortcut */}
-          <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs">
+          <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-3 text-xs">
             <div className="space-y-0.5">
               <span className="font-semibold text-[#10212E] dark:text-white flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#2F8F5B]" />
                 Demo Administrator
               </span>
-              <p className="text-[#6B7A87]">admin@bidready360.co.bw</p>
+              <p className="text-[#6B7A87] dark:text-[#9CB4C9]">admin@bidready360.co.bw</p>
             </div>
             <div className="flex items-center gap-1.5">
               <Button
@@ -206,7 +206,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onNavigate }) => {
           </form>
 
           {/* Compliance & Audit Footer */}
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[12px] text-[#6B7A87] leading-relaxed">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] text-center text-[12px] text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             All administrative sessions and actions are authenticated, cryptographically signed, and recorded in the immutable statutory audit trail.
           </div>
         </div>

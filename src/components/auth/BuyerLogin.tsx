@@ -164,16 +164,16 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
               <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
                 Buyer sign in
               </h2>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Access tender evaluation committees, publish RFPs, and verify statutory compliance.
               </p>
             </div>
 
             {/* Branded Entity Switcher Card */}
-            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs">
+            <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-3 text-xs">
               <div>
                 <p className="font-semibold text-[#10212E] dark:text-white">Looking for council or agency portals?</p>
-                <p className="text-[#6B7A87]">Gaborone Regional Council or National Training Agency</p>
+                <p className="text-[#6B7A87] dark:text-[#9CB4C9]">Gaborone Regional Council or National Training Agency</p>
               </div>
               <Button
                 type="button"
@@ -187,13 +187,13 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
             </div>
 
             {/* Demo Buyer Credentials Shortcut */}
-            <div className="p-3 rounded-[8px] bg-[#EAF2FA]/50 dark:bg-[#1E364A]/30 border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-xs">
+            <div className="p-3 rounded-[8px] bg-[#EAF2FA]/50 dark:bg-[#244157]/30 border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-3 text-xs">
               <div className="space-y-0.5">
                 <span className="font-semibold text-[#10212E] dark:text-white flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-[#2F8F5B]" />
                   Demo Buyer Officer
                 </span>
-                <p className="text-[#6B7A87]">officer@grc.gov.bw</p>
+                <p className="text-[#6B7A87] dark:text-[#9CB4C9]">officer@grc.gov.bw</p>
               </div>
               <div className="flex items-center gap-1.5">
                 <Button
@@ -284,7 +284,7 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
             </form>
 
             {/* Bottom Switcher */}
-            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               New procuring organization?{' '}
               <button
                 type="button"
@@ -298,7 +298,7 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
         ) : (
           /* MFA Challenge View */
           <div className="space-y-6 text-center">
-            <div className="w-12 h-12 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-[8px] bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center mx-auto">
               <ShieldCheck className="w-6 h-6" strokeWidth={1.5} />
             </div>
 
@@ -306,7 +306,7 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
               <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
                 Enter verification code
               </h2>
-              <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto">
+              <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto dark:text-[#9CB4C9]">
                 We sent a 6-digit security code to <strong>{email}</strong>. Enter it below to complete sign in.
               </p>
             </div>
@@ -322,7 +322,7 @@ export const BuyerLogin: React.FC<BuyerLoginProps> = ({ onNavigate }) => {
               <DigitCodeInput onComplete={handleMfaComplete} disabled={isLoading} />
             </div>
 
-            <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3">
+            <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3 dark:text-[#9CB4C9]">
               <div className="flex items-center justify-center gap-3 pt-2">
                 <Button
                   variant="ghost"

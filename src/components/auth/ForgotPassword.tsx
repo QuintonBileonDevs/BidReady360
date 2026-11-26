@@ -45,13 +45,13 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onNavigate }) =>
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Forgot password
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Enter your email to receive password reset instructions.
           </p>
         </div>
 
         {isSubmitted ? (
-          <div className="space-y-4 p-5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="space-y-4 p-5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157]">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0 mt-0.5" />
               <div className="space-y-1 text-[14px]">
@@ -59,7 +59,7 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onNavigate }) =>
                   Check your inbox
                 </span>
                 {/* Neutral wording strictly required */}
-                <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   If an account exists for this email, we've sent a reset link. Please check your inbox and spam folder.
                 </p>
               </div>
@@ -120,7 +120,7 @@ export const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onNavigate }) =>
               <button
                 type="button"
                 onClick={() => onNavigate('supplier-login')}
-                className="text-[14px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1 font-medium cursor-pointer"
+                className="text-[14px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1 font-medium cursor-pointer dark:text-[#9CB4C9]"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Return to sign in</span>

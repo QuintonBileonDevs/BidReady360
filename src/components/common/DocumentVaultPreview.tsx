@@ -147,10 +147,10 @@ function domNodeToReact(node: Node, key: string): React.ReactNode {
   else if (tag === 'p') props.className = 'text-sm leading-relaxed text-slate-800 my-2';
   else if (tag === 'ul') props.className = 'list-disc pl-6 my-2 space-y-1 text-sm text-slate-800';
   else if (tag === 'ol') props.className = 'list-decimal pl-6 my-2 space-y-1 text-sm text-slate-800';
-  else if (tag === 'table') props.className = 'w-full border-collapse border border-slate-300 my-3 text-xs';
+  else if (tag === 'table') props.className = 'w-full border-collapse border border-slate-300 my-3 text-xs dark:border-[#244157]';
   else if (tag === 'th') props.className = 'border border-slate-300 bg-slate-100 px-2.5 py-1.5 text-left font-semibold text-slate-900';
   else if (tag === 'td') props.className = 'border border-slate-300 px-2.5 py-1.5 text-slate-800';
-  else if (tag === 'blockquote') props.className = 'border-l-4 border-slate-300 pl-3 italic text-slate-700 my-2';
+  else if (tag === 'blockquote') props.className = 'border-l-4 border-slate-300 pl-3 italic text-slate-700 my-2 dark:text-[#D3E3F2] dark:border-[#244157]';
 
   if (tag === 'br' || tag === 'hr') {
     return React.createElement(tag, props);
@@ -328,7 +328,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
     return (
       <div className={`w-full ${maxHeightClass} bg-slate-50 dark:bg-[#0D1B26] flex flex-col items-center justify-center gap-3 p-6 text-center`}>
         <Loader2 className="w-7 h-7 animate-spin text-[#1F5F99] dark:text-[#38BDF8]" />
-        <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+        <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
           {isLoading ? 'Loading uploaded document from secure vault...' : 'Preparing document preview...'}
         </p>
       </div>
@@ -343,7 +343,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
           <p className="font-semibold text-[14px] text-[#10212E] dark:text-white">
             Document preview unavailable
           </p>
-          <p className="text-[13px] text-[#6B7A87] dark:text-[#B2C3D2]">
+          <p className="text-[13px] text-[#6B7A87] dark:text-[#D3E3F2]">
             {error || renderError}
           </p>
         </div>
@@ -352,7 +352,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
             <button
               type="button"
               onClick={onRetry}
-              className="px-3.5 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white rounded-[6px] text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white rounded-[6px] text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Retry</span>
@@ -375,7 +375,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
 
   if (!blob) {
     return (
-      <div className="w-full min-h-[220px] bg-slate-50 dark:bg-[#0D1B26] flex items-center justify-center p-6 text-[13px] text-[#6B7A87]">
+      <div className="w-full min-h-[220px] bg-slate-50 dark:bg-[#0D1B26] flex items-center justify-center p-6 text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
         Select a document to preview its contents.
       </div>
     );
@@ -384,7 +384,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
   return (
     <div className="w-full flex flex-col bg-slate-100 dark:bg-[#0D1B26]">
       {/* Viewer Controls Bar */}
-      <div className="px-3 py-2 bg-white dark:bg-[#132635] border-b border-[#D5E0EA] dark:border-[#1E364A] flex flex-wrap items-center justify-between gap-2 text-[12px]">
+      <div className="px-3 py-2 bg-white dark:bg-[#1C364B] border-b border-[#D5E0EA] dark:border-[#244157] flex flex-wrap items-center justify-between gap-2 text-[12px]">
         <div className="flex items-center gap-1.5 flex-wrap">
           {detectedKind === 'pdf' && numPages > 0 && (
             <>
@@ -394,7 +394,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                     type="button"
                     disabled={pageNumber <= 1}
                     onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
-                    className="p-1 rounded border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white disabled:opacity-40 cursor-pointer"
+                    className="p-1 rounded border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white disabled:opacity-40 cursor-pointer"
                     title="Previous page"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
@@ -406,7 +406,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                     type="button"
                     disabled={pageNumber >= numPages}
                     onClick={() => setPageNumber((p) => Math.min(numPages, p + 1))}
-                    className="p-1 rounded border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white disabled:opacity-40 cursor-pointer"
+                    className="p-1 rounded border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white disabled:opacity-40 cursor-pointer"
                     title="Next page"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -424,8 +424,8 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                   onClick={() => setShowAllPages((v) => !v)}
                   className={`px-2 py-1 rounded border text-[11px] font-medium inline-flex items-center gap-1 cursor-pointer ${
                     showAllPages
-                      ? 'bg-[#EAF2FA] dark:bg-[#1E364A] border-[#1F5F99] text-[#1F5F99] dark:text-[#38BDF8]'
-                      : 'border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] hover:bg-slate-50 dark:hover:bg-[#182C3A]'
+                      ? 'bg-[#EAF2FA] dark:bg-[#244157] border-[#1F5F99] text-[#1F5F99] dark:text-[#38BDF8]'
+                      : 'border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2] hover:bg-slate-50 dark:hover:bg-[#182C3A]'
                   }`}
                   title={showAllPages ? 'Switch to single page' : 'Scroll all pages'}
                 >
@@ -440,7 +440,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
             <button
               type="button"
               onClick={() => setRotation((r) => (r + 90) % 360)}
-              className="px-2 py-1 rounded border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white inline-flex items-center gap-1 cursor-pointer"
+              className="px-2 py-1 rounded border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white inline-flex items-center gap-1 cursor-pointer"
               title="Rotate 90°"
             >
               <RotateCw className="w-3.5 h-3.5" />
@@ -449,13 +449,13 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
           )}
 
           {detectedKind === 'docx' && (
-            <span className="px-2 py-0.5 rounded bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
+            <span className="px-2 py-0.5 rounded bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
               Word Document Preview
             </span>
           )}
 
           {detectedKind === 'text' && (
-            <span className="px-2 py-0.5 rounded bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
+            <span className="px-2 py-0.5 rounded bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
               Plain Text Preview
             </span>
           )}
@@ -467,18 +467,18 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
               <button
                 type="button"
                 onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-                className="p-1 rounded border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white cursor-pointer"
+                className="p-1 rounded border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white cursor-pointer"
                 title="Zoom out"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="w-11 text-center tabular-nums font-medium text-[#43525F] dark:text-[#B2C3D2]">
+              <span className="w-11 text-center tabular-nums font-medium text-[#43525F] dark:text-[#D3E3F2]">
                 {Math.round(zoom * 100)}%
               </span>
               <button
                 type="button"
                 onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.25).toFixed(2))))}
-                className="p-1 rounded border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white cursor-pointer"
+                className="p-1 rounded border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white cursor-pointer"
                 title="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
@@ -489,7 +489,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                   setZoom(1.0);
                   setRotation(0);
                 }}
-                className="p-1 rounded border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white cursor-pointer"
+                className="p-1 rounded border border-[#D5E0EA] dark:border-[#244157] hover:bg-slate-50 dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white cursor-pointer"
                 title="Reset zoom and rotation"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
@@ -524,7 +524,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
             onLoadSuccess={handleDocumentLoadSuccess}
             onLoadError={handleDocumentLoadError}
             loading={
-              <div className="py-16 flex flex-col items-center justify-center gap-2 text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+              <div className="py-16 flex flex-col items-center justify-center gap-2 text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                 <Loader2 className="w-6 h-6 animate-spin text-[#1F5F99] dark:text-[#38BDF8]" />
                 <span>Rendering PDF pages...</span>
               </div>
@@ -539,7 +539,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
             {numPages > 0 &&
               (showAllPages ? (
                 Array.from({ length: numPages }, (_, idx) => (
-                  <div key={`page-${idx + 1}`} className="bg-white shadow-md rounded-[2px] overflow-hidden">
+                  <div key={`page-${idx + 1}`} className="bg-white shadow-md rounded-[2px] overflow-hidden dark:bg-[#1C364B]">
                     <Page
                       pageNumber={idx + 1}
                       width={containerWidth}
@@ -549,7 +549,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                       renderTextLayer
                       renderAnnotationLayer
                       loading={
-                        <div className="w-[320px] h-[420px] flex items-center justify-center bg-white text-slate-400 text-xs">
+                        <div className="w-[320px] h-[420px] flex items-center justify-center bg-white text-slate-400 text-xs dark:bg-[#1C364B]">
                           Loading page {idx + 1}...
                         </div>
                       }
@@ -557,7 +557,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                   </div>
                 ))
               ) : (
-                <div className="bg-white shadow-md rounded-[2px] overflow-hidden">
+                <div className="bg-white shadow-md rounded-[2px] overflow-hidden dark:bg-[#1C364B]">
                   <Page
                     pageNumber={pageNumber}
                     width={containerWidth}
@@ -567,7 +567,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
                     renderTextLayer
                     renderAnnotationLayer
                     loading={
-                      <div className="w-[320px] h-[420px] flex items-center justify-center bg-white text-slate-400 text-xs">
+                      <div className="w-[320px] h-[420px] flex items-center justify-center bg-white text-slate-400 text-xs dark:bg-[#1C364B]">
                         Rendering page {pageNumber}...
                       </div>
                     }
@@ -587,22 +587,22 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
               transform: `scale(${zoom}) rotate(${rotation}deg)`,
               transformOrigin: 'center center',
             }}
-            className="max-h-full max-w-full object-contain rounded shadow-md bg-white transition-transform duration-150"
+            className="max-h-full max-w-full object-contain rounded shadow-md bg-white transition-transform duration-150 dark:bg-[#1C364B]"
           />
         </div>
       ) : detectedKind === 'docx' && docxNodes ? (
         <div className={`w-full ${maxHeightClass} overflow-auto p-4 sm:p-6 bg-slate-200/70 dark:bg-[#0A151E]`}>
-          <div className="max-w-3xl mx-auto bg-white rounded-[4px] shadow-md p-6 sm:p-8 min-h-full">
+          <div className="max-w-3xl mx-auto bg-white rounded-[4px] shadow-md p-6 sm:p-8 min-h-full dark:bg-[#1C364B]">
             {docxNodes.length > 0 ? (
               docxNodes
             ) : (
-              <p className="text-sm text-slate-500 italic">This Word document has no extractable text content.</p>
+              <p className="text-sm text-slate-500 italic dark:text-[#9CB4C9]">This Word document has no extractable text content.</p>
             )}
           </div>
         </div>
       ) : detectedKind === 'text' && plainText !== null ? (
         <div className={`w-full ${maxHeightClass} overflow-auto p-4 bg-slate-200/70 dark:bg-[#0A151E]`}>
-          <pre className="max-w-3xl mx-auto bg-white text-slate-900 rounded-[4px] shadow-md p-5 text-xs font-mono whitespace-pre-wrap break-words leading-relaxed">
+          <pre className="max-w-3xl mx-auto bg-white text-slate-900 rounded-[4px] shadow-md p-5 text-xs tabular-nums whitespace-pre-wrap break-words leading-relaxed dark:bg-[#1C364B] dark:text-white">
             {plainText}
           </pre>
         </div>
@@ -613,7 +613,7 @@ export const DocumentVaultPreview: React.FC<DocumentVaultPreviewProps> = ({
             <p className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
               {fileName}
             </p>
-            <p className="text-[12px] text-[#6B7A87]">
+            <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Inline browser rendering is not supported for this binary format ({mimeType || blob.type || 'unknown'}). Download the file to open it locally.
             </p>
           </div>

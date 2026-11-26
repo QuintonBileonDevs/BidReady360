@@ -21,6 +21,15 @@ export interface NotificationTenantScope {
   tenantId?: string | null;
 }
 
+export type NotificationBulkAction =
+  | 'read'
+  | 'unread'
+  | 'star'
+  | 'unstar'
+  | 'archive'
+  | 'unarchive'
+  | 'delete';
+
 export interface NotificationRecord {
   id: string;
   userId: string;
@@ -36,6 +45,9 @@ export interface NotificationRecord {
   priority: 'urgent' | 'info' | 'success' | 'warning';
   isRead: boolean;
   readAt: string | null;
+  isStarred: boolean;
+  isArchived: boolean;
+  archivedAt: string | null;
   createdAt: string;
   recipientRole: 'Supplier' | 'Buyer';
 }
@@ -227,10 +239,10 @@ export class NotificationsRepository {
   async listForUser(
     userId: string,
     scope?: NotificationTenantScope | 'supplier' | 'organization',
-    limit = 50
+    limit = 100
   ): Promise<NotificationRecord[]> {
     if (!UUID_REGEX.test(userId)) return [];
-    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
     const { clause, params: scopeParams, normalizedType } = buildTenantScopeSql(scope, 2);
     const limitParamIndex = 2 + scopeParams.length;
 
@@ -246,9 +258,12 @@ export class NotificationsRepository {
               data,
               priority,
               read_at AS "readAt",
+              COALESCE(is_starred, FALSE) AS "isStarred",
+              archived_at AS "archivedAt",
               created_at AS "createdAt"
        FROM notifications
        WHERE user_id = $1
+         AND deleted_at IS NULL
        ${clause}
        ORDER BY created_at DESC
        LIMIT $${limitParamIndex}`,
@@ -260,6 +275,9 @@ export class NotificationsRepository {
       type: r.eventType,
       link: r.linkUrl,
       isRead: Boolean(r.readAt),
+      isStarred: Boolean(r.isStarred),
+      isArchived: Boolean(r.archivedAt),
+      archivedAt: r.archivedAt || null,
       recipientRole:
         normalizedType === 'organization'
           ? 'Buyer'
@@ -282,6 +300,8 @@ export class NotificationsRepository {
        FROM notifications
        WHERE user_id = $1
          AND read_at IS NULL
+         AND archived_at IS NULL
+         AND deleted_at IS NULL
        ${clause}`,
       [userId, ...scopeParams]
     );
@@ -300,10 +320,141 @@ export class NotificationsRepository {
        SET read_at = COALESCE(read_at, NOW())
        WHERE id = $1
          AND user_id = $2
+         AND deleted_at IS NULL
        ${clause}`,
       [notificationId, userId, ...scopeParams]
     );
     return (res.rowCount || 0) > 0;
+  }
+
+  async markUnread(
+    notificationId: string,
+    userId: string,
+    scope?: NotificationTenantScope | 'supplier' | 'organization'
+  ): Promise<boolean> {
+    if (!UUID_REGEX.test(notificationId) || !UUID_REGEX.test(userId)) return false;
+    const { clause, params: scopeParams } = buildTenantScopeSql(scope, 3);
+    const res = await query(
+      `UPDATE notifications
+       SET read_at = NULL
+       WHERE id = $1
+         AND user_id = $2
+         AND deleted_at IS NULL
+       ${clause}`,
+      [notificationId, userId, ...scopeParams]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  async setStarred(
+    notificationId: string,
+    userId: string,
+    starred: boolean,
+    scope?: NotificationTenantScope | 'supplier' | 'organization'
+  ): Promise<boolean> {
+    if (!UUID_REGEX.test(notificationId) || !UUID_REGEX.test(userId)) return false;
+    const { clause, params: scopeParams } = buildTenantScopeSql(scope, 4);
+    const res = await query(
+      `UPDATE notifications
+       SET is_starred = $3
+       WHERE id = $1
+         AND user_id = $2
+         AND deleted_at IS NULL
+       ${clause}`,
+      [notificationId, userId, Boolean(starred), ...scopeParams]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  async setArchived(
+    notificationId: string,
+    userId: string,
+    archived: boolean,
+    scope?: NotificationTenantScope | 'supplier' | 'organization'
+  ): Promise<boolean> {
+    if (!UUID_REGEX.test(notificationId) || !UUID_REGEX.test(userId)) return false;
+    const { clause, params: scopeParams } = buildTenantScopeSql(scope, 4);
+    const res = await query(
+      `UPDATE notifications
+       SET archived_at = CASE WHEN $3::boolean THEN COALESCE(archived_at, NOW()) ELSE NULL END
+       WHERE id = $1
+         AND user_id = $2
+         AND deleted_at IS NULL
+       ${clause}`,
+      [notificationId, userId, Boolean(archived), ...scopeParams]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  async softDelete(
+    notificationId: string,
+    userId: string,
+    scope?: NotificationTenantScope | 'supplier' | 'organization'
+  ): Promise<boolean> {
+    if (!UUID_REGEX.test(notificationId) || !UUID_REGEX.test(userId)) return false;
+    const { clause, params: scopeParams } = buildTenantScopeSql(scope, 3);
+    const res = await query(
+      `UPDATE notifications
+       SET deleted_at = NOW()
+       WHERE id = $1
+         AND user_id = $2
+         AND deleted_at IS NULL
+       ${clause}`,
+      [notificationId, userId, ...scopeParams]
+    );
+    return (res.rowCount || 0) > 0;
+  }
+
+  async bulkUpdate(
+    notificationIds: string[],
+    userId: string,
+    action: NotificationBulkAction,
+    scope?: NotificationTenantScope | 'supplier' | 'organization'
+  ): Promise<number> {
+    if (!UUID_REGEX.test(userId)) return 0;
+    const validIds = Array.from(
+      new Set((notificationIds || []).filter((id) => UUID_REGEX.test(String(id))))
+    ).slice(0, 200);
+    if (!validIds.length) return 0;
+
+    let setClause: string;
+    switch (action) {
+      case 'read':
+        setClause = 'read_at = COALESCE(read_at, NOW())';
+        break;
+      case 'unread':
+        setClause = 'read_at = NULL';
+        break;
+      case 'star':
+        setClause = 'is_starred = TRUE';
+        break;
+      case 'unstar':
+        setClause = 'is_starred = FALSE';
+        break;
+      case 'archive':
+        setClause = 'archived_at = COALESCE(archived_at, NOW())';
+        break;
+      case 'unarchive':
+        setClause = 'archived_at = NULL';
+        break;
+      case 'delete':
+        setClause = 'deleted_at = NOW()';
+        break;
+      default:
+        return 0;
+    }
+
+    const { clause, params: scopeParams } = buildTenantScopeSql(scope, 3);
+    const res = await query(
+      `UPDATE notifications
+       SET ${setClause}
+       WHERE id = ANY($1::uuid[])
+         AND user_id = $2
+         AND deleted_at IS NULL
+       ${clause}`,
+      [validIds, userId, ...scopeParams]
+    );
+    return res.rowCount || 0;
   }
 
   async markAllRead(
@@ -317,6 +468,8 @@ export class NotificationsRepository {
        SET read_at = NOW()
        WHERE user_id = $1
          AND read_at IS NULL
+         AND archived_at IS NULL
+         AND deleted_at IS NULL
        ${clause}`,
       [userId, ...scopeParams]
     );

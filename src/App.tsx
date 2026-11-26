@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ThemeProvider } from './context/ThemeContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { ReadinessProvider } from './context/ReadinessContext';
 import { Header } from './components/common/Header';
@@ -71,11 +72,11 @@ const MainContent: React.FC = () => {
   const isProfileComplete = supplierCompleteness.score >= 100;
 
   if (authLoading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA]">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-page)] text-[var(--text-primary)]">
       <div className="flex flex-col items-center gap-4">
         <Logo size="lg" />
-        <div className="flex items-center gap-2.5 text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
-          <div className="w-4 h-4 border-2 border-[#1F5F99] border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center gap-2.5 text-[14px] text-[var(--text-secondary)]">
+          <div className="w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full animate-spin" />
           <span>Verifying security session...</span>
         </div>
       </div>
@@ -137,7 +138,7 @@ const MainContent: React.FC = () => {
   const isWorkspaceShell = isAdminWorkspace || isBuyerWorkspace;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-[#EAF2FA] transition-colors duration-150">
+    <div className="min-h-screen flex flex-col bg-[var(--bg-page)] text-[var(--text-primary)] transition-colors duration-150">
       <LoadingGate isVisible={isBootstrapping} step={bootstrapStep} statusMessage={bootstrapMessage} />
       <div
         className="flex-1 flex flex-col"
@@ -157,10 +158,12 @@ const MainContent: React.FC = () => {
 
 export default function App() {
   return (
-    <ReadinessProvider>
-      <AppProvider>
-        <MainContent />
-      </AppProvider>
-    </ReadinessProvider>
+    <ThemeProvider>
+      <ReadinessProvider>
+        <AppProvider>
+          <MainContent />
+        </AppProvider>
+      </ReadinessProvider>
+    </ThemeProvider>
   );
 }

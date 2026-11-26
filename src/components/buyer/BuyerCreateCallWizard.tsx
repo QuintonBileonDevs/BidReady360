@@ -185,20 +185,20 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide dark:text-[#9CB4C9]">
             Tender Publishing Studio
           </span>
-          <h1 className="text-xl sm:text-2xl font-heading font-bold text-[#10212E]">
+          <h1 className="text-xl sm:text-2xl font-heading font-bold text-[#10212E] dark:text-white">
             Create Procurement Call / Tender
           </h1>
         </div>
-        <button onClick={onCancel} className="text-xs font-semibold text-slate-500 hover:text-slate-900">
+        <button onClick={onCancel} className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-[#9CB4C9] dark:hover:text-white">
           Cancel
         </button>
       </div>
 
       {/* Stepper header */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex items-center justify-between text-xs font-semibold">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex items-center justify-between text-xs font-semibold dark:bg-[#1C364B] dark:border-[#244157]">
         {['1. Basic Info & Type', '2. Deadlines & Visibility', '3. Vault Documents', '4. Form & Publish'].map((st, idx) => (
           <div
             key={idx}
@@ -216,7 +216,7 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
                   ? 'bg-[#1F5F99] text-white'
                   : currentStep > idx + 1
                   ? 'bg-[#2F8F5B] text-white'
-                  : 'bg-slate-100 text-slate-500'
+                  : 'bg-slate-100 text-slate-500 dark:bg-[#162C3D] dark:text-[#9CB4C9]'
               }`}
             >
               {idx + 1}
@@ -227,30 +227,30 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
       </div>
 
       {/* Step Content */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-5 text-xs">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-5 text-xs dark:bg-[#1C364B] dark:border-[#244157]">
         {/* Step 1 */}
         {currentStep === 1 && (
           <div className="space-y-4">
-            <h3 className="font-heading font-bold text-base text-[#10212E]">Step 1: Tender Scope & Identity</h3>
+            <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">Step 1: Tender Scope & Identity</h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Tender Reference Number *</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Tender Reference Number *</label>
                 <input
                   type="text"
                   required
                   value={callData.callNumber}
                   onChange={(e) => setCallData({ ...callData, callNumber: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold"
+                  className="w-full p-2 border border-slate-300 rounded-lg tabular-nums font-bold dark:border-[#244157]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Procurement Type</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Procurement Type</label>
                 <select
                   value={callData.type}
                   onChange={(e) => setCallData({ ...callData, type: e.target.value as Call['type'] })}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 >
                   <option value="RFP">Request for Proposal (RFP)</option>
                   <option value="EOI">Expression of Interest (EOI)</option>
@@ -259,30 +259,30 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block font-semibold text-slate-700 mb-1">Tender Title *</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Tender Title *</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Supply and Delivery of Civil Infrastructure Materials"
                   value={callData.title}
                   onChange={(e) => setCallData({ ...callData, title: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block font-semibold text-slate-700 mb-1">Summary / Objective</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Summary / Objective</label>
                 <textarea
                   rows={3}
                   placeholder="Describe tender scope, deliverables, and key compliance expectations..."
                   value={callData.summary}
                   onChange={(e) => setCallData({ ...callData, summary: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Primary Sector / Category</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Primary Sector / Category</label>
                 {categories.length > 0 ? (
                   <select
                     value={selectedCategoryId}
@@ -292,7 +292,7 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
                       const found = categories.find((c) => c.id === id);
                       setCallData({ ...callData, category: found?.name || 'General Procurement' });
                     }}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                   >
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
@@ -305,18 +305,18 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
                     type="text"
                     value={callData.category}
                     onChange={(e) => setCallData({ ...callData, category: e.target.value })}
-                    className="w-full p-2 border border-slate-300 rounded-lg"
+                    className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                   />
                 )}
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Estimated Budget (BWP)</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Estimated Budget (BWP)</label>
                 <input
                   type="number"
                   value={callData.estimatedBudgetBWP}
                   onChange={(e) => setCallData({ ...callData, estimatedBudgetBWP: Number(e.target.value) })}
-                  className="w-full p-2 border border-slate-300 rounded-lg font-mono"
+                  className="w-full p-2 border border-slate-300 rounded-lg tabular-nums dark:border-[#244157]"
                 />
               </div>
             </div>
@@ -326,56 +326,56 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
         {/* Step 2 */}
         {currentStep === 2 && (
           <div className="space-y-4">
-            <h3 className="font-heading font-bold text-base text-[#10212E]">Step 2: Statutory Deadlines, Visibility & Security</h3>
+            <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">Step 2: Statutory Deadlines, Visibility & Security</h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Opening Date</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Opening Date</label>
                 <input
                   type="date"
                   value={callData.openingDate}
                   onChange={(e) => setCallData({ ...callData, openingDate: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Clarification Deadline</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Clarification Deadline</label>
                 <input
                   type="date"
                   value={String(callData.clarificationDeadline).slice(0, 10)}
                   onChange={(e) => setCallData({ ...callData, clarificationDeadline: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Closing Date</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Closing Date</label>
                 <input
                   type="date"
                   value={callData.closingDate}
                   onChange={(e) => setCallData({ ...callData, closingDate: e.target.value })}
-                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
+                  className="w-full p-2 border border-slate-300 rounded-lg font-bold dark:border-[#244157]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Closing Time (CAT)</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Closing Time (CAT)</label>
                 <input
                   type="text"
                   value={callData.closingTimeCAT}
                   onChange={(e) => setCallData({ ...callData, closingTimeCAT: e.target.value })}
                   placeholder="14:00"
-                  className="w-full p-2 border border-slate-300 rounded-lg font-mono font-bold"
+                  className="w-full p-2 border border-slate-300 rounded-lg tabular-nums font-bold dark:border-[#244157]"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Portal Visibility</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Portal Visibility</label>
                 <select
                   value={visibility}
                   onChange={(e) => setVisibility(e.target.value as any)}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 >
                   <option value="open">Open Public Tender (Public Portal)</option>
                   <option value="approved_suppliers">Approved Roster Suppliers Only</option>
@@ -385,11 +385,11 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Publication Status</label>
+                <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Publication Status</label>
                 <select
                   value={publishMode}
                   onChange={(e) => setPublishMode(e.target.value as 'open' | 'draft')}
-                  className="w-full p-2 border border-slate-300 rounded-lg"
+                  className="w-full p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                 >
                   <option value="open">Publish Open Immediately</option>
                   <option value="draft">Save as Draft (Internal Review)</option>
@@ -397,18 +397,18 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
               </div>
 
               <div className="sm:col-span-2 pt-2">
-                <label className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3 cursor-pointer">
+                <label className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3 cursor-pointer dark:bg-[#162C3D] dark:border-[#244157]">
                   <input
                     type="checkbox"
                     checked={callData.isSealed}
                     onChange={(e) => setCallData({ ...callData, isSealed: e.target.checked })}
-                    className="rounded border-slate-300 text-[#1F5F99] mt-0.5"
+                    className="rounded border-slate-300 text-[#1F5F99] mt-0.5 dark:text-[#6FAEE0] dark:border-[#244157]"
                   />
                   <div className="space-y-0.5">
-                    <span className="font-bold text-[#10212E] block">
+                    <span className="font-bold text-[#10212E] block dark:text-white">
                       Enforce Encrypted Sealed Tender Vault (Mandatory for competitive RFPs)
                     </span>
-                    <p className="text-slate-500">
+                    <p className="text-slate-500 dark:text-[#9CB4C9]">
                       Bids remain locked and cannot be decrypted by evaluators until the exact closing timestamp and opening session.
                     </p>
                   </div>
@@ -422,10 +422,10 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
         {currentStep === 3 && (
           <div className="space-y-4">
             <div>
-              <h3 className="font-heading font-bold text-base text-[#10212E]">
+              <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">
                 Step 3: Standard Document Vault Requirements
               </h3>
-              <p className="text-slate-500">
+              <p className="text-slate-500 dark:text-[#9CB4C9]">
                 Suppliers with verified documents in BidReady360 can attach them directly from their Document Vault.
               </p>
             </div>
@@ -438,7 +438,7 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
                     key={docType}
                     onClick={() => handleDocToggle(docType)}
                     className={`p-3.5 rounded-xl border cursor-pointer flex items-center justify-between transition-colors ${
-                      isSelected ? 'bg-[#EAF2FA]/50 border-[#1F5F99] text-[#10212E]' : 'bg-slate-50 border-slate-200 text-slate-500'
+                      isSelected ? 'bg-[#EAF2FA]/50 border-[#1F5F99] text-[#10212E]' : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-[#162C3D] dark:text-[#9CB4C9] dark:border-[#244157]'
                     }`}
                   >
                     <span className="font-semibold">{docType}</span>
@@ -446,7 +446,7 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
                       type="checkbox"
                       checked={isSelected}
                       readOnly
-                      className="rounded border-slate-300 text-[#1F5F99]"
+                      className="rounded border-slate-300 text-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                     />
                   </div>
                 );
@@ -458,14 +458,14 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
         {/* Step 4 */}
         {currentStep === 4 && (
           <div className="space-y-4">
-            <h3 className="font-heading font-bold text-base text-[#10212E]">Step 4: Attach Form Template & Review</h3>
+            <h3 className="font-heading font-bold text-base text-[#10212E] dark:text-white">Step 4: Attach Form Template & Review</h3>
 
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Attach Questionnaire Form Template</label>
+              <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Attach Questionnaire Form Template</label>
               <select
                 value={callData.formTemplateId}
                 onChange={(e) => setCallData({ ...callData, formTemplateId: e.target.value })}
-                className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-semibold"
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-semibold dark:border-[#244157]"
               >
                 <option value="">No supplementary questionnaire</option>
                 {formTemplates.map((t) => (
@@ -476,19 +476,19 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
               </select>
             </div>
 
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-              <span className="font-bold text-[#10212E] block">Tender Summary</span>
-              <div className="grid grid-cols-2 gap-2 text-slate-600">
-                <div>Ref: <strong className="text-slate-800">{callData.callNumber}</strong></div>
-                <div>Type: <strong className="text-slate-800">{callData.type}</strong></div>
-                <div>Status: <strong className="text-slate-800 uppercase">{publishMode}</strong></div>
-                <div>Visibility: <strong className="text-slate-800">{visibility.replace('_', ' ')}</strong></div>
-                <div>Closing: <strong className="text-slate-800">{callData.closingDate} ({callData.closingTimeCAT} CAT)</strong></div>
-                <div>Mandatory Docs: <strong className="text-slate-800">{callData.requiredDocumentTypes.length} types</strong></div>
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 dark:bg-[#162C3D] dark:border-[#244157]">
+              <span className="font-bold text-[#10212E] block dark:text-white">Tender Summary</span>
+              <div className="grid grid-cols-2 gap-2 text-slate-600 dark:text-[#D3E3F2]">
+                <div>Ref: <strong className="text-slate-800 dark:text-white">{callData.callNumber}</strong></div>
+                <div>Type: <strong className="text-slate-800 dark:text-white">{callData.type}</strong></div>
+                <div>Status: <strong className="text-slate-800 uppercase dark:text-white">{publishMode}</strong></div>
+                <div>Visibility: <strong className="text-slate-800 dark:text-white">{visibility.replace('_', ' ')}</strong></div>
+                <div>Closing: <strong className="text-slate-800 dark:text-white">{callData.closingDate} ({callData.closingTimeCAT} CAT)</strong></div>
+                <div>Mandatory Docs: <strong className="text-slate-800 dark:text-white">{callData.requiredDocumentTypes.length} types</strong></div>
               </div>
             </div>
             {errorMsg && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-start gap-2.5 text-xs">
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-start gap-2.5 text-xs dark:bg-[#C2412D]/20 dark:text-[#FCA5A5] dark:border-[#C2412D]/40">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{errorMsg}</span>
               </div>
@@ -497,11 +497,11 @@ export const BuyerCreateCallWizard: React.FC<BuyerCreateCallWizardProps> = ({ on
         )}
 
         {/* Buttons */}
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-[#244157]">
           {currentStep > 1 ? (
             <button
               onClick={() => setCurrentStep(currentStep - 1)}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl flex items-center gap-1.5"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl flex items-center gap-1.5 dark:bg-[#162C3D] dark:text-[#D3E3F2]"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Previous</span>

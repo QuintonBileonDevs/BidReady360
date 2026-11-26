@@ -33,7 +33,7 @@ export const InactivityWarningModal: React.FC<InactivityWarningModalProps> = ({
       aria-modal="true"
       aria-labelledby="inactivity-warning-title"
     >
-      <div className="relative w-full max-w-md bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[12px] shadow-2xl overflow-hidden p-6 sm:p-7 text-center">
+      <div className="relative w-full max-w-md bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[12px] shadow-2xl overflow-hidden p-6 sm:p-7 text-center">
         {/* Warning Icon Badge */}
         <div
           className={`w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-4 transition-colors ${
@@ -56,14 +56,14 @@ export const InactivityWarningModal: React.FC<InactivityWarningModalProps> = ({
         >
           Session Inactivity Warning
         </h2>
-        <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-2 leading-relaxed">
+        <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] mt-2 leading-relaxed">
           You have been inactive for a while. For your security and to protect sensitive procurement data, your session will automatically end in:
         </p>
 
         {/* Big Countdown Timer */}
-        <div className="my-5 p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="my-5 p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[10px] border border-[#D5E0EA] dark:border-[#244157]">
           <div
-            className={`text-[36px] font-mono font-bold tracking-wider tabular-nums ${
+            className={`text-[36px] font-bold tracking-wider tabular-nums ${
               isUrgent
                 ? 'text-[#DC2626] dark:text-[#F87171] animate-pulse'
                 : 'text-[#1F5F99] dark:text-[#6FAEE0]'
@@ -71,12 +71,12 @@ export const InactivityWarningModal: React.FC<InactivityWarningModalProps> = ({
           >
             {formattedTime}
           </div>
-          <div className="text-[12px] uppercase font-semibold tracking-wider text-[#6B7A87] mt-0.5">
+          <div className="text-[12px] uppercase font-semibold tracking-wider text-[#6B7A87] mt-0.5 dark:text-[#9CB4C9]">
             Minutes : Seconds
           </div>
 
           {/* Progress bar */}
-          <div className="w-full bg-[#E2E8F0] dark:bg-[#1E364A] h-2 rounded-full mt-3 overflow-hidden">
+          <div className="w-full bg-[#E2E8F0] dark:bg-[#244157] h-2 rounded-full mt-3 overflow-hidden">
             <div
               className={`h-full transition-all duration-1000 rounded-full ${
                 isUrgent ? 'bg-[#DC2626]' : 'bg-[#1F5F99]'
@@ -103,7 +103,7 @@ export const InactivityWarningModal: React.FC<InactivityWarningModalProps> = ({
             type="button"
             variant="ghost"
             size="md"
-            className="w-full flex items-center justify-center gap-2 text-[#6B7A87] hover:text-[#DC2626]"
+            className="w-full flex items-center justify-center gap-2 text-[#6B7A87] hover:text-[#DC2626] dark:text-[#9CB4C9]"
             onClick={onSignOut}
             leftIcon={<LogOut className="w-4 h-4" />}
           >

@@ -44,6 +44,7 @@ import { BuyerBilling } from './BuyerBilling';
 import { BuyerAuditLog } from './BuyerAuditLog';
 import { BuyerSettings } from './BuyerSettings';
 import { NotificationDrawer } from '../common/NotificationDrawer';
+import { ThemeSwitcher } from '../common/ThemeSwitcher';
 
 export const BuyerLayout: React.FC = () => {
   const {
@@ -113,7 +114,7 @@ export const BuyerLayout: React.FC = () => {
       .join('') || 'PO';
 
   const unreadNotifs = notifications.filter(
-    (n) => !n.read && n.recipientRole === 'Buyer'
+    (n) => !n.read && !n.archived && n.recipientRole === 'Buyer'
   ).length;
 
   const navGroups = [
@@ -238,10 +239,10 @@ export const BuyerLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7FAFD] dark:bg-[#0D1A25] text-[#10212E] dark:text-white flex flex-col">
+    <div className="min-h-screen bg-[#F7FAFD] dark:bg-[#10212E] text-[#10212E] dark:text-white flex flex-col">
       {/* 1. Unified Buyer Workspace Header */}
       <header
-        className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] h-16 flex items-center px-4 sm:px-6 justify-between gap-6 border-t-[3px]"
+        className="sticky top-0 z-40 bg-white dark:bg-[#162C3D] border-b border-[#D5E0EA] dark:border-[#244157] h-16 flex items-center px-4 sm:px-6 justify-between gap-6 border-t-[3px]"
         style={{ borderTopColor: brandColor }}
       >
         {/* Left: Brand Wordmark + Organization Breadcrumb */}
@@ -249,7 +250,7 @@ export const BuyerLayout: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
-            className="md:hidden min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] cursor-pointer shrink-0"
+            className="md:hidden min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] cursor-pointer shrink-0"
             aria-label={isMobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
             {isMobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -266,14 +267,14 @@ export const BuyerLayout: React.FC = () => {
 
           <span
             aria-hidden="true"
-            className="hidden sm:block h-5 w-px bg-[#D5E0EA] dark:bg-[#1E364A] shrink-0"
+            className="hidden sm:block h-5 w-px bg-[#D5E0EA] dark:bg-[#244157] shrink-0"
           />
 
           <nav aria-label="Workspace breadcrumb" className="hidden sm:flex items-center gap-2.5 text-[13px] min-w-0">
             <button
               type="button"
               onClick={() => setCurrentTab('overview')}
-              className="flex items-center gap-2 text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E] dark:hover:text-white transition-colors min-w-0 cursor-pointer"
+              className="flex items-center gap-2 text-[#43525F] dark:text-[#D3E3F2] hover:text-[#10212E] dark:hover:text-white transition-colors min-w-0 cursor-pointer"
               title={`${orgDisplayName} — ${brandSubtext}`}
             >
               <span
@@ -293,12 +294,13 @@ export const BuyerLayout: React.FC = () => {
           </nav>
         </div>
 
-        {/* Right: Notifications & Buyer User Menu */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        {/* Right: Theme Switcher, Notifications & Buyer User Menu */}
+        <div className="flex items-center gap-2 shrink-0">
+          <ThemeSwitcher variant="compact" />
           <button
             type="button"
             onClick={() => setIsNotifOpen(true)}
-            className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer shrink-0"
+            className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#D3E3F2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#EAF2FA] dark:hover:bg-[#1C364B] transition-colors cursor-pointer shrink-0"
             aria-label={unreadNotifs > 0 ? `Open notifications (${unreadNotifs} unread)` : 'Open notifications'}
           >
             <Bell className="w-4 h-4" strokeWidth={1.75} />
@@ -319,7 +321,7 @@ export const BuyerLayout: React.FC = () => {
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               aria-expanded={isUserMenuOpen}
               aria-haspopup="menu"
-              className="min-h-[40px] flex items-center gap-2.5 pl-2 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5F99]"
+              className="min-h-[40px] flex items-center gap-2.5 pl-2 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F5F99]"
             >
               <div
                 className="w-8 h-8 rounded-[6px] text-white flex items-center justify-center font-semibold text-[13px] shrink-0"
@@ -336,7 +338,7 @@ export const BuyerLayout: React.FC = () => {
                 </span>
               </div>
               <ChevronDown
-                className={`w-3.5 h-3.5 text-[#6B7A87] transition-transform duration-150 shrink-0 ${
+                className={`w-3.5 h-3.5 text-[#6B7A87] transition-transform duration-150 shrink-0 dark:text-[#9CB4C9] ${
                   isUserMenuOpen ? 'rotate-180' : ''
                 }`}
               />
@@ -345,13 +347,13 @@ export const BuyerLayout: React.FC = () => {
             {isUserMenuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] p-1.5 z-50 text-[13px] space-y-1 shadow-sm"
+                className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[10px] p-1.5 z-50 text-[13px] space-y-1 shadow-elevated"
               >
-                <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#244157]">
                   <div className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
                     {buyerName}
                   </div>
-                  <div className="text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] truncate">
+                  <div className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9] truncate">
                     {buyerEmail ? `${buyerEmail} · ${buyerSubRole}` : buyerSubRole}
                   </div>
                 </div>
@@ -362,7 +364,7 @@ export const BuyerLayout: React.FC = () => {
                     setCurrentTab('team');
                     setIsUserMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                 >
                   Team profile &amp; roles
                 </button>
@@ -373,10 +375,16 @@ export const BuyerLayout: React.FC = () => {
                     setCurrentTab('settings');
                     setIsUserMenuOpen(false);
                   }}
-                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                 >
                   Procurement settings
                 </button>
+                <div className="px-2.5 py-2 border-y border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
+                  <span className="text-[11px] font-medium text-[#6B7A87] dark:text-[#9CB4C9] block">
+                    Appearance
+                  </span>
+                  <ThemeSwitcher variant="segmented" className="w-full justify-between" />
+                </div>
                 <button
                   type="button"
                   role="menuitem"
@@ -404,7 +412,7 @@ export const BuyerLayout: React.FC = () => {
 
         {/* Left Sidebar */}
         <aside
-          className={`w-64 bg-white dark:bg-[#10212E] border-r border-[#D5E0EA] dark:border-[#1E364A] p-4 flex flex-col justify-between shrink-0 overflow-y-auto ${
+          className={`w-64 bg-white dark:bg-[#162C3D] border-r border-[#D5E0EA] dark:border-[#244157] p-4 flex flex-col justify-between shrink-0 overflow-y-auto ${
             isMobileNavOpen ? 'flex fixed inset-y-0 left-0 z-50 pt-20' : 'hidden md:flex'
           }`}
         >
@@ -428,7 +436,7 @@ export const BuyerLayout: React.FC = () => {
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                         isActive
                           ? 'font-semibold'
-                          : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] hover:text-[#10212E] dark:hover:text-white'
+                          : 'text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] hover:text-[#10212E] dark:hover:text-white'
                       }`}
                       style={
                         isActive
@@ -449,7 +457,7 @@ export const BuyerLayout: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-4 mt-6 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-start gap-2.5 text-[12px] text-[#6B7A87] dark:text-[#8DA2B5]">
+          <div className="pt-4 mt-6 border-t border-[#D5E0EA] dark:border-[#244157] flex items-start gap-2.5 text-[12px] text-[#6B7A87] dark:text-[#8DA2B5]">
             <div
               className="w-8 h-8 rounded-[6px] text-white font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5"
               style={{ backgroundColor: brandColor }}
@@ -460,7 +468,7 @@ export const BuyerLayout: React.FC = () => {
               <div className="truncate font-semibold text-[#10212E] dark:text-white">{orgDisplayName}</div>
               <div className="text-[11px] truncate">{brandSubtext}</div>
               {brandDomain && (
-                <div className="text-[10px] font-mono truncate opacity-80">{brandDomain}</div>
+                <div className="text-[10px] tabular-nums truncate opacity-80">{brandDomain}</div>
               )}
             </div>
           </div>
@@ -470,7 +478,7 @@ export const BuyerLayout: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-6 sm:p-10">
           <div className="max-w-6xl mx-auto space-y-4">
             {buyerSubRole === 'Auditor' && (
-              <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3E] border border-[#C9D9E8] dark:border-[#1E364A] text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-between gap-3">
+              <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3D] border border-[#C9D9E8] dark:border-[#244157] text-[13px] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <ScrollText className="w-4 h-4 shrink-0" />
                   <span>

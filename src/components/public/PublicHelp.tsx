@@ -137,7 +137,7 @@ export const PublicHelp: React.FC = () => {
   return (
     <div className="space-y-10 sm:space-y-12 py-4">
       {/* Header */}
-      <div className="relative border-b border-[#D5E0EA] dark:border-[#1E364A] pb-10 overflow-hidden">
+      <div className="relative border-b border-[#D5E0EA] dark:border-[#244157] pb-10 overflow-hidden">
         <RingMotif size={360} dotAngle={60} opacity={0.3} position="top-right" />
 
         <div className="max-w-2xl space-y-4 relative z-10">
@@ -149,7 +149,7 @@ export const PublicHelp: React.FC = () => {
             Frequently Asked Questions
           </h1>
 
-          <p className="text-base text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+          <p className="text-base text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
             Find clear answers about the Supplier Passport, sealed-bid cryptographic protocols, buyer workspaces, and Botswana public procurement compliance.
           </p>
 
@@ -175,7 +175,7 @@ export const PublicHelp: React.FC = () => {
             className={`px-3 py-1.5 rounded-[6px] text-xs font-semibold whitespace-nowrap transition-colors ${
               activeCategory === cat.id
                 ? 'bg-[#1F5F99] text-white shadow-subtle'
-                : 'bg-[#F7FAFD] dark:bg-[#132635] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3E] border border-[#D5E0EA] dark:border-[#1E364A]'
+                : 'bg-[#F7FAFD] dark:bg-[#1C364B] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] border border-[#D5E0EA] dark:border-[#244157]'
             }`}
           >
             {cat.label}
@@ -188,7 +188,7 @@ export const PublicHelp: React.FC = () => {
         {filteredItems.length > 0 ? (
           <Accordion items={filteredItems} allowMultiple />
         ) : (
-          <div className="p-8 text-center text-sm text-[#6B7A87] border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px]">
+          <div className="p-8 text-center text-sm text-[#6B7A87] border border-dashed border-[#D5E0EA] dark:border-[#244157] rounded-[10px] dark:text-[#9CB4C9]">
             No answers matched your search query "{searchQuery}". Try a different keyword.
           </div>
         )}
@@ -200,7 +200,7 @@ export const PublicHelp: React.FC = () => {
           <h4 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             Need statutory guidance on PPRA regulations?
           </h4>
-          <p className="text-xs text-[#6B7A87]">
+          <p className="text-xs text-[#6B7A87] dark:text-[#9CB4C9]">
             Review official contractor grading thresholds, commodity subcodes, and dispute resolution procedures.
           </p>
         </div>

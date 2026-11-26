@@ -53,12 +53,12 @@ export const Modal: React.FC<ModalProps> = ({
       />
 
       <div
-        className={`relative w-full ${maxWidthStyles[maxWidth]} bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] shadow-elevated overflow-hidden z-10 max-h-[90vh] flex flex-col ${className}`}
+        className={`relative w-full ${maxWidthStyles[maxWidth]} bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[10px] shadow-elevated overflow-hidden z-10 max-h-[90vh] flex flex-col ${className}`}
         role="dialog"
         aria-modal="true"
       >
         {(title || description) && (
-          <div className="px-6 pt-6 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A] flex items-start justify-between gap-4">
+          <div className="px-6 pt-6 pb-4 border-b border-[#D5E0EA] dark:border-[#244157] flex items-start justify-between gap-4">
             <div className="space-y-1 pr-6">
               {title && (
                 <h3 className="text-lg font-heading font-semibold text-[#10212E] dark:text-white">
@@ -66,7 +66,7 @@ export const Modal: React.FC<ModalProps> = ({
                 </h3>
               )}
               {description && (
-                <p className="text-xs text-[#6B7A87] leading-relaxed">
+                <p className="text-xs text-[#6B7A87] dark:text-[#9CB4C9] leading-relaxed">
                   {description}
                 </p>
               )}
@@ -75,7 +75,7 @@ export const Modal: React.FC<ModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-[6px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] transition-colors"
+              className="p-1.5 rounded-[6px] text-[#6B7A87] dark:text-[#9CB4C9] hover:text-[#10212E] dark:hover:text-white hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] transition-colors cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" strokeWidth={1.5} />

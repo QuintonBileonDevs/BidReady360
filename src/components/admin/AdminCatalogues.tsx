@@ -173,12 +173,12 @@ export const AdminCatalogues: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Master catalogues &amp; reference data
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Manage standardized procurement categories and mandatory statutory compliance document types stored in PostgreSQL.
           </p>
         </div>
@@ -186,7 +186,7 @@ export const AdminCatalogues: React.FC = () => {
           type="button"
           onClick={loadCatalogues}
           disabled={isLoading}
-          className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] bg-white dark:bg-[#132635] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+          className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] bg-white dark:bg-[#1C364B] hover:bg-[#F7FAFD] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto dark:hover:bg-[#162C3D]"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
@@ -201,27 +201,27 @@ export const AdminCatalogues: React.FC = () => {
       )}
 
       {feedback && (
-        <div className="p-3.5 rounded-[8px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2">
+        <div className="p-3.5 rounded-[8px] bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[14px] flex items-center gap-2 dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <CheckCircle2 className="w-4 h-4 text-[#2F8F5B] shrink-0" />
           <span>{feedback}</span>
         </div>
       )}
 
       {isLoading ? (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-12 flex items-center justify-center gap-2 text-[#6B7A87]">
-          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-12 flex items-center justify-center gap-2 text-[#6B7A87] dark:text-[#9CB4C9]">
+          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
           <span>Loading reference catalogues...</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Category Tree Card */}
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                   Procurement categories
                 </h2>
-                <span className="text-[12px] text-[#6B7A87]">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {topCategories.length} top-level · {categories.length} total
                 </span>
               </div>
@@ -236,7 +236,7 @@ export const AdminCatalogues: React.FC = () => {
             </div>
 
             {topCategories.length === 0 ? (
-              <div className="py-8 text-center text-[14px] text-[#6B7A87]">
+              <div className="py-8 text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 No procurement categories configured yet.
               </div>
             ) : (
@@ -247,7 +247,7 @@ export const AdminCatalogues: React.FC = () => {
                   return (
                     <div
                       key={cat.id}
-                      className="border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] overflow-hidden"
+                      className="border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] overflow-hidden"
                     >
                       <div className="p-3 bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-between gap-2">
                         <button
@@ -256,13 +256,13 @@ export const AdminCatalogues: React.FC = () => {
                           className="flex items-center gap-2 font-semibold text-[#10212E] dark:text-white text-left cursor-pointer min-w-0"
                         >
                           {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-[#6B7A87] shrink-0" />
+                            <ChevronDown className="w-4 h-4 text-[#6B7A87] shrink-0 dark:text-[#9CB4C9]" />
                           ) : (
-                            <ChevronRight className="w-4 h-4 text-[#6B7A87] shrink-0" />
+                            <ChevronRight className="w-4 h-4 text-[#6B7A87] shrink-0 dark:text-[#9CB4C9]" />
                           )}
-                          <Folder className="w-4 h-4 text-[#1F5F99] shrink-0" />
+                          <Folder className="w-4 h-4 text-[#1F5F99] shrink-0 dark:text-[#6FAEE0]" />
                           <span className="truncate">{cat.name}</span>
-                          <span className="text-[11px] font-normal text-[#6B7A87] shrink-0">({cat.code})</span>
+                          <span className="text-[11px] font-normal text-[#6B7A87] shrink-0 dark:text-[#9CB4C9]">({cat.code})</span>
                         </button>
                         <button
                           type="button"
@@ -271,7 +271,7 @@ export const AdminCatalogues: React.FC = () => {
                           className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium cursor-pointer shrink-0 ${
                             cat.isActive
                               ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                              : 'bg-slate-200 text-slate-600'
+                              : 'bg-slate-200 text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2]'
                           }`}
                         >
                           {cat.isActive ? 'Active' : 'Inactive'}
@@ -279,19 +279,19 @@ export const AdminCatalogues: React.FC = () => {
                       </div>
 
                       {isExpanded && (
-                        <div className="p-3 space-y-2 bg-white dark:bg-[#132635] border-t border-[#D5E0EA] dark:border-[#1E364A]">
+                        <div className="p-3 space-y-2 bg-white dark:bg-[#1C364B] border-t border-[#D5E0EA] dark:border-[#244157]">
                           {children.length === 0 ? (
-                            <div className="pl-6 text-[12px] text-[#6B7A87]">No subcategories</div>
+                            <div className="pl-6 text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">No subcategories</div>
                           ) : (
                             children.map((sub) => (
                               <div
                                 key={sub.id}
-                                className="flex items-center justify-between gap-2 pl-4 text-[13px] text-[#43525F] dark:text-[#B2C3D2]"
+                                className="flex items-center justify-between gap-2 pl-4 text-[13px] text-[#43525F] dark:text-[#D3E3F2]"
                               >
                                 <div className="flex items-center gap-2 min-w-0">
                                   <span className="w-1.5 h-1.5 rounded-full bg-[#1F5F99] shrink-0" />
                                   <span className="truncate">{sub.name}</span>
-                                  <span className="text-[11px] text-[#6B7A87]">({sub.code})</span>
+                                  <span className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">({sub.code})</span>
                                 </div>
                                 <button
                                   type="button"
@@ -300,7 +300,7 @@ export const AdminCatalogues: React.FC = () => {
                                   className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium cursor-pointer shrink-0 ${
                                     sub.isActive
                                       ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                                      : 'bg-slate-200 text-slate-600'
+                                      : 'bg-slate-200 text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2]'
                                   }`}
                                 >
                                   {sub.isActive ? 'Active' : 'Inactive'}
@@ -318,13 +318,13 @@ export const AdminCatalogues: React.FC = () => {
           </div>
 
           {/* Compliance Document Types Card */}
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div>
                 <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                   Compliance document types
                 </h2>
-                <span className="text-[12px] text-[#6B7A87]">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {documentTypes.length} configured document types
                 </span>
               </div>
@@ -339,11 +339,11 @@ export const AdminCatalogues: React.FC = () => {
             </div>
 
             {documentTypes.length === 0 ? (
-              <div className="py-8 text-center text-[14px] text-[#6B7A87]">
+              <div className="py-8 text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 No compliance document types configured yet.
               </div>
             ) : (
-              <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[14px]">
+              <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[14px]">
                 {documentTypes.map((dt) => (
                   <div key={dt.id} className="py-3.5 space-y-1.5">
                     <div className="flex items-start justify-between gap-3">
@@ -351,7 +351,7 @@ export const AdminCatalogues: React.FC = () => {
                         <span className="font-semibold text-[#10212E] dark:text-white">
                           {dt.name}
                         </span>{' '}
-                        <span className="text-[12px] text-[#6B7A87]">({dt.code})</span>
+                        <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">({dt.code})</span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
@@ -361,7 +361,7 @@ export const AdminCatalogues: React.FC = () => {
                           className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium cursor-pointer ${
                             dt.isMandatoryDefault
                               ? 'bg-[#EAF2FA] text-[#1F5F99]'
-                              : 'bg-slate-100 text-[#6B7A87]'
+                              : 'bg-slate-100 text-[#6B7A87] dark:bg-[#162C3D] dark:text-[#9CB4C9]'
                           }`}
                         >
                           {dt.isMandatoryDefault ? 'Mandatory' : 'Optional'}
@@ -373,14 +373,14 @@ export const AdminCatalogues: React.FC = () => {
                           className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium cursor-pointer ${
                             dt.isActive
                               ? 'bg-[#ECFDF5] text-[#2F8F5B]'
-                              : 'bg-slate-200 text-slate-600'
+                              : 'bg-slate-200 text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2]'
                           }`}
                         >
                           {dt.isActive ? 'Active' : 'Inactive'}
                         </button>
                       </div>
                     </div>
-                    <p className="text-[13px] text-[#6B7A87]">
+                    <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       {dt.description || 'Statutory compliance document'}{' '}
                       {dt.issuingAuthority ? `· Issuer: ${dt.issuingAuthority}` : ''}
                       {dt.requiresExpiry ? ' · Expiry required' : ''}
@@ -398,7 +398,7 @@ export const AdminCatalogues: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
           <form
             onSubmit={handleCreateCategory}
-            className="w-full max-w-md bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4 text-[14px]"
+            className="w-full max-w-md bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4 text-[14px]"
           >
             <h3 className="font-heading font-semibold text-[18px]">Add procurement category</h3>
             <div className="space-y-1">
@@ -409,7 +409,7 @@ export const AdminCatalogues: React.FC = () => {
                 placeholder="e.g. ICT-CLOUD"
                 value={catCode}
                 onChange={(e) => setCatCode(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               />
             </div>
             <div className="space-y-1">
@@ -420,7 +420,7 @@ export const AdminCatalogues: React.FC = () => {
                 placeholder="e.g. Cloud & Cybersecurity Services"
                 value={catName}
                 onChange={(e) => setCatName(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               />
             </div>
             <div className="space-y-1">
@@ -428,7 +428,7 @@ export const AdminCatalogues: React.FC = () => {
               <select
                 value={catParentId}
                 onChange={(e) => setCatParentId(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               >
                 <option value="">None (Top-level group)</option>
                 {topCategories.map((c) => (
@@ -444,11 +444,11 @@ export const AdminCatalogues: React.FC = () => {
                 rows={2}
                 value={catDesc}
                 onChange={(e) => setCatDesc(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setIsCatModalOpen(false)} className="px-4 py-2 text-[#43525F] cursor-pointer">
+              <button type="button" onClick={() => setIsCatModalOpen(false)} className="px-4 py-2 text-[#43525F] cursor-pointer dark:text-[#D3E3F2]">
                 Cancel
               </button>
               <button
@@ -468,7 +468,7 @@ export const AdminCatalogues: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
           <form
             onSubmit={handleCreateDocType}
-            className="w-full max-w-md bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4 text-[14px]"
+            className="w-full max-w-md bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4 text-[14px]"
           >
             <h3 className="font-heading font-semibold text-[18px]">Add compliance document type</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -480,7 +480,7 @@ export const AdminCatalogues: React.FC = () => {
                   placeholder="e.g. PPRA_CERT"
                   value={docCode}
                   onChange={(e) => setDocCode(e.target.value)}
-                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
                 />
               </div>
               <div className="space-y-1">
@@ -490,7 +490,7 @@ export const AdminCatalogues: React.FC = () => {
                   placeholder="e.g. PPRA / BURS"
                   value={docAuthority}
                   onChange={(e) => setDocAuthority(e.target.value)}
-                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
                 />
               </div>
             </div>
@@ -502,7 +502,7 @@ export const AdminCatalogues: React.FC = () => {
                 placeholder="e.g. PPRA Registration Certificate"
                 value={docName}
                 onChange={(e) => setDocName(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               />
             </div>
             <div className="space-y-1">
@@ -511,7 +511,7 @@ export const AdminCatalogues: React.FC = () => {
                 rows={2}
                 value={docDesc}
                 onChange={(e) => setDocDesc(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E]"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E]"
               />
             </div>
             <div className="flex flex-col gap-2 text-[13px]">
@@ -533,7 +533,7 @@ export const AdminCatalogues: React.FC = () => {
               </label>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setIsDocModalOpen(false)} className="px-4 py-2 text-[#43525F] cursor-pointer">
+              <button type="button" onClick={() => setIsDocModalOpen(false)} className="px-4 py-2 text-[#43525F] cursor-pointer dark:text-[#D3E3F2]">
                 Cancel
               </button>
               <button

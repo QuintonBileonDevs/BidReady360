@@ -1454,6 +1454,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   priority              VARCHAR(20) NOT NULL DEFAULT 'info'
                         CHECK (priority IN ('urgent', 'info', 'success', 'warning')),
   read_at               TIMESTAMPTZ,
+  is_starred            BOOLEAN NOT NULL DEFAULT FALSE,
+  archived_at           TIMESTAMPTZ,
+  deleted_at            TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

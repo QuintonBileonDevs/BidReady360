@@ -473,6 +473,15 @@ export interface AuditEvent {
   ipAddress?: string;
 }
 
+export type NotificationBulkAction =
+  | 'read'
+  | 'unread'
+  | 'star'
+  | 'unstar'
+  | 'archive'
+  | 'unarchive'
+  | 'delete';
+
 export interface NotificationItem {
   id: string;
   recipientRole: 'Supplier' | 'Buyer';
@@ -482,6 +491,9 @@ export interface NotificationItem {
   message: string;
   timestamp: string;
   read: boolean;
+  starred?: boolean;
+  archived?: boolean;
+  archivedAt?: string | null;
   type: 'urgent' | 'info' | 'success' | 'warning';
   actionLink?: string;
   data?: Record<string, any> | null;

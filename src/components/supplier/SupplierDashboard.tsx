@@ -142,21 +142,21 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
       {/* 1. Onboarding Checklist Panel (shown until completeness is 100%) */}
       {!completeness.isComplete && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 shadow-subtle space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 shadow-subtle space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <div className="space-y-1">
               <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#162C3E] dark:text-[#6FAEE0] text-[12px] font-semibold uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#162C3D] dark:text-[#6FAEE0] text-[12px] font-semibold uppercase tracking-wider">
                   Finish setting up
                 </span>
-                <span className="text-[14px] text-[#6B7A87]">
+                <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {completeness.completedCount} of {completeness.totalCount} items completed
                 </span>
               </div>
               <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                 Complete your profile to start applying
               </h2>
-              <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+              <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
                 Botswana procuring entities require statutory standing verification before you can submit electronic bids.
               </p>
             </div>
@@ -173,7 +173,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsChecklistExpanded(!isChecklistExpanded)}
-                className="p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#6B7A87] hover:text-[#10212E] transition-colors cursor-pointer"
+                className="p-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#6B7A87] hover:text-[#10212E] transition-colors cursor-pointer dark:text-[#9CB4C9] dark:hover:text-white"
                 aria-label="Toggle checklist"
               >
                 {isChecklistExpanded ? (
@@ -188,12 +188,12 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           {/* Progress bar */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[13px]">
-              <span className="text-[#6B7A87]">Completeness progress</span>
+              <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Completeness progress</span>
               <span data-bind="completeness.score" className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
                 {completeness.score}%
               </span>
             </div>
-            <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3E] rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3D] rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#1F5F99] transition-all duration-300 rounded-full"
                 style={{ width: `${completeness.score}%` }}
@@ -205,9 +205,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           {isChecklistExpanded && (
             <div className="pt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Company (10 items) */}
-              <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#1E364A] text-[13px] font-semibold text-[#10212E] dark:text-white">
-                  <Building2 className="w-4 h-4 text-[#1F5F99]" />
+              <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
+                <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#244157] text-[13px] font-semibold text-[#10212E] dark:text-white">
+                  <Building2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>Company Details (10)</span>
                 </div>
                 <div className="space-y-1.5 text-[13px]">
@@ -218,7 +218,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                         key={item.id}
                         type="button"
                         onClick={onNavigateToProfile}
-                        className="w-full flex items-center justify-between text-left py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#132635] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between text-left py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#1C364B] transition-colors cursor-pointer"
                       >
                         <span
                           className={
@@ -240,9 +240,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               </div>
 
               {/* People (1 item) */}
-              <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#1E364A] text-[13px] font-semibold text-[#10212E] dark:text-white">
-                  <Users className="w-4 h-4 text-[#1F5F99]" />
+              <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
+                <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#244157] text-[13px] font-semibold text-[#10212E] dark:text-white">
+                  <Users className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>People & Directors (1)</span>
                 </div>
                 <div className="space-y-1.5 text-[13px]">
@@ -253,7 +253,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                         key={item.id}
                         type="button"
                         onClick={onNavigateToProfile}
-                        className="w-full flex items-center justify-between text-left py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#132635] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between text-left py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#1C364B] transition-colors cursor-pointer"
                       >
                         <div className="pr-2">
                           <span
@@ -265,7 +265,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                           >
                             {item.shortLabel}
                           </span>
-                          <span className="text-[11px] text-[#6B7A87]">
+                          <span className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">
                             Ownership must total 100%
                           </span>
                         </div>
@@ -280,9 +280,9 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               </div>
 
               {/* Documents (4 items) */}
-              <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
-                <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#1E364A] text-[13px] font-semibold text-[#10212E] dark:text-white">
-                  <ShieldCheck className="w-4 h-4 text-[#1F5F99]" />
+              <div className="p-3.5 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
+                <div className="flex items-center gap-2 pb-1.5 border-b border-[#D5E0EA] dark:border-[#244157] text-[13px] font-semibold text-[#10212E] dark:text-white">
+                  <ShieldCheck className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>
                     Statutory Documents ({completeness.items.filter((item) => item.category === 'Documents').length})
                   </span>
@@ -295,7 +295,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                         key={item.id}
                         type="button"
                         onClick={onNavigateToVault}
-                        className="w-full flex items-center justify-between text-left py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#132635] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between text-left py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#1C364B] transition-colors cursor-pointer"
                       >
                         <span
                           className={
@@ -321,25 +321,25 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
       )}
 
       {/* 2. Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 data-bind="supplier.name" className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
               {supplier.legalName || 'Supplier Passport'}
             </h1>
             {completeness.isComplete ? (
-              <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1">
+              <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1 dark:bg-[#2F8F5B]/20">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Verified profile</span>
               </span>
             ) : (
-              <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1">
+              <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1 dark:bg-[#E8A33D]/20 dark:text-[#FCD34D]">
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>Incomplete profile ({completeness.score}%)</span>
               </span>
             )}
           </div>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             CIPA: {supplier.cipaNumber || 'Not recorded'} · Categories:{' '}
             {supplierCategories.length > 0
               ? supplierCategories.join(', ')
@@ -351,7 +351,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           <button
             type="button"
             onClick={onNavigateToVault}
-            className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#132635] rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer"
+            className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] rounded-[6px] text-[15px] font-medium transition-colors cursor-pointer"
           >
             Document vault ({documents.length})
           </button>
@@ -367,7 +367,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
       {/* 3. Compliance Alert (Shows ONLY when an uploaded document is expired or expiring soon) */}
       {activeAlertDoc && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] border-l-4 border-l-[#C2412D] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] border-l-4 border-l-[#C2412D] p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
             <div className="text-[#C2412D] shrink-0 mt-0.5">
               <AlertTriangle className="w-5 h-5" strokeWidth={1.5} />
@@ -376,7 +376,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
                 {activeAlertDoc.documentType} {activeAlertDoc.status.toLowerCase()}
               </h2>
-              <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+              <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
                 {activeAlertDoc.status === 'Expired'
                   ? `This document expired on ${activeAlertDoc.expiryDate || 'recently'}. Upload an active replacement to maintain verified procurement standing.`
                   : `This document will expire on ${activeAlertDoc.expiryDate}. Please prepare a renewal certificate.`}
@@ -399,13 +399,13 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
       {/* 4. Summary Row (Three equal cards reading real memory state) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
         {/* Card 1: Profile completeness */}
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
                 Profile completeness
               </h2>
-              <span className="text-[13px] text-[#6B7A87]">
+              <span className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 {completeness.completedCount}/15 items
               </span>
             </div>
@@ -414,7 +414,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <div data-bind="completeness.score" className="font-heading font-semibold text-[32px] text-[#10212E] dark:text-white leading-none tabular-nums">
                 {completeness.score}%
               </div>
-              <div className="h-1.5 w-full bg-[#EAF2FA] dark:bg-[#162C3E] rounded-full overflow-hidden">
+              <div className="h-1.5 w-full bg-[#EAF2FA] dark:bg-[#162C3D] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#1F5F99] rounded-full transition-all duration-300"
                   style={{ width: `${completeness.score}%` }}
@@ -431,22 +431,22 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#6B7A87] block">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#6B7A87] block dark:text-[#9CB4C9]">
                     What's missing ({completeness.missingItems.length}):
                   </span>
                   {completeness.missingItems.slice(0, 3).map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between text-[13px] text-[#43525F] dark:text-[#B2C3D2]"
+                      className="flex items-center justify-between text-[13px] text-[#43525F] dark:text-[#D3E3F2]"
                     >
                       <span className="truncate max-w-[190px]">{item.label}</span>
-                      <span className="text-[#D97706] text-[12px] font-medium shrink-0">
+                      <span className="text-[#D97706] text-[12px] font-medium shrink-0 dark:text-[#FCD34D]">
                         Required
                       </span>
                     </div>
                   ))}
                   {completeness.missingItems.length > 3 && (
-                    <div className="text-[12px] text-[#6B7A87] pt-0.5">
+                    <div className="text-[12px] text-[#6B7A87] pt-0.5 dark:text-[#9CB4C9]">
                       + {completeness.missingItems.length - 3} more item(s) to complete
                     </div>
                   )}
@@ -455,7 +455,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             </div>
           </div>
 
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-6">
             <button
               type="button"
               onClick={onNavigateToProfile}
@@ -468,13 +468,13 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
         </div>
 
         {/* Card 2: Applications (Real State with empty state) */}
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
                 Applications
               </h2>
-              <span data-bind="applications.count" className="text-[13px] text-[#6B7A87]">
+              <span data-bind="applications.count" className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Total: {applications.length}
               </span>
             </div>
@@ -484,21 +484,21 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <p className="text-[15px] font-medium text-[#10212E] dark:text-white">
                   No applications yet
                 </p>
-                <p className="text-[13px] text-[#6B7A87] leading-relaxed">
+                <p className="text-[13px] text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
                   You haven't submitted any electronic tender applications or bids yet.
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[15px]">
+              <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[15px]">
                 <div className="py-2 flex items-center justify-between">
-                  <span className="text-[#43525F] dark:text-[#B2C3D2]">Under review</span>
+                  <span className="text-[#43525F] dark:text-[#D3E3F2]">Under review</span>
                   <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {underReviewCount}
                   </span>
                 </div>
 
                 <div className="py-2 flex items-center justify-between">
-                  <span className="text-[#43525F] dark:text-[#B2C3D2]">Approved</span>
+                  <span className="text-[#43525F] dark:text-[#D3E3F2]">Approved</span>
                   <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {approvedCount}
                   </span>
@@ -507,7 +507,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <div className="py-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#E8A33D]" />
-                    <span className="text-[#43525F] dark:text-[#B2C3D2]">Action required</span>
+                    <span className="text-[#43525F] dark:text-[#D3E3F2]">Action required</span>
                   </div>
                   <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {actionRequiredCount}
@@ -515,7 +515,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 </div>
 
                 <div className="py-2 flex items-center justify-between">
-                  <span className="text-[#43525F] dark:text-[#B2C3D2]">Shared with</span>
+                  <span className="text-[#43525F] dark:text-[#D3E3F2]">Shared with</span>
                   <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {distinctBuyersCount} buyer{distinctBuyersCount === 1 ? '' : 's'}
                   </span>
@@ -536,7 +536,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
             )}
           </div>
 
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-6">
             <button
               type="button"
               onClick={onNavigateToApplications}
@@ -555,13 +555,13 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
         </div>
 
         {/* Card 3: Quick actions & Vault State */}
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[16px] font-semibold text-[#10212E] dark:text-white">
                 Document vault
               </h2>
-              <span data-bind="documents.count" className="text-[13px] text-[#6B7A87]">
+              <span data-bind="documents.count" className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 {documents.length === 0 ? 'No documents uploaded' : `${documents.length} doc${documents.length === 1 ? '' : 's'}`}
               </span>
             </div>
@@ -571,7 +571,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                 <p className="text-[14px] font-medium text-[#10212E] dark:text-white">
                   No documents uploaded
                 </p>
-                <p className="text-[13px] text-[#6B7A87] leading-relaxed">
+                <p className="text-[13px] text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
                   Upload your CIPA certificate and tax clearance to complete your statutory credentials.
                 </p>
               </div>
@@ -581,22 +581,22 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               <button
                 type="button"
                 onClick={onNavigateToVault}
-                className="w-full p-3 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] transition-colors flex items-center justify-between text-[15px] text-[#10212E] dark:text-white cursor-pointer"
+                className="w-full p-3 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] transition-colors flex items-center justify-between text-[15px] text-[#10212E] dark:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Upload className="w-4 h-4 text-[#1F5F99]" strokeWidth={1.5} />
+                  <Upload className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
                   <span>Upload a document</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#6B7A87]" />
+                <ChevronRight className="w-4 h-4 text-[#6B7A87] dark:text-[#9CB4C9]" />
               </button>
 
               <button
                 type="button"
                 onClick={onNavigateToConsent}
-                className="w-full p-3 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] transition-colors flex items-center justify-between text-[15px] text-[#10212E] dark:text-white cursor-pointer"
+                className="w-full p-3 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] transition-colors flex items-center justify-between text-[15px] text-[#10212E] dark:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Share2 className="w-4 h-4 text-[#1F5F99]" strokeWidth={1.5} />
+                  <Share2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
                   <span>Manage sharing</span>
                   {completeness.score < 100 && (
                     <span className="p-0.5 rounded text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800" title="Sharing locked (100% completeness required)">
@@ -604,24 +604,24 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                     </span>
                   )}
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#6B7A87]" />
+                <ChevronRight className="w-4 h-4 text-[#6B7A87] dark:text-[#9CB4C9]" />
               </button>
 
               <button
                 type="button"
                 onClick={() => onNavigateToApply()}
-                className="w-full p-3 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] transition-colors flex items-center justify-between text-[15px] text-[#10212E] dark:text-white cursor-pointer"
+                className="w-full p-3 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] transition-colors flex items-center justify-between text-[15px] text-[#10212E] dark:text-white cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <Search className="w-4 h-4 text-[#1F5F99]" strokeWidth={1.5} />
+                  <Search className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" strokeWidth={1.5} />
                   <span>Browse open tenders</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#6B7A87]" />
+                <ChevronRight className="w-4 h-4 text-[#6B7A87] dark:text-[#9CB4C9]" />
               </button>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-6">
             <button
               type="button"
               onClick={onNavigateToVault}
@@ -640,7 +640,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
             Recommended tenders
           </h2>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             {supplierCategories.length > 0
               ? 'Matched to your registered procurement categories.'
               : 'Choose your categories to see matching tenders.'}
@@ -649,15 +649,15 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
 
         {supplierCategories.length === 0 ? (
           /* Empty state when no categories have been chosen */
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-dashed border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center space-y-4">
-            <div className="w-12 h-12 rounded-full bg-[#EAF2FA] dark:bg-[#162C3E] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center mx-auto">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-dashed border-[#D5E0EA] dark:border-[#244157] p-8 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-[#EAF2FA] dark:bg-[#162C3D] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center mx-auto">
               <Search className="w-6 h-6" strokeWidth={1.5} />
             </div>
             <div className="max-w-md mx-auto space-y-1">
               <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Choose your categories to see matching tenders
               </h3>
-              <p className="text-[14px] text-[#6B7A87] leading-relaxed">
+              <p className="text-[14px] text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
                 You haven't chosen any procurement categories yet. Select the supply codes and trade disciplines you operate in so we can match you to open tenders.
               </p>
             </div>
@@ -672,18 +672,18 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
           </div>
         ) : matchingCalls.length === 0 ? (
           /* When categories are chosen but no current calls match */
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center space-y-3">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-8 text-center space-y-3">
             <p className="text-[16px] font-medium text-[#10212E] dark:text-white">
               No open tenders currently match your selected categories.
             </p>
-            <p className="text-[14px] text-[#6B7A87]">
+            <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               New calls are published regularly by participating town councils, parastatals, and commercial buyers.
             </p>
             <div className="pt-2">
               <button
                 type="button"
                 onClick={() => handleApplyClick()}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] rounded-[6px] text-[14px] font-medium text-[#1F5F99] transition-colors cursor-pointer"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] hover:bg-[#F7FAFD] rounded-[6px] text-[14px] font-medium text-[#1F5F99] transition-colors cursor-pointer dark:text-[#6FAEE0] dark:hover:bg-[#162C3D]"
               >
                 Browse all public tenders
               </button>
@@ -700,14 +700,14 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
               return (
                 <div
                   key={call.id}
-                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 flex flex-col justify-between hover:shadow-md hover:border-[#BDE0FE] dark:hover:border-[#2C4D63] transition-all group"
+                  className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 flex flex-col justify-between hover:shadow-md hover:border-[#BDE0FE] dark:hover:border-[#2C4D63] transition-all group"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[12px] font-medium text-[#6B7A87] dark:text-[#94A3B8] truncate" title={call.organizationName}>
                         {call.organizationName}
                       </span>
-                      <span className="bg-[#EAF2FA] dark:bg-[#162C3E] text-[#1F5F99] dark:text-[#6FAEE0] text-[11px] px-2 py-0.5 rounded-[4px] font-semibold shrink-0">
+                      <span className="bg-[#EAF2FA] dark:bg-[#162C3D] text-[#1F5F99] dark:text-[#6FAEE0] text-[11px] px-2 py-0.5 rounded-[4px] font-semibold shrink-0">
                         {call.type === 'RFP' ? 'RFP' : call.type || 'Tender'}
                       </span>
                     </div>
@@ -717,20 +717,20 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                     </h3>
 
                     {(call.callNumber || (call as any).referenceNo) && (
-                      <span className="text-[11px] font-mono text-[#6B7A87] dark:text-[#94A3B8] bg-[#F7FAFD] dark:bg-[#0D1A25] px-2 py-0.5 rounded inline-block border border-[#E2EDF8] dark:border-[#1A3042]">
+                      <span className="text-[11px] tabular-nums text-[#6B7A87] dark:text-[#94A3B8] bg-[#F7FAFD] dark:bg-[#10212E] px-2 py-0.5 rounded inline-block border border-[#E2EDF8] dark:border-[#1A3042]">
                         Ref: {call.callNumber || (call as any).referenceNo}
                       </span>
                     )}
 
-                    <div className="space-y-1.5 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[13px]">
-                      <div className="flex items-center justify-between text-[#43525F] dark:text-[#B2C3D2]">
+                    <div className="space-y-1.5 pt-2 border-t border-[#D5E0EA] dark:border-[#244157] text-[13px]">
+                      <div className="flex items-center justify-between text-[#43525F] dark:text-[#D3E3F2]">
                         <span>Closing date:</span>
                         <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">
                           {call.closingDate}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between text-[#43525F] dark:text-[#B2C3D2]">
+                      <div className="flex items-center justify-between text-[#43525F] dark:text-[#D3E3F2]">
                         <span>Estimated budget:</span>
                         <span className="tabular-nums font-semibold text-[#10212E] dark:text-white">
                           {budgetLabel}
@@ -739,7 +739,7 @@ export const SupplierDashboard: React.FC<SupplierDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] mt-6 flex items-center justify-between">
+                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] mt-6 flex items-center justify-between">
                     <button
                       type="button"
                       onClick={() => handleApplyClick(call.id)}

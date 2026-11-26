@@ -344,7 +344,7 @@ export const BuyerRFPManagement: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               RFP Control Center
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">· Clarifications, Addenda, Invitations & Sealed Envelopes</span>
@@ -408,13 +408,13 @@ export const BuyerRFPManagement: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
+      <div className="border-b border-slate-200 flex items-center gap-2 overflow-x-auto dark:border-[#244157]">
         <button
           onClick={() => setActiveTab('sealed_bids')}
           className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'sealed_bids'
               ? 'border-[#1F5F99] text-[#1F5F99]'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
+              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-[#D3E3F2] dark:hover:text-white'
           }`}
         >
           <Lock className="w-4 h-4" />
@@ -426,7 +426,7 @@ export const BuyerRFPManagement: React.FC = () => {
           className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'clarifications'
               ? 'border-[#1F5F99] text-[#1F5F99]'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
+              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-[#D3E3F2] dark:hover:text-white'
           }`}
         >
           <HelpCircle className="w-4 h-4" />
@@ -438,7 +438,7 @@ export const BuyerRFPManagement: React.FC = () => {
           className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'addenda'
               ? 'border-[#1F5F99] text-[#1F5F99]'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
+              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-[#D3E3F2] dark:hover:text-white'
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -450,7 +450,7 @@ export const BuyerRFPManagement: React.FC = () => {
           className={`pb-3 px-4 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap cursor-pointer ${
             activeTab === 'invitations'
               ? 'border-[#1F5F99] text-[#1F5F99]'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
+              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-[#D3E3F2] dark:hover:text-white'
           }`}
         >
           <Users className="w-4 h-4" />
@@ -472,15 +472,15 @@ export const BuyerRFPManagement: React.FC = () => {
               <div className="space-y-2 max-w-2xl">
                 <div className="flex items-center gap-2">
                   {areAllOpened ? (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/20 text-[#2F8F5B] border border-emerald-500/40 text-xs font-bold font-mono">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/20 text-[#2F8F5B] border border-emerald-500/40 text-xs font-bold tabular-nums">
                       <Unlock className="w-4 h-4" /> VAULT FORMALLY UNSEALED
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/20 text-[#E8A33D] border border-amber-500/40 text-xs font-bold font-mono">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500/20 text-[#E8A33D] border border-amber-500/40 text-xs font-bold tabular-nums">
                       <Lock className="w-4 h-4" /> CRYPTOGRAPHICALLY SEALED ENVELOPE
                     </span>
                   )}
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-slate-400 tabular-nums">
                     Ref: {selectedCall.callNumber}
                   </span>
                 </div>
@@ -497,15 +497,15 @@ export const BuyerRFPManagement: React.FC = () => {
               </div>
 
               <div className="p-5 bg-white/10 rounded-2xl backdrop-blur-xs border border-white/10 text-center space-y-3 shrink-0">
-                <div className="text-xs text-slate-300 font-mono">
+                <div className="text-xs text-slate-300 tabular-nums">
                   {areAllOpened ? 'Opening Presiding Officer:' : 'Statutory Closing Countdown:'}
                 </div>
                 {areAllOpened ? (
-                  <div className="font-bold text-sm text-[#2F8F5B] font-mono">
+                  <div className="font-bold text-sm text-[#2F8F5B] tabular-nums">
                     {openingSession?.conductedByName || officerDisplay}
                   </div>
                 ) : (
-                  <div className="text-2xl font-bold font-mono text-[#E8A33D] tabular-nums">
+                  <div className="text-2xl font-bold text-[#E8A33D] tabular-nums">
                     {selectedCall.daysRemaining} Days Remaining
                   </div>
                 )}
@@ -526,31 +526,31 @@ export const BuyerRFPManagement: React.FC = () => {
           </div>
 
           {openingSession && (
-            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[#065F46] font-semibold">
+            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2 text-xs dark:border-[#2F8F5B]/40">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[#065F46] font-semibold dark:text-[#6EE7B7]">
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
                   Official Opening Session Record ({openingSession.witnesses?.length || 0} witnesses verified)
                 </span>
-                <span className="font-mono text-[11px]">
+                <span className="tabular-nums text-[11px]">
                   {new Date(openingSession.openedAt).toLocaleString('en-BW')}
                 </span>
               </div>
               {openingSession.registerSha256 && (
-                <div className="font-mono text-[11px] text-slate-700 bg-white p-2 rounded border border-emerald-200 break-all">
+                <div className="tabular-nums text-[11px] text-slate-700 bg-white p-2 rounded border border-emerald-200 break-all dark:bg-[#1C364B] dark:text-[#D3E3F2] dark:border-[#2F8F5B]/40">
                   Register SHA-256: {openingSession.registerSha256}
                 </div>
               )}
             </div>
           )}
 
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs space-y-4 p-6">
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs space-y-4 p-6 dark:bg-[#1C364B] dark:border-[#244157]">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-heading font-semibold text-base text-[#10212E]">
+                <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
                   Submitted Bid Envelopes ({bidsList.length})
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-[#9CB4C9]">
                   {areAllOpened
                     ? 'Decrypted itemized financial proposals.'
                     : 'Encrypted SHA256 hashes verifying package integrity without revealing amounts.'}
@@ -561,7 +561,7 @@ export const BuyerRFPManagement: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                     <th className="py-2.5 px-3">Bidder Company</th>
                     <th className="py-2.5 px-3">Cryptographic Seal</th>
                     <th className="py-2.5 px-3">Submission Timestamp</th>
@@ -569,7 +569,7 @@ export const BuyerRFPManagement: React.FC = () => {
                     <th className="py-2.5 px-3 text-right">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-[#244157]">
                   {isLoadingBids ? (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-slate-400">
@@ -584,25 +584,25 @@ export const BuyerRFPManagement: React.FC = () => {
                     </tr>
                   ) : (
                     bidsList.map((bid) => (
-                      <tr key={bid.id} className="hover:bg-slate-50">
+                      <tr key={bid.id} className="hover:bg-slate-50 dark:hover:bg-[#162C3D]">
                         <td className="py-3 px-3">
-                          <div className="font-bold text-[#10212E]">{bid.supplierName}</div>
-                          <span className="text-[11px] text-slate-400 font-mono">
+                          <div className="font-bold text-[#10212E] dark:text-white">{bid.supplierName}</div>
+                          <span className="text-[11px] text-slate-400 tabular-nums">
                             Receipt: {bid.receiptNumber || bid.id}
                           </span>
                         </td>
 
-                        <td className="py-3 px-3 font-mono text-slate-500 truncate max-w-xs">
+                        <td className="py-3 px-3 tabular-nums text-slate-500 truncate max-w-xs dark:text-[#9CB4C9]">
                           {bid.payloadSha256 || 'Recorded'}
                         </td>
 
-                        <td className="py-3 px-3 text-slate-600 font-mono">
+                        <td className="py-3 px-3 text-slate-600 tabular-nums dark:text-[#D3E3F2]">
                           {bid.submittedAt ? new Date(bid.submittedAt).toLocaleString() : '—'}
                         </td>
 
-                        <td className="py-3 px-3 text-right font-mono font-bold">
+                        <td className="py-3 px-3 text-right tabular-nums font-bold">
                           {bid.status === 'opened' && bid.totalPrice != null ? (
-                            <span className="text-base text-[#1F5F99]">
+                            <span className="text-base text-[#1F5F99] dark:text-[#6FAEE0]">
                               {bid.currency || 'BWP'} {Number(bid.totalPrice).toLocaleString()}
                             </span>
                           ) : bid.status === 'withdrawn' ? (
@@ -630,8 +630,8 @@ export const BuyerRFPManagement: React.FC = () => {
       {/* Tab 2: Clarification Q&A Moderation */}
       {activeTab === 'clarifications' && (
         <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-            <h3 className="font-heading font-semibold text-base text-[#10212E]">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 dark:bg-[#1C364B] dark:border-[#244157]">
+            <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
               Clarifications & Bidder Inquiries
             </h3>
 
@@ -642,19 +642,19 @@ export const BuyerRFPManagement: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 {callClarifications.map((clar) => (
-                  <div key={clar.id} className="p-5 border border-slate-200 rounded-xl space-y-3 bg-white">
+                  <div key={clar.id} className="p-5 border border-slate-200 rounded-xl space-y-3 bg-white dark:bg-[#1C364B] dark:border-[#244157]">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <span className="text-[11px] font-bold text-slate-400 block font-mono">
+                        <span className="text-[11px] font-bold text-slate-400 block tabular-nums">
                           QUESTION FROM {clar.supplierName.toUpperCase()} · {clar.submittedAt}
                         </span>
-                        <p className="font-semibold text-sm text-[#10212E] mt-1">
+                        <p className="font-semibold text-sm text-[#10212E] mt-1 dark:text-white">
                           "{clar.question}"
                         </p>
                       </div>
                       <span
                         className={`text-xs font-semibold px-2.5 py-0.5 rounded ${
-                          clar.isPublished ? 'bg-emerald-50 text-[#2F8F5B]' : 'bg-amber-50 text-amber-900'
+                          clar.isPublished ? 'bg-emerald-50 text-[#2F8F5B] dark:bg-[#2F8F5B]/20' : 'bg-amber-50 text-amber-900 dark:bg-[#E8A33D]/20'
                         }`}
                       >
                         {clar.isPublished ? 'Published to Bidders' : 'Private (Pending Response)'}
@@ -662,11 +662,11 @@ export const BuyerRFPManagement: React.FC = () => {
                     </div>
 
                     {clar.isPublished ? (
-                      <div className="p-3 bg-slate-50 border-l-2 border-[#1F5F99] rounded-r-lg space-y-1 text-xs">
-                        <span className="font-bold text-[#1F5F99] block">
+                      <div className="p-3 bg-slate-50 border-l-2 border-[#1F5F99] rounded-r-lg space-y-1 text-xs dark:bg-[#162C3D]">
+                        <span className="font-bold text-[#1F5F99] block dark:text-[#6FAEE0]">
                           OFFICIAL RESPONSE ({clar.answeredBy || officerDisplay})
                         </span>
-                        <p className="text-slate-700">{clar.answer}</p>
+                        <p className="text-slate-700 dark:text-[#D3E3F2]">{clar.answer}</p>
                       </div>
                     ) : (
                       <div>
@@ -677,13 +677,13 @@ export const BuyerRFPManagement: React.FC = () => {
                               value={answerText}
                               onChange={(e) => setAnswerText(e.target.value)}
                               placeholder="Type official clarification response to publish to all registered bidders..."
-                              className="w-full p-2.5 border border-slate-300 rounded-lg text-xs"
+                              className="w-full p-2.5 border border-slate-300 rounded-lg text-xs dark:border-[#244157]"
                             />
                             <div className="flex justify-end gap-2">
                               <button
                                 type="button"
                                 onClick={() => setReplyingClarId(null)}
-                                className="px-3 py-1.5 text-xs text-slate-600"
+                                className="px-3 py-1.5 text-xs text-slate-600 dark:text-[#D3E3F2]"
                               >
                                 Cancel
                               </button>
@@ -704,7 +704,7 @@ export const BuyerRFPManagement: React.FC = () => {
                               setReplyingClarId(clar.id);
                               setAnswerText('');
                             }}
-                            className="px-3 py-1.5 bg-[#EAF2FA] text-[#1F5F99] hover:bg-[#1F5F99] hover:text-white rounded-lg text-xs font-semibold transition-colors"
+                            className="px-3 py-1.5 bg-[#EAF2FA] text-[#1F5F99] hover:bg-[#1F5F99] hover:text-white rounded-lg text-xs font-semibold transition-colors dark:bg-[#162C3D] dark:text-[#6FAEE0]"
                           >
                             Draft Official Response
                           </button>
@@ -722,13 +722,13 @@ export const BuyerRFPManagement: React.FC = () => {
       {/* Tab 3: Addenda */}
       {activeTab === 'addenda' && selectedCall && (
         <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 dark:bg-[#1C364B] dark:border-[#244157]">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-heading font-semibold text-base text-[#10212E]">
+                <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
                   Formal Tender Addenda
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 dark:text-[#9CB4C9]">
                   Published modifications, specification updates, or deadline extensions.
                 </p>
               </div>
@@ -744,44 +744,44 @@ export const BuyerRFPManagement: React.FC = () => {
             </div>
 
             {isCreatingAddendum && (
-              <form onSubmit={handleAddAddendum} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
-                <h4 className="font-bold text-slate-800">Issue Addendum No. {selectedCall.addenda.length + 1}</h4>
+              <form onSubmit={handleAddAddendum} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs dark:bg-[#162C3D] dark:border-[#244157]">
+                <h4 className="font-bold text-slate-800 dark:text-white">Issue Addendum No. {selectedCall.addenda.length + 1}</h4>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Addendum Title</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Addendum Title</label>
                   <input
                     type="text"
                     required
                     value={addendumTitle}
                     onChange={(e) => setAddendumTitle(e.target.value)}
                     placeholder="e.g. Revised Staging Schedule & Technical Specs"
-                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Summary / Notification Text</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Summary / Notification Text</label>
                   <textarea
                     rows={3}
                     required
                     value={addendumSummary}
                     onChange={(e) => setAddendumSummary(e.target.value)}
                     placeholder="Explain the changes to tender requirements..."
-                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Extend Closing Deadline (Optional)</label>
+                  <label className="block font-semibold text-slate-700 mb-1 dark:text-[#D3E3F2]">Extend Closing Deadline (Optional)</label>
                   <input
                     type="datetime-local"
                     value={addendumNewClosesAt}
                     onChange={(e) => setAddendumNewClosesAt(e.target.value)}
-                    className="w-full sm:w-auto p-2 bg-white border border-slate-300 rounded-lg text-xs"
+                    className="w-full sm:w-auto p-2 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
                   />
                 </div>
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setIsCreatingAddendum(false)}
-                    className="px-3 py-1.5 text-slate-600 font-semibold"
+                    className="px-3 py-1.5 text-slate-600 font-semibold dark:text-[#D3E3F2]"
                   >
                     Cancel
                   </button>
@@ -803,20 +803,20 @@ export const BuyerRFPManagement: React.FC = () => {
                 </div>
               ) : (
                 selectedCall.addenda.map((add) => (
-                  <div key={add.id} className="p-4 border border-slate-200 rounded-xl bg-white flex flex-col sm:flex-row sm:items-start justify-between gap-4 text-xs">
+                  <div key={add.id} className="p-4 border border-slate-200 rounded-xl bg-white flex flex-col sm:flex-row sm:items-start justify-between gap-4 text-xs dark:bg-[#1C364B] dark:border-[#244157]">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-[#10212E]">{add.title}</span>
-                        <span className="text-slate-400 font-mono">Issued {add.issuedDate}</span>
+                        <span className="font-bold text-[#10212E] dark:text-white">{add.title}</span>
+                        <span className="text-slate-400 tabular-nums">Issued {add.issuedDate}</span>
                         {typeof add.acknowledgementsCount === 'number' && (
-                          <span className="font-mono text-[11px] bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded">
+                          <span className="tabular-nums text-[11px] bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                             {add.acknowledgementsCount} supplier ack{add.acknowledgementsCount === 1 ? '' : 's'}
                           </span>
                         )}
                       </div>
-                      <p className="text-slate-600 leading-relaxed">{add.summary}</p>
+                      <p className="text-slate-600 leading-relaxed dark:text-[#D3E3F2]">{add.summary}</p>
                       {add.newClosesAt && (
-                        <p className="font-mono text-[11px] text-[#92400E]">
+                        <p className="tabular-nums text-[11px] text-[#92400E] dark:text-[#FCD34D]">
                           New Closing Deadline: {new Date(add.newClosesAt).toLocaleString('en-BW')}
                         </p>
                       )}
@@ -832,13 +832,13 @@ export const BuyerRFPManagement: React.FC = () => {
       {/* Tab 4: Invitations */}
       {activeTab === 'invitations' && selectedCall && (
         <div className="space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 text-xs">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 text-xs dark:bg-[#1C364B] dark:border-[#244157]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="font-heading font-semibold text-base text-[#10212E]">
+                <h3 className="font-heading font-semibold text-base text-[#10212E] dark:text-white">
                   Formal Supplier Tender Invitations ({selectedCall.visibility || 'open'})
                 </h3>
-                <p className="text-slate-500">
+                <p className="text-slate-500 dark:text-[#9CB4C9]">
                   Invite qualified suppliers to participate in this tender call. Required for Invite-Only tenders.
                 </p>
               </div>
@@ -856,8 +856,8 @@ export const BuyerRFPManagement: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Select Suppliers */}
               <div className="space-y-2">
-                <h4 className="font-bold text-slate-700 uppercase text-[11px]">Available Suppliers</h4>
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                <h4 className="font-bold text-slate-700 uppercase text-[11px] dark:text-[#D3E3F2]">Available Suppliers</h4>
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl dark:border-[#244157] dark:divide-[#244157]">
                   {orgSuppliers.length === 0 ? (
                     <div className="p-6 text-center text-slate-400">No active suppliers available.</div>
                   ) : (
@@ -867,7 +867,7 @@ export const BuyerRFPManagement: React.FC = () => {
                       return (
                         <label
                           key={sup.id}
-                          className={`p-3 flex items-center justify-between gap-2 ${alreadyInvited ? 'bg-slate-50 opacity-70' : 'cursor-pointer hover:bg-slate-50'}`}
+                          className={`p-3 flex items-center justify-between gap-2 ${alreadyInvited ? 'bg-slate-50 opacity-70 dark:bg-[#162C3D]' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-[#162C3D]'}`}
                         >
                           <div className="flex items-center gap-2.5">
                             <input
@@ -881,14 +881,14 @@ export const BuyerRFPManagement: React.FC = () => {
                               }
                             />
                             <div>
-                              <div className="font-semibold text-slate-900">{sup.legalName}</div>
-                              <div className="text-[11px] text-slate-500">
+                              <div className="font-semibold text-slate-900 dark:text-white">{sup.legalName}</div>
+                              <div className="text-[11px] text-slate-500 dark:text-[#9CB4C9]">
                                 {sup.city || 'Botswana'} · {sup.verificationStatus || 'active'}
                               </div>
                             </div>
                           </div>
                           {alreadyInvited && (
-                            <span className="text-[10px] font-semibold bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded">
+                            <span className="text-[10px] font-semibold bg-emerald-50 text-[#2F8F5B] px-2 py-0.5 rounded dark:bg-[#2F8F5B]/20">
                               Invited
                             </span>
                           )}
@@ -901,10 +901,10 @@ export const BuyerRFPManagement: React.FC = () => {
 
               {/* Sent Invitations Register */}
               <div className="space-y-2">
-                <h4 className="font-bold text-slate-700 uppercase text-[11px]">
+                <h4 className="font-bold text-slate-700 uppercase text-[11px] dark:text-[#D3E3F2]">
                   Dispatched Invitations ({callInvitations.length})
                 </h4>
-                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl dark:border-[#244157] dark:divide-[#244157]">
                   {isLoadingInvitations ? (
                     <div className="p-6 text-center text-slate-400">Loading invitations...</div>
                   ) : callInvitations.length === 0 ? (
@@ -913,12 +913,12 @@ export const BuyerRFPManagement: React.FC = () => {
                     callInvitations.map((inv) => (
                       <div key={inv.id} className="p-3 flex items-center justify-between gap-2">
                         <div>
-                          <div className="font-semibold text-slate-900">{inv.supplierName}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">
+                          <div className="font-semibold text-slate-900 dark:text-white">{inv.supplierName}</div>
+                          <div className="text-[11px] text-slate-500 tabular-nums dark:text-[#9CB4C9]">
                             Invited {inv.invitedAt ? new Date(inv.invitedAt).toLocaleDateString('en-BW') : '—'}
                           </div>
                         </div>
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] capitalize">
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-[#EAF2FA] text-[#1F5F99] capitalize dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                           {inv.status || 'invited'}
                         </span>
                       </div>
@@ -934,10 +934,10 @@ export const BuyerRFPManagement: React.FC = () => {
       {/* Witness Quorum Modal */}
       {isOpeningModalOpen && selectedCall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#10212E]/70 backdrop-blur-xs">
-          <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
-            <div className="pb-3 border-b border-slate-200">
-              <span className="text-[11px] font-bold text-[#1F5F99] uppercase">Statutory Opening Quorum (&gt;= 2 Witnesses)</span>
-              <h3 className="font-heading font-bold text-lg text-[#10212E]">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-slate-200 p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto dark:bg-[#1C364B] dark:border-[#244157]">
+            <div className="pb-3 border-b border-slate-200 dark:border-[#244157]">
+              <span className="text-[11px] font-bold text-[#1F5F99] uppercase dark:text-[#6FAEE0]">Statutory Opening Quorum (&gt;= 2 Witnesses)</span>
+              <h3 className="font-heading font-bold text-lg text-[#10212E] dark:text-white">
                 Execute Opening Ceremony — {selectedCall.callNumber}
               </h3>
             </div>
@@ -945,15 +945,15 @@ export const BuyerRFPManagement: React.FC = () => {
             <form onSubmit={handleExecuteOpeningSession} className="space-y-4">
               {members.length > 0 && (
                 <div className="space-y-2">
-                  <label className="font-semibold text-slate-800 block">Organization Co-Witnesses</label>
-                  <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                  <label className="font-semibold text-slate-800 block dark:text-white">Organization Co-Witnesses</label>
+                  <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-lg dark:border-[#244157] dark:divide-[#244157]">
                     {members.map((m) => {
                       const isPresiding = m.userId === currentUser?.id;
                       const checked = effectiveMemberWitnesses.has(m.userId);
                       return (
                         <label
                           key={m.userId}
-                          className={`flex items-center justify-between p-2.5 ${isPresiding ? 'bg-[#EAF2FA]/60' : 'cursor-pointer hover:bg-slate-50'}`}
+                          className={`flex items-center justify-between p-2.5 ${isPresiding ? 'bg-[#EAF2FA]/60' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-[#162C3D]'}`}
                         >
                           <div className="flex items-center gap-2">
                             <input
@@ -966,11 +966,11 @@ export const BuyerRFPManagement: React.FC = () => {
                                 )
                               }
                             />
-                            <span className="font-medium text-slate-900">
+                            <span className="font-medium text-slate-900 dark:text-white">
                               {m.fullName} {isPresiding ? '(Presiding Officer)' : ''}
                             </span>
                           </div>
-                          <span className="font-mono text-slate-500">{m.roleName}</span>
+                          <span className="tabular-nums text-slate-500 dark:text-[#9CB4C9]">{m.roleName}</span>
                         </label>
                       );
                     })}
@@ -980,11 +980,11 @@ export const BuyerRFPManagement: React.FC = () => {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="font-semibold text-slate-800">External Witnesses</label>
+                  <label className="font-semibold text-slate-800 dark:text-white">External Witnesses</label>
                   <button
                     type="button"
                     onClick={() => setExternalWitnesses((prev) => [...prev, { name: '', witnessRole: 'External Witness' }])}
-                    className="text-[#1F5F99] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                    className="text-[#1F5F99] font-semibold inline-flex items-center gap-1 cursor-pointer dark:text-[#6FAEE0]"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add External Witness
                   </button>
@@ -998,7 +998,7 @@ export const BuyerRFPManagement: React.FC = () => {
                       onChange={(e) =>
                         setExternalWitnesses((prev) => prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)))
                       }
-                      className="col-span-6 p-2 border border-slate-300 rounded-lg"
+                      className="col-span-6 p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                     />
                     <input
                       type="text"
@@ -1007,7 +1007,7 @@ export const BuyerRFPManagement: React.FC = () => {
                       onChange={(e) =>
                         setExternalWitnesses((prev) => prev.map((r, i) => (i === idx ? { ...r, witnessRole: e.target.value } : r)))
                       }
-                      className="col-span-5 p-2 border border-slate-300 rounded-lg"
+                      className="col-span-5 p-2 border border-slate-300 rounded-lg dark:border-[#244157]"
                     />
                     <button
                       type="button"
@@ -1020,17 +1020,17 @@ export const BuyerRFPManagement: React.FC = () => {
                 ))}
               </div>
 
-              <div className={`p-3 rounded-lg ${quorumSatisfied ? 'bg-emerald-50 text-[#065F46]' : 'bg-amber-50 text-amber-900'}`}>
+              <div className={`p-3 rounded-lg ${quorumSatisfied ? 'bg-emerald-50 text-[#065F46] dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7]' : 'bg-amber-50 text-amber-900 dark:bg-[#E8A33D]/20'}`}>
                 {quorumSatisfied
                   ? 'Quorum verified: >= 2 witnesses selected.'
                   : 'Select at least 2 distinct witnesses to proceed.'}
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#244157]">
                 <button
                   type="button"
                   onClick={() => setIsOpeningModalOpen(false)}
-                  className="px-3 py-1.5 text-slate-600"
+                  className="px-3 py-1.5 text-slate-600 dark:text-[#D3E3F2]"
                 >
                   Cancel
                 </button>

@@ -71,7 +71,7 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
   return (
     <div className="space-y-12 sm:space-y-16 py-4">
       {/* Editorial Header */}
-      <div className="relative border-b border-[#D5E0EA] dark:border-[#1E364A] pb-10 sm:pb-12 overflow-hidden">
+      <div className="relative border-b border-[#D5E0EA] dark:border-[#244157] pb-10 sm:pb-12 overflow-hidden">
         <RingMotif size={360} dotAngle={45} opacity={0.3} position="top-right" />
 
         <div className="max-w-3xl space-y-4 relative z-10">
@@ -83,7 +83,7 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
             Register once. Reuse everywhere. Bid with confidence.
           </h1>
 
-          <p className="text-base sm:text-lg text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+          <p className="text-base sm:text-lg text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
             Eliminate the repetitive cycle of certifying, printing, and resubmitting identical statutory documentation for every procurement opportunity in Botswana.
           </p>
 
@@ -116,7 +116,7 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
           <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             Single Verified Profile
           </h3>
-          <p className="text-xs text-[#6B7A87] leading-relaxed">
+          <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Your statutory standing is verified once against CIPA, BURS, and PPRA standards. Buying organizations verify compliance in seconds.
           </p>
         </Card>
@@ -128,7 +128,7 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
           <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             Sealed-Bid Cryptography
           </h3>
-          <p className="text-xs text-[#6B7A87] leading-relaxed">
+          <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Commercial price submissions are locked with public-key cryptography and cannot be viewed by any buyer until the official opening deadline.
           </p>
         </Card>
@@ -140,7 +140,7 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
           <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             Citizen Empowerment (EDD)
           </h3>
-          <p className="text-xs text-[#6B7A87] leading-relaxed">
+          <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Automatic application of Economic Diversification Drive (EDD) preference margins and registered contractor tier matching.
           </p>
         </Card>
@@ -148,7 +148,7 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
 
       {/* Step Sequence */}
       <div className="space-y-6">
-        <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-3">
+        <div className="border-b border-[#D5E0EA] dark:border-[#244157] pb-3">
           <h2 className="text-xl sm:text-2xl font-heading font-semibold text-[#10212E] dark:text-white">
             How the Supplier Passport works
           </h2>
@@ -158,22 +158,22 @@ export const PublicForSuppliers: React.FC<PublicForSuppliersProps> = ({ onOpenAu
           {steps.map((step) => (
             <Card key={step.num} variant="default" padding="md" className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 px-2 py-1 rounded-[4px]">
+                <span className="tabular-nums text-xs font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 px-2 py-1 rounded-[4px]">
                   STEP {step.num}
                 </span>
-                <span className="text-[11px] text-[#6B7A87]">Passport Workflow</span>
+                <span className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">Passport Workflow</span>
               </div>
 
               <div className="space-y-1.5">
                 <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
                   {step.title}
                 </h3>
-                <p className="text-xs text-[#6B7A87] leading-relaxed">
+                <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
                   {step.description}
                 </p>
               </div>
 
-              <ul className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-xs text-[#43525F] dark:text-[#B2C3D2]">
+              <ul className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#244157] text-xs text-[#43525F] dark:text-[#D3E3F2]">
                 {step.details.map((detail, i) => (
                   <li key={i} className="flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B] shrink-0" strokeWidth={1.5} />

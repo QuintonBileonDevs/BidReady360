@@ -89,12 +89,12 @@ export const BuyerBranding: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Organization branding &amp; public profile
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Customize your public procurement portal header, accent color, and supplier onboarding notice.
           </p>
         </div>
@@ -108,22 +108,22 @@ export const BuyerBranding: React.FC = () => {
       )}
 
       {savedSuccess && (
-        <div className="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-[12px] text-[#065F46] text-[14px] flex items-center gap-2">
+        <div className="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-[12px] text-[#065F46] text-[14px] flex items-center gap-2 dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <CheckCircle2 className="w-5 h-5 text-[#2F8F5B]" />
           <span>Branding settings persisted to your organization profile and logged to the audit trail.</span>
         </div>
       )}
 
       {isLoading ? (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-10 flex items-center justify-center gap-2.5 text-[#6B7A87]">
-          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-10 flex items-center justify-center gap-2.5 text-[#6B7A87] dark:text-[#9CB4C9]">
+          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
           <span className="text-[14px]">Loading organization branding profile...</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <form
             onSubmit={handleSave}
-            className="lg:col-span-7 bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4 text-[14px]"
+            className="lg:col-span-7 bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4 text-[14px]"
           >
             <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               Entity details
@@ -136,7 +136,7 @@ export const BuyerBranding: React.FC = () => {
                 required
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               />
             </div>
 
@@ -146,7 +146,7 @@ export const BuyerBranding: React.FC = () => {
                 type="text"
                 value={subtext}
                 onChange={(e) => setSubtext(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               />
             </div>
 
@@ -158,9 +158,9 @@ export const BuyerBranding: React.FC = () => {
                     type="color"
                     value={primaryColor}
                     onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="w-10 h-10 rounded-[6px] cursor-pointer border border-[#D5E0EA]"
+                    className="w-10 h-10 rounded-[6px] cursor-pointer border border-[#D5E0EA] dark:border-[#244157]"
                   />
-                  <span className="font-mono text-[13px] text-[#43525F] dark:text-[#B2C3D2]">{primaryColor}</span>
+                  <span className="tabular-nums text-[13px] text-[#43525F] dark:text-[#D3E3F2]">{primaryColor}</span>
                 </div>
               </div>
 
@@ -171,7 +171,7 @@ export const BuyerBranding: React.FC = () => {
                   value={customDomain}
                   onChange={(e) => setCustomDomain(e.target.value)}
                   placeholder="tenders.entity.gov.bw"
-                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
                 />
               </div>
             </div>
@@ -184,7 +184,7 @@ export const BuyerBranding: React.FC = () => {
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   placeholder="procurement@entity.gov.bw"
-                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
                 />
               </div>
               <div className="space-y-1">
@@ -194,7 +194,7 @@ export const BuyerBranding: React.FC = () => {
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   placeholder="+267 365 7400"
-                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                  className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
                 />
               </div>
             </div>
@@ -206,7 +206,7 @@ export const BuyerBranding: React.FC = () => {
                 value={welcomeNotice}
                 onChange={(e) => setWelcomeNotice(e.target.value)}
                 placeholder={`Welcome to the official electronic procurement portal for ${orgName}.`}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               />
             </div>
 
@@ -221,12 +221,12 @@ export const BuyerBranding: React.FC = () => {
           </form>
 
           {/* Live Preview Card */}
-          <div className="lg:col-span-5 bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-4">
-            <span className="text-[12px] font-semibold text-[#6B7A87] uppercase tracking-wider block">
+          <div className="lg:col-span-5 bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-4">
+            <span className="text-[12px] font-semibold text-[#6B7A87] uppercase tracking-wider block dark:text-[#9CB4C9]">
               Public portal preview
             </span>
 
-            <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] space-y-3">
+            <div className="p-4 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#10212E] space-y-3">
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded-[6px] text-white flex items-center justify-center font-bold text-[14px]"
@@ -238,14 +238,14 @@ export const BuyerBranding: React.FC = () => {
                   <h4 className="font-semibold text-[15px] text-[#10212E] dark:text-white">
                     {orgName}
                   </h4>
-                  <span className="text-[12px] text-[#6B7A87]">{subtext}</span>
+                  <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">{subtext}</span>
                 </div>
               </div>
-              <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+              <div className="p-3 bg-white dark:bg-[#1C364B] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                 {welcomeNotice.trim() || `Welcome to the official electronic procurement portal for ${orgName}.`}
               </div>
               {customDomain && (
-                <div className="text-[11px] font-mono text-[#6B7A87]">
+                <div className="text-[11px] tabular-nums text-[#6B7A87] dark:text-[#9CB4C9]">
                   Portal URL: https://{customDomain}
                 </div>
               )}

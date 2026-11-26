@@ -243,7 +243,7 @@ export const BuyerReviewQueue: React.FC = () => {
       <div className="card-elevated p-6 sm:p-8 flex flex-wrap items-center justify-between gap-6 border-l-4 border-l-[#1F5F99]">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+            <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
               Evaluation Desk
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">· Submitted Dossier Snapshots & Consent Enforcement</span>
@@ -258,7 +258,7 @@ export const BuyerReviewQueue: React.FC = () => {
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <div className="bg-[#EAF2FA]/50 border border-slate-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs dark:bg-[#162C3D] dark:border-[#244157]">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -266,14 +266,14 @@ export const BuyerReviewQueue: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search candidate company or tender..."
-            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
           />
         </div>
 
         <select
           value={filterCallId}
           onChange={(e) => setFilterCallId(e.target.value)}
-          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
         >
           <option value="ALL">All Tenders & Drives</option>
           {calls.map((c) => (
@@ -286,7 +286,7 @@ export const BuyerReviewQueue: React.FC = () => {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs"
+          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs dark:bg-[#1C364B] dark:border-[#244157]"
         >
           <option value="ALL">All Application Statuses</option>
           <option value="Submitted">Submitted</option>
@@ -300,19 +300,19 @@ export const BuyerReviewQueue: React.FC = () => {
 
       {/* Split-View */}
       {isLoadingApps ? (
-        <div className="p-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500">
+        <div className="p-12 bg-white border border-slate-200 rounded-2xl flex items-center justify-center gap-2 text-xs text-slate-500 dark:bg-[#1C364B] dark:text-[#9CB4C9] dark:border-[#244157]">
           <Loader2 className="w-4 h-4 animate-spin" />
           <span>Loading application dossiers...</span>
         </div>
       ) : liveApplications.length === 0 ? (
-        <div className="p-12 bg-white border border-slate-200 rounded-2xl text-center text-xs text-slate-500">
+        <div className="p-12 bg-white border border-slate-200 rounded-2xl text-center text-xs text-slate-500 dark:bg-[#1C364B] dark:text-[#9CB4C9] dark:border-[#244157]">
           No submitted applications found for your procuring organization yet.
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column */}
           <div className="lg:col-span-5 space-y-3">
-            <h3 className="font-heading font-semibold text-sm text-[#10212E]">
+            <h3 className="font-heading font-semibold text-sm text-[#10212E] dark:text-white">
               Submissions ({filteredApps.length})
             </h3>
 
@@ -326,24 +326,24 @@ export const BuyerReviewQueue: React.FC = () => {
                     className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                       isSelected
                         ? 'bg-white border-[#1F5F99] ring-2 ring-[#1F5F99]/20 shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
+                        : 'bg-white border-slate-200 hover:border-slate-300 dark:bg-[#1C364B] dark:border-[#244157]'
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-xs text-[#10212E] leading-snug">
+                      <span className="font-semibold text-xs text-[#10212E] leading-snug dark:text-white">
                         {app.supplierName}
                       </span>
                       <StatusChip status={app.status} />
                     </div>
 
-                    <p className="text-[11px] text-slate-500 font-mono mt-1">
+                    <p className="text-[11px] text-slate-500 tabular-nums mt-1 dark:text-[#9CB4C9]">
                       {app.callNumber} · {app.callType}
                     </p>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 dark:border-[#244157]">
                       <span>Submitted: {app.submittedAt || '—'}</span>
                       {app.bid && app.bid.totalAmountBWP != null && (
-                        <span className="font-mono font-bold text-slate-800">
+                        <span className="tabular-nums font-bold text-slate-800 dark:text-white">
                           BWP {Number(app.bid.totalAmountBWP).toLocaleString()}
                         </span>
                       )}
@@ -356,21 +356,21 @@ export const BuyerReviewQueue: React.FC = () => {
 
           {/* Right Column */}
           {selectedApp && (
-            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-2xs">
-              <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 space-y-6 shadow-2xs dark:bg-[#1C364B] dark:border-[#244157]">
+              <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-slate-100 dark:border-[#244157]">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-[#1F5F99]">{selectedApp.callNumber}</span>
+                    <span className="text-xs tabular-nums font-bold text-[#1F5F99] dark:text-[#6FAEE0]">{selectedApp.callNumber}</span>
                     <span className="text-xs text-slate-400">·</span>
-                    <span className="text-xs text-slate-600 font-medium">{selectedApp.callType}</span>
+                    <span className="text-xs text-slate-600 font-medium dark:text-[#D3E3F2]">{selectedApp.callType}</span>
                     {selectedApp.receiptNumber && (
-                      <span className="text-[11px] font-mono text-slate-400">· {selectedApp.receiptNumber}</span>
+                      <span className="text-[11px] tabular-nums text-slate-400">· {selectedApp.receiptNumber}</span>
                     )}
                   </div>
-                  <h3 className="font-heading font-bold text-lg text-[#10212E] mt-0.5">
+                  <h3 className="font-heading font-bold text-lg text-[#10212E] mt-0.5 dark:text-white">
                     {selectedApp.supplierName}
                   </h3>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-slate-500 dark:text-[#9CB4C9]">
                     Target Call: {selectedApp.callTitle}
                   </span>
                 </div>
@@ -379,17 +379,17 @@ export const BuyerReviewQueue: React.FC = () => {
               </div>
 
               {/* Consent-Scoped Company Profile Summary */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 text-xs dark:bg-[#162C3D] dark:border-[#244157]">
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-2 dark:text-white">
                     <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
                     <span>Supplier Profile & Consent Scope</span>
                   </h4>
                   <span
                     className={`text-[10px] font-semibold px-2 py-0.5 rounded capitalize ${
                       consentedSupplier?.consentStatus === 'active'
-                        ? 'bg-emerald-50 text-[#2F8F5B]'
-                        : 'bg-amber-50 text-amber-900'
+                        ? 'bg-emerald-50 text-[#2F8F5B] dark:bg-[#2F8F5B]/20'
+                        : 'bg-amber-50 text-amber-900 dark:bg-[#E8A33D]/20'
                     }`}
                   >
                     Consent: {consentedSupplier?.consentStatus || 'Submitted dossier only'}
@@ -399,13 +399,13 @@ export const BuyerReviewQueue: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div>
                     <span className="text-slate-400 block text-[10px]">CIPA UIN</span>
-                    <span className="font-mono font-bold text-slate-800">
+                    <span className="tabular-nums font-bold text-slate-800 dark:text-white">
                       {consentedSupplier?.cipaNumber || '[Consent restricted]'}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px]">BURS TIN</span>
-                    <span className="font-mono font-bold text-slate-800">
+                    <span className="tabular-nums font-bold text-slate-800 dark:text-white">
                       {consentedSupplier?.tinNumber || '[Consent restricted]'}
                     </span>
                   </div>
@@ -419,19 +419,19 @@ export const BuyerReviewQueue: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px]">CITY / ADDRESS</span>
-                    <span className="text-slate-700 truncate block">
+                    <span className="text-slate-700 truncate block dark:text-[#D3E3F2]">
                       {consentedSupplier?.physicalAddress || consentedSupplier?.city || '[Consent restricted]'}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px]">VERIFICATION STANDING</span>
-                    <span className="font-medium text-slate-800 capitalize">
+                    <span className="font-medium text-slate-800 capitalize dark:text-white">
                       {consentedSupplier?.complianceStatus || 'Recorded on dossier'}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[10px]">EDD STATUS</span>
-                    <span className="font-bold text-[#1F5F99]">
+                    <span className="font-bold text-[#1F5F99] dark:text-[#6FAEE0]">
                       {consentedSupplier?.eddCertified ? 'EDD Certified' : 'Standard'}
                     </span>
                   </div>
@@ -440,25 +440,25 @@ export const BuyerReviewQueue: React.FC = () => {
 
               {/* Pinned Submitted Dossier Documents */}
               <div className="space-y-3 text-xs">
-                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] dark:text-white">
                   Pinned Dossier Compliance Documents ({attachedDocs.length})
                 </h4>
 
                 {attachedDocs.length === 0 ? (
-                  <div className="p-4 border border-slate-200 rounded-xl text-slate-500">
+                  <div className="p-4 border border-slate-200 rounded-xl text-slate-500 dark:text-[#9CB4C9] dark:border-[#244157]">
                     No pinned compliance documents were attached to this application.
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden dark:border-[#244157] dark:divide-[#244157]">
                     {attachedDocs.map((doc) => (
-                      <div key={doc.documentVersionId} className="p-3 bg-white flex items-center justify-between gap-3">
+                      <div key={doc.documentVersionId} className="p-3 bg-white flex items-center justify-between gap-3 dark:bg-[#1C364B]">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <FileText className="w-4 h-4 text-[#1F5F99] shrink-0" />
+                          <FileText className="w-4 h-4 text-[#1F5F99] shrink-0 dark:text-[#6FAEE0]" />
                           <div className="min-w-0">
-                            <span className="font-semibold text-slate-900 block truncate">
+                            <span className="font-semibold text-slate-900 block truncate dark:text-white">
                               {doc.name} (v{doc.versionNo})
                             </span>
-                            <span className="text-[11px] text-slate-500 font-mono block truncate">
+                            <span className="text-[11px] text-slate-500 tabular-nums block truncate dark:text-[#9CB4C9]">
                               Doc: {doc.documentNumber || '—'} · Exp: {doc.expiryDate ? String(doc.expiryDate).slice(0, 10) : 'None'} · SHA {String(doc.sha256 || '').slice(0, 10)}
                             </span>
                           </div>
@@ -477,7 +477,7 @@ export const BuyerReviewQueue: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handlePreviewSubmittedDoc(doc)}
-                            className="p-1.5 text-slate-500 hover:text-[#1F5F99] rounded hover:bg-slate-100 cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-[#1F5F99] rounded hover:bg-slate-100 cursor-pointer dark:text-[#9CB4C9] dark:hover:bg-[#162C3D] dark:hover:text-[#6FAEE0]"
                             title="Preview pinned document"
                           >
                             <Eye className="w-4 h-4" />
@@ -489,9 +489,9 @@ export const BuyerReviewQueue: React.FC = () => {
                 )}
 
                 {(isPreviewLoading || previewError || previewDoc) && (
-                  <div className="border border-slate-200 rounded-xl overflow-hidden mt-3">
-                    <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
-                      <span className="font-semibold text-slate-800 truncate">
+                  <div className="border border-slate-200 rounded-xl overflow-hidden mt-3 dark:border-[#244157]">
+                    <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 dark:bg-[#162C3D] dark:border-[#244157]">
+                      <span className="font-semibold text-slate-800 truncate dark:text-white">
                         {previewDoc ? `${previewDoc.title} — ${previewDoc.fileName}` : 'Loading document preview...'}
                       </span>
                       <button
@@ -519,11 +519,11 @@ export const BuyerReviewQueue: React.FC = () => {
 
               {/* Information Request History */}
               {selectedApp.informationRequest && (
-                <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1 text-xs">
+                <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200 space-y-1 text-xs dark:border-[#E8A33D]/40">
                   <span className="font-bold text-amber-900 block">Information Request Inquiry</span>
                   <p className="text-amber-950">{selectedApp.informationRequest.message}</p>
                   {selectedApp.informationRequest.responseNote && (
-                    <p className="text-emerald-900 pt-1 border-t border-amber-200">
+                    <p className="text-emerald-900 pt-1 border-t border-amber-200 dark:border-[#E8A33D]/40">
                       <strong>Supplier Response:</strong> {selectedApp.informationRequest.responseNote}
                     </p>
                   )}
@@ -533,14 +533,14 @@ export const BuyerReviewQueue: React.FC = () => {
               {/* Questionnaire Responses */}
               {selectedApp.responses.length > 0 && (
                 <div className="space-y-3 text-xs">
-                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] dark:text-white">
                     Questionnaire Responses
                   </h4>
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 dark:bg-[#162C3D] dark:border-[#244157]">
                     {selectedApp.responses.map((resp, idx) => (
                       <div key={idx} className="pb-2 border-b border-slate-200/60 last:border-0 last:pb-0">
-                        <span className="font-semibold text-slate-700 block text-[11px]">{resp.label}</span>
-                        <span className="font-medium text-slate-900 block mt-0.5">
+                        <span className="font-semibold text-slate-700 block text-[11px] dark:text-[#D3E3F2]">{resp.label}</span>
+                        <span className="font-medium text-slate-900 block mt-0.5 dark:text-white">
                           {typeof resp.value === 'boolean'
                             ? resp.value
                               ? 'Yes'
@@ -554,11 +554,11 @@ export const BuyerReviewQueue: React.FC = () => {
               )}
 
               {/* Actions Bar */}
-              <div className="pt-4 border-t border-slate-200 space-y-3">
-                <span className="text-xs font-bold text-slate-700 block">Evaluation Decision & Status Action:</span>
+              <div className="pt-4 border-t border-slate-200 space-y-3 dark:border-[#244157]">
+                <span className="text-xs font-bold text-slate-700 block dark:text-[#D3E3F2]">Evaluation Decision & Status Action:</span>
 
                 {isFinalized ? (
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 dark:bg-[#162C3D] dark:text-[#D3E3F2] dark:border-[#244157]">
                     This application is in finalized status (<strong>{selectedApp.status}</strong>) and cannot transition further.
                     {selectedApp.withdrawalReason ? ` Reason: ${selectedApp.withdrawalReason}` : ''}
                   </div>
@@ -569,7 +569,7 @@ export const BuyerReviewQueue: React.FC = () => {
                         type="button"
                         disabled={isSubmittingDecision}
                         onClick={() => recordDecision('Under review', 'Dossier opened for compliance & technical committee review.')}
-                        className="px-4 py-2 bg-[#EAF2FA] hover:bg-[#1F5F99] text-[#1F5F99] hover:text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                        className="px-4 py-2 bg-[#EAF2FA] hover:bg-[#1F5F99] text-[#1F5F99] hover:text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 dark:bg-[#162C3D] dark:text-[#6FAEE0]"
                       >
                         <Clock className="w-4 h-4" />
                         <span>Mark Under review</span>
@@ -595,7 +595,7 @@ export const BuyerReviewQueue: React.FC = () => {
                       type="button"
                       disabled={isSubmittingDecision}
                       onClick={() => setIsRequestingInfo(true)}
-                      className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                      className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 dark:bg-[#E8A33D]/20"
                     >
                       <AlertTriangle className="w-4 h-4 text-[#E8A33D]" />
                       <span>Request More Information</span>
@@ -605,7 +605,7 @@ export const BuyerReviewQueue: React.FC = () => {
                       type="button"
                       disabled={isSubmittingDecision}
                       onClick={() => setIsRejecting(true)}
-                      className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                      className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-[#C2412D] border border-rose-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 dark:bg-[#C2412D]/20 dark:border-[#C2412D]/40"
                     >
                       <XCircle className="w-4 h-4" />
                       <span>Reject</span>
@@ -615,10 +615,10 @@ export const BuyerReviewQueue: React.FC = () => {
               </div>
 
               {isRequestingInfo && (
-                <form onSubmit={handleRequestInfoSubmit} className="p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3 text-xs">
+                <form onSubmit={handleRequestInfoSubmit} className="p-4 bg-amber-50 border border-amber-300 rounded-xl space-y-3 text-xs dark:bg-[#E8A33D]/20">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-amber-900">Specify Missing or Clarification Requirements:</span>
-                    <button type="button" onClick={() => setIsRequestingInfo(false)} className="text-amber-800">
+                    <button type="button" onClick={() => setIsRequestingInfo(false)} className="text-amber-800 dark:text-[#FCD34D]">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -629,14 +629,14 @@ export const BuyerReviewQueue: React.FC = () => {
                     value={infoRequestReason}
                     onChange={(e) => setInfoRequestReason(e.target.value)}
                     placeholder="e.g. Please provide updated bank rating certificate..."
-                    className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-slate-900"
+                    className="w-full p-2.5 bg-white border border-amber-300 rounded-lg text-slate-900 dark:bg-[#1C364B] dark:text-white"
                   />
 
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setIsRequestingInfo(false)}
-                      className="px-3 py-1.5 text-slate-600"
+                      className="px-3 py-1.5 text-slate-600 dark:text-[#D3E3F2]"
                     >
                       Cancel
                     </button>
@@ -652,10 +652,10 @@ export const BuyerReviewQueue: React.FC = () => {
               )}
 
               {isRejecting && (
-                <form onSubmit={handleRejectSubmit} className="p-4 bg-rose-50 border border-rose-300 rounded-xl space-y-3 text-xs">
+                <form onSubmit={handleRejectSubmit} className="p-4 bg-rose-50 border border-rose-300 rounded-xl space-y-3 text-xs dark:bg-[#C2412D]/20">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-rose-900">Enter Statutory Reason for Rejection:</span>
-                    <button type="button" onClick={() => setIsRejecting(false)} className="text-rose-800">
+                    <button type="button" onClick={() => setIsRejecting(false)} className="text-rose-800 dark:text-[#FCA5A5]">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -666,14 +666,14 @@ export const BuyerReviewQueue: React.FC = () => {
                     value={rejectReason}
                     onChange={(e) => setRejectReason(e.target.value)}
                     placeholder="e.g. Non-compliance with mandatory technical qualification criteria..."
-                    className="w-full p-2.5 bg-white border border-rose-300 rounded-lg text-slate-900"
+                    className="w-full p-2.5 bg-white border border-rose-300 rounded-lg text-slate-900 dark:bg-[#1C364B] dark:text-white"
                   />
 
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setIsRejecting(false)}
-                      className="px-3 py-1.5 text-slate-600"
+                      className="px-3 py-1.5 text-slate-600 dark:text-[#D3E3F2]"
                     >
                       Cancel
                     </button>

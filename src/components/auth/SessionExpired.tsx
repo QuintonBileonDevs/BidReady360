@@ -22,7 +22,7 @@ export const SessionExpired: React.FC<SessionExpiredProps> = ({ onNavigate }) =>
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Session expired
           </h2>
-          <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto leading-relaxed">
+          <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto leading-relaxed dark:text-[#9CB4C9]">
             Your session has timed out due to inactivity. Please sign in again to continue managing your bids and calls.
           </p>
         </div>

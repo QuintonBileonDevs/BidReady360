@@ -33,15 +33,15 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
 
     const variantStyles = {
       default:
-        'bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] shadow-subtle',
+        'bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] shadow-subtle',
       surface:
-        'bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]',
+        'bg-[#EAF2FA]/60 dark:bg-[#162C3D] border border-[#D5E0EA] dark:border-[#244157]',
       dark:
-        'bg-[#10212E] text-white border border-[#1E364A] shadow-elevated',
+        'bg-[#10212E] text-white border border-[#244157] shadow-elevated',
       outline:
-        'bg-transparent border border-[#D5E0EA] dark:border-[#1E364A]',
+        'bg-transparent border border-[#D5E0EA] dark:border-[#244157]',
       interactive:
-        'bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] shadow-subtle hover:border-[#1F5F99] dark:hover:border-[#6FAEE0] hover:shadow-elevated cursor-pointer',
+        'bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] shadow-subtle hover:border-[#1F5F99] dark:hover:border-[#6FAEE0] hover:shadow-elevated cursor-pointer',
     };
 
     return (

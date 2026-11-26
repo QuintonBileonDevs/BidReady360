@@ -18,7 +18,7 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
 
   if (!data.length) {
     return (
-      <div className="h-[220px] flex items-center justify-center text-[13px] text-[#6B7A87]">
+      <div className="h-[220px] flex items-center justify-center text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
         No adoption trend data available yet.
       </div>
     );
@@ -41,12 +41,12 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-[14px] flex-wrap gap-2">
-        <span className="font-medium text-[#43525F] dark:text-[#B2C3D2]">
+        <span className="font-medium text-[#43525F] dark:text-[#D3E3F2]">
           6-month cumulative registrations
         </span>
         <div className="flex items-center gap-4 text-[13px]">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-0.5 bg-[#1F5F99]" />
+            <span className="w-3 h-0.5 bg-[#1F5F99] dark:bg-[#6FAEE0]" />
             <span className="text-[#10212E] dark:text-white">Suppliers ({latest.suppliers})</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -65,15 +65,14 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
                 y1={getY(val)}
                 x2="480"
                 y2={getY(val)}
-                stroke="#D5E0EA"
+                stroke="var(--border-subtle)"
                 strokeDasharray="3,3"
-                className="dark:stroke-[#1E364A]"
               />
               <text
                 x="32"
                 y={getY(val) + 4}
                 textAnchor="end"
-                className="fill-[#6B7A87] text-[11px] font-sans"
+                className="fill-[#6B7A87] dark:fill-[#9CB4C9] text-[11px] font-sans"
               >
                 {val}
               </text>
@@ -82,7 +81,7 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
 
           {data.length > 1 && (
             <>
-              <polyline fill="none" stroke="#1F5F99" strokeWidth="2.5" points={supplierPoints} />
+              <polyline fill="none" stroke="var(--brand-primary)" strokeWidth="2.5" points={supplierPoints} />
               <polyline fill="none" stroke="#2F8F5B" strokeWidth="2" strokeDasharray="4,2" points={orgPoints} />
             </>
           )}
@@ -98,7 +97,7 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
                 cx={getX(i)}
                 cy={getY(d.suppliers)}
                 r={hoveredIndex === i ? 5 : 3.5}
-                fill="#1F5F99"
+                fill="var(--brand-primary)"
                 className="transition-all"
               />
               <circle
@@ -112,7 +111,7 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
                 x={getX(i)}
                 y="210"
                 textAnchor="middle"
-                className="fill-[#6B7A87] text-[11px] font-sans"
+                className="fill-[#6B7A87] dark:fill-[#9CB4C9] text-[11px] font-sans"
               >
                 {d.month}
               </text>
@@ -140,7 +139,7 @@ export const AdminGrowthChart: React.FC<{ data?: GrowthPoint[] }> = ({ data = []
 export const AdminRevenueChart: React.FC<{ data?: RevenuePoint[] }> = ({ data = [] }) => {
   if (!data.length) {
     return (
-      <div className="h-[220px] flex items-center justify-center text-[13px] text-[#6B7A87]">
+      <div className="h-[220px] flex items-center justify-center text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
         No billing invoice records yet.
       </div>
     );
@@ -151,7 +150,7 @@ export const AdminRevenueChart: React.FC<{ data?: RevenuePoint[] }> = ({ data = 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-[14px] flex-wrap gap-2">
-        <span className="font-medium text-[#43525F] dark:text-[#B2C3D2]">
+        <span className="font-medium text-[#43525F] dark:text-[#D3E3F2]">
           Past 6 months invoiced revenue (BWP)
         </span>
         <div className="flex items-center gap-3 text-[12px]">
@@ -164,18 +163,18 @@ export const AdminRevenueChart: React.FC<{ data?: RevenuePoint[] }> = ({ data = 
         </div>
       </div>
 
-      <div className="h-[220px] flex items-end justify-between gap-4 pt-4 border-b border-[#D5E0EA] dark:border-[#1E364A] pb-2">
+      <div className="h-[220px] flex items-end justify-between gap-4 pt-4 border-b border-[#D5E0EA] dark:border-[#244157] pb-2">
         {data.map((d, i) => {
           const barHeight = d.total > 0 ? Math.max(8, (d.total / maxTotal) * 160) : 4;
           const paidPct = d.total > 0 ? (d.paid / d.total) * 100 : 0;
           const outPct = d.total > 0 ? (d.outstanding / d.total) * 100 : 0;
           return (
             <div key={d.month + i} className="flex-1 flex flex-col items-center gap-2 group">
-              <span className="text-[11px] text-[#6B7A87] opacity-0 group-hover:opacity-100 transition-opacity tabular-nums">
+              <span className="text-[11px] text-[#6B7A87] opacity-0 group-hover:opacity-100 transition-opacity tabular-nums dark:text-[#9CB4C9]">
                 BWP {d.total.toLocaleString()}
               </span>
               <div
-                className="w-full max-w-[42px] bg-[#EAF2FA] dark:bg-[#162C3E] rounded-t-[4px] overflow-hidden flex flex-col-reverse transition-all"
+                className="w-full max-w-[42px] bg-[#EAF2FA] dark:bg-[#162C3D] rounded-t-[4px] overflow-hidden flex flex-col-reverse transition-all"
                 style={{ height: `${barHeight}px` }}
               >
                 {paidPct > 0 && (

@@ -157,13 +157,13 @@ export const BuyerSignup: React.FC<BuyerSignupProps> = ({ onNavigate }) => {
           <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
             Register procuring organization
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Set up an official workspace for your council, parastatal, or entity.
           </p>
         </div>
 
         {/* Short Note per user requirement */}
-        <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3E] border border-[#C9D9E8] dark:border-[#1E364A] text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] flex items-start gap-2.5">
+        <div className="p-3.5 rounded-[8px] bg-[#EAF2FA] dark:bg-[#162C3D] border border-[#C9D9E8] dark:border-[#244157] text-[14px] text-[#1F5F99] dark:text-[#6FAEE0] flex items-start gap-2.5">
           <Info className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={1.5} />
           <span>New organizations are reviewed before they can publish calls.</span>
         </div>
@@ -171,7 +171,7 @@ export const BuyerSignup: React.FC<BuyerSignupProps> = ({ onNavigate }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Organization Details Section */}
           <div className="space-y-3 pt-1">
-            <span className="text-[13px] font-semibold text-[#10212E] dark:text-white uppercase tracking-wider block border-b border-[#D5E0EA] dark:border-[#1E364A] pb-1">
+            <span className="text-[13px] font-semibold text-[#10212E] dark:text-white uppercase tracking-wider block border-b border-[#D5E0EA] dark:border-[#244157] pb-1">
               Organization details
             </span>
 
@@ -224,7 +224,7 @@ export const BuyerSignup: React.FC<BuyerSignupProps> = ({ onNavigate }) => {
 
           {/* Your Details Section */}
           <div className="space-y-3 pt-2">
-            <span className="text-[13px] font-semibold text-[#10212E] dark:text-white uppercase tracking-wider block border-b border-[#D5E0EA] dark:border-[#1E364A] pb-1">
+            <span className="text-[13px] font-semibold text-[#10212E] dark:text-white uppercase tracking-wider block border-b border-[#D5E0EA] dark:border-[#244157] pb-1">
               Your details
             </span>
 
@@ -330,7 +330,7 @@ export const BuyerSignup: React.FC<BuyerSignupProps> = ({ onNavigate }) => {
         </form>
 
         {/* Bottom Switcher Link */}
-        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-center text-[14px] text-[#6B7A87]">
+        <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] text-center text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
           Already have an approved account?{' '}
           <button
             type="button"

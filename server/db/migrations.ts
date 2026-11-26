@@ -46,9 +46,14 @@ export async function ensureFoundationSchema(): Promise<void> {
     // awards unique index required by ON CONFLICT (bid_id)
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_awards_bid_id ON awards (bid_id)`,
 
-    // notifications & templates indexes
+    // notifications & templates mailbox columns and indexes
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_starred BOOLEAN NOT NULL DEFAULT FALSE`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
     `CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications (user_id, created_at DESC) WHERE read_at IS NULL`,
     `CREATE INDEX IF NOT EXISTS idx_notifications_tenant_scope ON notifications (user_id, organization_id, supplier_id, created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_notifications_user_inbox ON notifications (user_id, created_at DESC) WHERE deleted_at IS NULL AND archived_at IS NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_notifications_user_starred ON notifications (user_id, created_at DESC) WHERE deleted_at IS NULL AND is_starred = TRUE`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_templates_code_channel ON notification_templates (COALESCE(organization_id, '00000000-0000-0000-0000-000000000000'::uuid), code, channel, locale)`,
   ];
 

@@ -202,12 +202,12 @@ export const AdminBilling: React.FC = () => {
   return (
     <div className="space-y-10">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Billing &amp; revenue operations
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Manage procuring organization subscription tiers and reconcile platform invoices.
           </p>
         </div>
@@ -240,7 +240,7 @@ export const AdminBilling: React.FC = () => {
       )}
 
       {successMessage && (
-        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px]">
+        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px] dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
             <span>{successMessage}</span>
@@ -248,7 +248,7 @@ export const AdminBilling: React.FC = () => {
           <button
             type="button"
             onClick={() => setSuccessMessage(null)}
-            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer"
+            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer dark:text-[#6EE7B7]"
           >
             ✕
           </button>
@@ -262,7 +262,7 @@ export const AdminBilling: React.FC = () => {
             <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
               Active subscription plans
             </h2>
-            <p className="text-[14px] text-[#6B7A87]">
+            <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Configured monthly rates and annual call allowances stored in PostgreSQL.
             </p>
           </div>
@@ -270,7 +270,7 @@ export const AdminBilling: React.FC = () => {
           <button
             type="button"
             onClick={loadBilling}
-            className="text-[13px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1 cursor-pointer"
+            className="text-[13px] text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white inline-flex items-center gap-1 cursor-pointer dark:text-[#9CB4C9]"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reload from database</span>
@@ -278,12 +278,12 @@ export const AdminBilling: React.FC = () => {
         </div>
 
         {isLoadingPlans ? (
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 flex items-center justify-center gap-3 text-[#6B7A87]">
-            <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-8 flex items-center justify-center gap-3 text-[#6B7A87] dark:text-[#9CB4C9]">
+            <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span className="text-[14px]">Loading subscription plans...</span>
           </div>
         ) : plans.length === 0 ? (
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-8 text-center text-[#6B7A87] text-[14px]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-8 text-center text-[#6B7A87] text-[14px] dark:text-[#9CB4C9]">
             No subscription plans configured in database.
           </div>
         ) : (
@@ -295,18 +295,18 @@ export const AdminBilling: React.FC = () => {
               return (
                 <div
                   key={plan.id}
-                  className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-5 flex flex-col justify-between"
+                  className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-5 flex flex-col justify-between"
                 >
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-[#1F5F99] bg-[#EAF2FA] px-2.5 py-0.5 rounded-[4px] font-medium">
+                      <span className="text-[12px] text-[#1F5F99] bg-[#EAF2FA] px-2.5 py-0.5 rounded-[4px] font-medium dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                         {plan.category}
                       </span>
                       {!isEditing && (
                         <button
                           type="button"
                           onClick={() => startEditing(plan)}
-                          className="px-2.5 py-1 text-[13px] bg-[#F7FAFD] dark:bg-[#10212E] hover:bg-[#EAF2FA] text-[#1F5F99] dark:text-[#6FAEE0] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] inline-flex items-center gap-1.5 font-medium cursor-pointer"
+                          className="px-2.5 py-1 text-[13px] bg-[#F7FAFD] dark:bg-[#10212E] hover:bg-[#EAF2FA] text-[#1F5F99] dark:text-[#6FAEE0] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] inline-flex items-center gap-1.5 font-medium cursor-pointer dark:hover:bg-[#162C3D]"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>Edit</span>
@@ -319,21 +319,21 @@ export const AdminBilling: React.FC = () => {
                     </h3>
 
                     {isEditing ? (
-                      <div className="space-y-4 p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A]">
+                      <div className="space-y-4 p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157]">
                         <div className="space-y-1.5">
                           <label className="text-[13px] font-semibold block">Monthly rate (BWP)</label>
                           <input
                             type="number"
                             value={editPrice}
                             onChange={(e) => setEditPrice(Number(e.target.value))}
-                            className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[15px] font-semibold tabular-nums"
+                            className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[15px] font-semibold tabular-nums"
                             min="0"
                             step="100"
                           />
                           <div className="flex flex-wrap gap-1.5 pt-1">
-                            <button type="button" onClick={() => applyQuickPriceOffset(500)} className="text-[11px] px-2 py-0.5 rounded border border-[#D5E0EA] cursor-pointer">+500</button>
-                            <button type="button" onClick={() => applyQuickPricePercent(5)} className="text-[11px] px-2 py-0.5 rounded border border-[#D5E0EA] cursor-pointer">+5%</button>
-                            <button type="button" onClick={() => applyQuickPricePercent(-5)} className="text-[11px] px-2 py-0.5 rounded border border-[#D5E0EA] cursor-pointer">-5%</button>
+                            <button type="button" onClick={() => applyQuickPriceOffset(500)} className="text-[11px] px-2 py-0.5 rounded border border-[#D5E0EA] cursor-pointer dark:border-[#244157]">+500</button>
+                            <button type="button" onClick={() => applyQuickPricePercent(5)} className="text-[11px] px-2 py-0.5 rounded border border-[#D5E0EA] cursor-pointer dark:border-[#244157]">+5%</button>
+                            <button type="button" onClick={() => applyQuickPricePercent(-5)} className="text-[11px] px-2 py-0.5 rounded border border-[#D5E0EA] cursor-pointer dark:border-[#244157]">-5%</button>
                           </div>
                         </div>
 
@@ -346,7 +346,7 @@ export const AdminBilling: React.FC = () => {
                             min="1"
                             value={editMaxCalls}
                             onChange={(e) => setEditMaxCalls(e.target.value)}
-                            className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px]"
+                            className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[14px]"
                           />
                         </div>
 
@@ -356,17 +356,17 @@ export const AdminBilling: React.FC = () => {
                             rows={2}
                             value={editDescription}
                             onChange={(e) => setEditDescription(e.target.value)}
-                            className="w-full p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[13px]"
+                            className="w-full p-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[13px]"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[12px] font-semibold text-[#6B7A87] block">Audit rationale</label>
+                          <label className="text-[12px] font-semibold text-[#6B7A87] block dark:text-[#9CB4C9]">Audit rationale</label>
                           <input
                             type="text"
                             value={editReason}
                             onChange={(e) => setEditReason(e.target.value)}
-                            className="w-full px-3 py-1 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[13px]"
+                            className="w-full px-3 py-1 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[13px]"
                           />
                         </div>
 
@@ -383,7 +383,7 @@ export const AdminBilling: React.FC = () => {
                           <button
                             type="button"
                             onClick={cancelEditing}
-                            className="px-3 py-2 border border-[#D5E0EA] text-[13px] rounded-[6px] cursor-pointer"
+                            className="px-3 py-2 border border-[#D5E0EA] text-[13px] rounded-[6px] cursor-pointer dark:border-[#244157]"
                           >
                             Cancel
                           </button>
@@ -395,22 +395,22 @@ export const AdminBilling: React.FC = () => {
                           <div className="font-heading font-semibold text-[32px] text-[#10212E] dark:text-white tabular-nums">
                             BWP {plan.priceBWP.toLocaleString()}
                           </div>
-                          <span className="text-[14px] text-[#6B7A87]">/ month</span>
+                          <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">/ month</span>
                         </div>
-                        <div className="text-[13px] text-[#2F8F5B] bg-[#ECFDF5] px-2.5 py-1 rounded-[4px] inline-block font-medium">
+                        <div className="text-[13px] text-[#2F8F5B] bg-[#ECFDF5] px-2.5 py-1 rounded-[4px] inline-block font-medium dark:bg-[#2F8F5B]/20">
                           BWP {annualPrice.toLocaleString()} / year
                         </div>
                         <div className="text-[13px] font-medium text-[#1F5F99] dark:text-[#6FAEE0]">
                           Quota: {plan.callsAllowance}
                         </div>
-                        <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                        <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                           {plan.description}
                         </p>
                       </div>
                     )}
                   </div>
 
-                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] text-[13px] text-[#6B7A87]">
+                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     {plan.subscribersCount} active subscriber{plan.subscribersCount === 1 ? '' : 's'}
                   </div>
                 </div>
@@ -423,18 +423,18 @@ export const AdminBilling: React.FC = () => {
       {/* Adjust All Pricing Modal */}
       {isAdjustModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-2xl w-full p-6 space-y-6 my-8">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-2xl w-full p-6 space-y-6 my-8">
+            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[20px]">Adjust subscription plan pricing</h3>
-                <p className="text-[13px] text-[#6B7A87]">Changes persist to PostgreSQL and log an audit event.</p>
+                <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">Changes persist to PostgreSQL and log an audit event.</p>
               </div>
-              <button type="button" onClick={() => setIsAdjustModalOpen(false)} className="p-1 text-[#6B7A87] cursor-pointer">
+              <button type="button" onClick={() => setIsAdjustModalOpen(false)} className="p-1 text-[#6B7A87] cursor-pointer dark:text-[#9CB4C9]">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex border-b border-[#D5E0EA] dark:border-[#1E364A] gap-4">
+            <div className="flex border-b border-[#D5E0EA] dark:border-[#244157] gap-4">
               <button
                 type="button"
                 onClick={() => setModalTab('individual')}
@@ -466,7 +466,7 @@ export const AdminBilling: React.FC = () => {
                     className={`px-3 py-1.5 rounded-[6px] text-[13px] font-semibold cursor-pointer ${
                       indexationPercent === pct
                         ? 'bg-[#1F5F99] text-white'
-                        : 'bg-white dark:bg-[#132635] border border-[#D5E0EA]'
+                        : 'bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157]'
                     }`}
                   >
                     {pct > 0 ? `+${pct}%` : `${pct}%`}
@@ -475,12 +475,12 @@ export const AdminBilling: React.FC = () => {
               </div>
             )}
 
-            <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
+            <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157] border border-[#D5E0EA] dark:border-[#244157] rounded-[8px]">
               {plans.map((p) => (
                 <div key={p.id} className="p-4 flex items-center justify-between gap-4">
                   <div>
                     <div className="font-semibold text-[14px]">{p.name}</div>
-                    <div className="text-[12px] text-[#6B7A87]">Current: BWP {p.priceBWP.toLocaleString()}</div>
+                    <div className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">Current: BWP {p.priceBWP.toLocaleString()}</div>
                   </div>
                   <input
                     type="number"
@@ -488,7 +488,7 @@ export const AdminBilling: React.FC = () => {
                     step="100"
                     value={tempModalPrices[p.id] ?? p.priceBWP}
                     onChange={(e) => handleModalPriceChange(p.id, Number(e.target.value))}
-                    className="w-36 px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] text-right font-semibold tabular-nums"
+                    className="w-36 px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-[#F7FAFD] dark:bg-[#10212E] text-right font-semibold tabular-nums"
                   />
                 </div>
               ))}
@@ -500,11 +500,11 @@ export const AdminBilling: React.FC = () => {
                 type="text"
                 value={adjustmentJustification}
                 onChange={(e) => setAdjustmentJustification(e.target.value)}
-                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E]"
+                className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#10212E]"
               />
             </div>
 
-            <div className="flex justify-end gap-3 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="flex justify-end gap-3 pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
               <button type="button" onClick={() => setIsAdjustModalOpen(false)} className="px-4 py-2 text-[14px] cursor-pointer">
                 Cancel
               </button>
@@ -530,10 +530,10 @@ export const AdminBilling: React.FC = () => {
           </h2>
         </div>
 
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] overflow-hidden">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px]">
+            <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+              <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[13px] dark:text-[#9CB4C9]">
                 <tr>
                   <th className="p-4">Invoice #</th>
                   <th className="p-4">Tenant</th>
@@ -543,10 +543,10 @@ export const AdminBilling: React.FC = () => {
                   <th className="p-4">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
                 {invoices.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-[#6B7A87]">
+                    <td colSpan={6} className="p-8 text-center text-[#6B7A87] dark:text-[#9CB4C9]">
                       No platform invoices recorded yet.
                     </td>
                   </tr>
@@ -554,14 +554,14 @@ export const AdminBilling: React.FC = () => {
                   invoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
                       <td className="p-4 font-semibold">{inv.invoiceNumber}</td>
-                      <td className="p-4 text-[#43525F] dark:text-[#B2C3D2]">{inv.orgName}</td>
-                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2]">
+                      <td className="p-4 text-[#43525F] dark:text-[#D3E3F2]">{inv.orgName}</td>
+                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#D3E3F2]">
                         {formatDate(inv.issuedAt || inv.createdAt)}
                       </td>
                       <td className="p-4 font-semibold tabular-nums text-right">
                         {inv.currency} {inv.amountBWP.toLocaleString()}
                       </td>
-                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#B2C3D2]">
+                      <td className="p-4 tabular-nums text-[#43525F] dark:text-[#D3E3F2]">
                         {formatDate(inv.dueDate)}
                       </td>
                       <td className="p-4">

@@ -11,6 +11,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { NotificationDrawer } from './NotificationDrawer';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import { calculateSupplierCompleteness } from '../../utils/supplierOnboarding';
 import { useReadiness } from '../../context/ReadinessContext';
 
@@ -71,6 +72,7 @@ export const Header: React.FC = () => {
   const unreadNotifs = notifications.filter(
     (n) =>
       !n.read &&
+      !n.archived &&
       ((role === 'supplier' && n.recipientRole === 'Supplier') ||
         (role === 'buyer' && n.recipientRole === 'Buyer'))
   ).length;
@@ -149,7 +151,7 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] transition-colors">
+      <header className="sticky top-0 z-40 bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#244157] transition-colors">
         <div className="container-1160 h-16 flex items-center justify-between gap-6 lg:gap-8">
           {/* Zone 1: Brand Wordmark */}
           <button
@@ -181,7 +183,7 @@ export const Header: React.FC = () => {
                     className={`h-full flex items-center gap-1.5 px-1 text-[14px] xl:text-[15px] font-medium transition-colors cursor-pointer border-b-2 -mb-[1px] whitespace-nowrap shrink-0 ${
                       isActive
                         ? 'border-[#1F5F99] dark:border-[#6FAEE0] text-[#10212E] dark:text-white font-semibold'
-                        : 'border-transparent text-[#43525F] dark:text-[#B2C3D2] hover:text-[#10212E] dark:hover:text-white'
+                        : 'border-transparent text-[#43525F] dark:text-[#D3E3F2] hover:text-[#10212E] dark:hover:text-white'
                     }`}
                   >
                     <span>{item.label}</span>
@@ -202,7 +204,9 @@ export const Header: React.FC = () => {
           )}
 
           {/* Zone 3: Actions & Account Menu */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <ThemeSwitcher variant="compact" />
+
             {/* Public Role Action Buttons */}
             {(!isAuthenticated || role === 'public') && (
               <div className="hidden sm:flex items-center gap-2 shrink-0">
@@ -216,7 +220,7 @@ export const Header: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openAuth('supplier', 'signup')}
-                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] text-white text-[14px] font-medium rounded-[6px] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="px-4 py-2 bg-[#1F5F99] hover:bg-[#184c7a] dark:bg-[#6FAEE0] dark:hover:bg-[#5b9dd2] text-white dark:text-[#10212E] text-[14px] font-semibold rounded-[6px] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
                   Register company
                 </button>
@@ -228,7 +232,7 @@ export const Header: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsNotifOpen(true)}
-                className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer shrink-0"
+                className="relative min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#D3E3F2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] rounded-[6px] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] transition-colors cursor-pointer shrink-0"
                 aria-label={unreadNotifs > 0 ? `Open notifications (${unreadNotifs} unread)` : 'Open notifications'}
               >
                 <Bell className="w-4 h-4" strokeWidth={1.75} />
@@ -252,13 +256,13 @@ export const Header: React.FC = () => {
                   aria-expanded={isUserMenuOpen}
                   aria-haspopup="menu"
                   title={supplier.legalName || 'Supplier'}
-                  className="min-h-[40px] flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] transition-colors cursor-pointer text-left shrink-0"
+                  className="min-h-[40px] flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] transition-colors cursor-pointer text-left shrink-0"
                 >
-                  <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] dark:bg-[#162C3E] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center font-semibold text-[13px] shrink-0">
+                  <div className="w-8 h-8 rounded-[6px] bg-[#EAF2FA] dark:bg-[#162C3D] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center font-semibold text-[13px] shrink-0">
                     {supplier.legalName ? (
                       supplier.legalName.trim().substring(0, 2).toUpperCase()
                     ) : (
-                      <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99]" />
+                      <Loader2 className="w-4 h-4 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
                     )}
                   </div>
                   <div className="hidden sm:block leading-tight">
@@ -275,7 +279,7 @@ export const Header: React.FC = () => {
                     </span>
                   </div>
                   <ChevronDown
-                    className={`w-3.5 h-3.5 text-[#6B7A87] transition-transform duration-150 shrink-0 ${
+                    className={`w-3.5 h-3.5 text-[#6B7A87] transition-transform duration-150 shrink-0 dark:text-[#9CB4C9] ${
                       isUserMenuOpen ? 'rotate-180' : ''
                     }`}
                     strokeWidth={1.75}
@@ -285,13 +289,13 @@ export const Header: React.FC = () => {
                 {isUserMenuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 mt-2 w-60 bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[10px] p-1.5 z-50 text-[13px] space-y-1 shadow-sm"
+                    className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] rounded-[10px] p-1.5 z-50 text-[13px] space-y-1 shadow-elevated"
                   >
-                    <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+                    <div className="px-3 py-2 border-b border-[#D5E0EA] dark:border-[#244157]">
                       <div className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
                         {supplier.legalName || 'Supplier'}
                       </div>
-                      <div className="text-[12px] text-[#6B7A87] dark:text-[#8DA2B5] truncate">
+                      <div className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9] truncate">
                         {supplier.cipaNumber ? `CIPA ${supplier.cipaNumber}` : 'Account active'}
                         {!supplier.emailVerified ? ' · Email unverified' : ''}
                       </div>
@@ -303,7 +307,7 @@ export const Header: React.FC = () => {
                         setActiveNav('profile');
                         setIsUserMenuOpen(false);
                       }}
-                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
+                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                     >
                       Company profile
                     </button>
@@ -314,10 +318,16 @@ export const Header: React.FC = () => {
                         setActiveNav('vault');
                         setIsUserMenuOpen(false);
                       }}
-                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] text-[#10212E] dark:text-white transition-colors cursor-pointer"
+                      className="w-full text-left px-3 py-2 rounded-[6px] hover:bg-[#EAF2FA] dark:hover:bg-[#162C3D] text-[#10212E] dark:text-white transition-colors cursor-pointer"
                     >
                       Document vault
                     </button>
+                    <div className="px-2.5 py-2 border-y border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
+                      <span className="text-[11px] font-medium text-[#6B7A87] dark:text-[#9CB4C9] block">
+                        Appearance
+                      </span>
+                      <ThemeSwitcher variant="segmented" className="w-full justify-between" />
+                    </div>
                     <button
                       type="button"
                       role="menuitem"
@@ -357,7 +367,7 @@ export const Header: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#132635] cursor-pointer shrink-0"
+                className="lg:hidden min-w-[40px] min-h-[40px] flex items-center justify-center text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B] cursor-pointer shrink-0"
                 aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
               >
                 {isMobileMenuOpen ? (
@@ -372,7 +382,7 @@ export const Header: React.FC = () => {
 
         {/* Mobile Navigation Drawer */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#1E364A] px-4 py-4 space-y-2">
+          <div className="lg:hidden bg-white dark:bg-[#10212E] border-b border-[#D5E0EA] dark:border-[#244157] px-4 py-4 space-y-2">
             {navItems.map((item) => {
               const isActive =
                 activeNav === item.id ||
@@ -390,7 +400,7 @@ export const Header: React.FC = () => {
                   className={`w-full text-left px-3 py-2.5 rounded-[6px] text-[15px] font-medium transition-colors flex items-center justify-between cursor-pointer ${
                     isActive
                       ? 'bg-[#EAF2FA] dark:bg-[#1F5F99]/20 text-[#1F5F99] dark:text-[#6FAEE0] font-semibold'
-                      : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#132635]'
+                      : 'text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] dark:hover:bg-[#1C364B]'
                   }`}
                 >
                   <span>{item.label}</span>
@@ -404,19 +414,24 @@ export const Header: React.FC = () => {
               );
             })}
 
+            <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-2">
+              <span className="text-[13px] font-medium text-[#43525F] dark:text-[#D3E3F2]">Appearance</span>
+              <ThemeSwitcher variant="segmented" />
+            </div>
+
             {(!isAuthenticated || role === 'public') && (
-              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col gap-2 sm:hidden">
+              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col gap-2 sm:hidden">
                 <button
                   type="button"
                   onClick={() => openAuth('supplier', 'signin')}
-                  className="w-full px-3.5 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
+                  className="w-full px-3.5 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
                 >
                   Sign in
                 </button>
                 <button
                   type="button"
                   onClick={() => openAuth('supplier', 'signup')}
-                  className="w-full px-3.5 py-2.5 bg-[#1F5F99] text-white rounded-[6px] text-[14px] font-medium cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-[#1F5F99] dark:bg-[#6FAEE0] text-white dark:text-[#10212E] rounded-[6px] text-[14px] font-semibold cursor-pointer"
                 >
                   Register company
                 </button>

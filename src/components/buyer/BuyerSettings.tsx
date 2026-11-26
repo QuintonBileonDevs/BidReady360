@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { buyerApi } from '../../services/api';
+import { ThemeSwitcher } from '../common/ThemeSwitcher';
 
 export const BuyerSettings: React.FC = () => {
   const [minDays, setMinDays] = useState('21');
@@ -73,12 +74,12 @@ export const BuyerSettings: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1">
           <h1 className="font-heading font-semibold text-[30px] leading-tight text-[#10212E] dark:text-white">
             Procurement policies &amp; council settings
           </h1>
-          <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+          <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
             Configure minimum tender advertising durations, clarification cut-offs, and automated reminder controls.
           </p>
         </div>
@@ -92,21 +93,33 @@ export const BuyerSettings: React.FC = () => {
       )}
 
       {saved && (
-        <div className="p-4 bg-[#ECFDF5] border border-[#A7F3D0] rounded-[12px] text-[#065F46] text-[14px] flex items-center gap-2">
-          <CheckCircle2 className="w-5 h-5 text-[#2F8F5B]" />
+        <div className="p-4 bg-[#ECFDF5] dark:bg-[#2F8F5B]/20 border border-[#A7F3D0] dark:border-[#2F8F5B]/40 rounded-[12px] text-[#065F46] dark:text-[#86EFAC] text-[14px] flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] dark:text-[#86EFAC]" />
           <span>Organization procurement parameters saved to PostgreSQL and logged to the audit trail.</span>
         </div>
       )}
 
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 max-w-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white">
+            Display appearance
+          </h2>
+          <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
+            Choose Light, System, or Dark mode for this browser. System follows your device preference automatically.
+          </p>
+        </div>
+        <ThemeSwitcher variant="segmented" className="shrink-0" />
+      </div>
+
       {isLoading ? (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-10 flex items-center justify-center gap-2.5 text-[#6B7A87]">
-          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-10 flex items-center justify-center gap-2.5 text-[#6B7A87] dark:text-[#9CB4C9]">
+          <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
           <span className="text-[14px]">Loading procurement settings...</span>
         </div>
       ) : (
         <form
           onSubmit={handleSave}
-          className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-5 max-w-2xl text-[14px]"
+          className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-5 max-w-2xl text-[14px]"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -116,7 +129,7 @@ export const BuyerSettings: React.FC = () => {
               <select
                 value={minDays}
                 onChange={(e) => setMinDays(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               >
                 <option value="14">14 Days (Fast-track EOI)</option>
                 <option value="21">21 Days (Public Procurement Standard)</option>
@@ -135,7 +148,7 @@ export const BuyerSettings: React.FC = () => {
                 max={30}
                 value={cutoffDays}
                 onChange={(e) => setCutoffDays(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               />
             </div>
           </div>
@@ -147,7 +160,7 @@ export const BuyerSettings: React.FC = () => {
                 type="time"
                 value={closingTime}
                 onChange={(e) => setClosingTime(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               />
             </div>
 
@@ -156,7 +169,7 @@ export const BuyerSettings: React.FC = () => {
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
+                className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#10212E] text-[#10212E] dark:text-white"
               >
                 <option value="BWP">Botswana Pula (BWP)</option>
                 <option value="USD">US Dollar (USD)</option>
@@ -165,17 +178,17 @@ export const BuyerSettings: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-3 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="space-y-3 pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={requireGazetteNotice}
                 onChange={(e) => setRequireGazetteNotice(e.target.checked)}
-                className="mt-1 rounded border-[#D5E0EA]"
+                className="mt-1 rounded border-[#D5E0EA] dark:border-[#244157]"
               />
               <span>
                 <strong className="block text-[#10212E] dark:text-white">Require statutory gazette notice tracking</strong>
-                <span className="text-[12px] text-[#6B7A87]">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Enforces public notice reference verification before publishing open RFP tenders.
                 </span>
               </span>
@@ -186,11 +199,11 @@ export const BuyerSettings: React.FC = () => {
                 type="checkbox"
                 checked={autoDeadlineReminders}
                 onChange={(e) => setAutoDeadlineReminders(e.target.checked)}
-                className="mt-1 rounded border-[#D5E0EA]"
+                className="mt-1 rounded border-[#D5E0EA] dark:border-[#244157]"
               />
               <span>
                 <strong className="block text-[#10212E] dark:text-white">Automated closing &amp; addendum reminders</strong>
-                <span className="text-[12px] text-[#6B7A87]">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Dispatches template-backed notifications to invited and applicant suppliers before deadlines.
                 </span>
               </span>
@@ -201,11 +214,11 @@ export const BuyerSettings: React.FC = () => {
                 type="checkbox"
                 checked={requireMfaEvaluators}
                 onChange={(e) => setRequireMfaEvaluators(e.target.checked)}
-                className="mt-1 rounded border-[#D5E0EA]"
+                className="mt-1 rounded border-[#D5E0EA] dark:border-[#244157]"
               />
               <span>
                 <strong className="block text-[#10212E] dark:text-white">Enforce MFA for evaluation &amp; bid opening officers</strong>
-                <span className="text-[12px] text-[#6B7A87]">
+                <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Requires two-factor authentication for officers conducting sealed bid openings or scoring.
                 </span>
               </span>

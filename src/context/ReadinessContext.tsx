@@ -327,10 +327,9 @@ const GateInspectorHUD: React.FC = () => {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[999999] bg-[#10212E]/95 border border-[#1E364A] text-white p-3 rounded-xl shadow-2xl text-[12px] font-mono max-w-[360px] max-h-[380px] overflow-auto backdrop-blur-md"
-      style={{ fontFamily: 'monospace' }}
+      className="fixed bottom-4 right-4 z-[999999] bg-[#10212E]/95 border border-[#244157] text-white p-3 rounded-xl shadow-2xl text-[12px] tabular-nums max-w-[360px] max-h-[380px] overflow-auto backdrop-blur-md"
     >
-      <div className="flex items-center justify-between pb-2 border-b border-[#1E364A] mb-2 font-bold text-[#6FAEE0]">
+      <div className="flex items-center justify-between pb-2 border-b border-[#244157] mb-2 font-bold text-[#6FAEE0]">
         <span>⚡ Gate Inspector (?gate-debug=1)</span>
         <span
           className={`px-1.5 py-0.5 rounded text-[10px] ${

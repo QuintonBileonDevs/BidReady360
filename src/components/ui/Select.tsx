@@ -39,10 +39,10 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           <select
             ref={ref}
             id={selectId}
-            className={`w-full h-10 rounded-[6px] bg-white dark:bg-[#132635] text-sm text-[#10212E] dark:text-white border appearance-none pr-9 pl-3.5 transition-colors ${
+            className={`w-full h-10 rounded-[6px] bg-white dark:bg-[#162C3D] text-sm text-[#10212E] dark:text-white border appearance-none pr-9 pl-3.5 transition-colors focus:outline-none ${
               error
                 ? 'border-[#C2412D] focus:border-[#C2412D]'
-                : 'border-[#D5E0EA] dark:border-[#1E364A] focus:border-[#1F5F99]'
+                : 'border-[#D5E0EA] dark:border-[#244157] focus:border-[#1F5F99] dark:focus:border-[#6FAEE0]'
             } disabled:opacity-50 ${className}`}
             {...props}
           >
@@ -56,13 +56,13 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           </select>
 
           <ChevronDown
-            className="absolute right-3 w-4 h-4 text-[#6B7A87] pointer-events-none"
+            className="absolute right-3 w-4 h-4 text-[#6B7A87] dark:text-[#9CB4C9] pointer-events-none"
             strokeWidth={1.5}
           />
         </div>
 
-        {error && <p className="text-xs text-[#C2412D] font-medium">{error}</p>}
-        {hint && !error && <p className="text-xs text-[#6B7A87]">{hint}</p>}
+        {error && <p className="text-xs text-[#C2412D] dark:text-[#FCA5A5] font-medium">{error}</p>}
+        {hint && !error && <p className="text-xs text-[#6B7A87] dark:text-[#9CB4C9]">{hint}</p>}
       </div>
     );
   }

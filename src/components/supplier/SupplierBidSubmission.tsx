@@ -693,7 +693,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
   return (
     <div className="space-y-8">
       {/* 1. Header with Call Summary, Status & Countdown */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="space-y-1.5 max-w-3xl">
           <div className="flex items-center gap-2 flex-wrap">
             <button
@@ -707,8 +707,8 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             <span className="font-semibold text-[14px] text-[#1F5F99] dark:text-[#6FAEE0]">
               {call.callNumber}
             </span>
-            <span className="text-[14px] text-[#6B7A87]">· {call.organizationName}</span>
-            <span className="bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#6FAEE0] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+            <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">· {call.organizationName}</span>
+            <span className="bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#244157] dark:text-[#6FAEE0] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5" />
               <span>Sealed RFP submission</span>
             </span>
@@ -723,35 +723,35 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             {call.title}
           </h1>
 
-          <div className="text-[14px] text-[#6B7A87] flex items-center gap-3 flex-wrap">
+          <div className="text-[14px] text-[#6B7A87] flex items-center gap-3 flex-wrap dark:text-[#9CB4C9]">
             <span>Procuring entity: <strong className="text-[#10212E] dark:text-white font-medium">{call.organizationName}</strong></span>
             <span>·</span>
             <span className="inline-flex items-center gap-1 text-[#10212E] dark:text-white">
-              <Calendar className="w-4 h-4 text-[#6B7A87]" />
+              <Calendar className="w-4 h-4 text-[#6B7A87] dark:text-[#9CB4C9]" />
               <span>Closing: {call.closingDate} at {call.closingTimeCAT} (Central Africa Time / CAT, GMT+2)</span>
             </span>
           </div>
         </div>
 
         {/* Closing Countdown & Timezone Card */}
-        <div className="bg-white dark:bg-[#132635] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 shrink-0 text-left sm:text-right">
-          <span className="text-[14px] text-[#6B7A87] block">
+        <div className="bg-white dark:bg-[#1C364B] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] space-y-1 shrink-0 text-left sm:text-right">
+          <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">
             Time until tender closing
           </span>
           <div className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white flex items-center sm:justify-end gap-1.5 tabular-nums">
-            <Clock className="w-4 h-4 text-[#1F5F99]" />
+            <Clock className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
             <span>{timeRemainingLabel}</span>
           </div>
-          <span className="text-[14px] text-[#6B7A87] block">
+          <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">
             Time zone: CAT (UTC+02:00)
           </span>
         </div>
       </div>
 
       {/* 2. Plain Language Sealed Notice Card */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-3">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-3">
         <div className="flex items-start gap-3.5">
-          <div className="w-10 h-10 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] flex items-center justify-center shrink-0">
             <Lock className="w-5 h-5" />
           </div>
           <div className="space-y-1 flex-1">
@@ -760,7 +760,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 Your bid is sealed. No one can read your prices until an authorised opening session is held after the closing time.
               </h2>
             </div>
-            <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+            <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
               In accordance with statutory procurement guidelines, pricing line items remain tamper-proof until the tender closing countdown reaches zero. Tender evaluation officers cannot view bills of quantities during the open advertising period.
             </p>
           </div>
@@ -843,14 +843,14 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
 
       {/* Resumed Draft Notice Banner */}
       {isDraftRestored && currentStep !== 5 && !existingSubmittedApp && (
-        <div className="p-4 rounded-[12px] bg-[#EAF2FA] dark:bg-[#1E364A]/60 border border-[#B8D5ED] dark:border-[#2A4D6B] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
+        <div className="p-4 rounded-[12px] bg-[#EAF2FA] dark:bg-[#244157]/60 border border-[#B8D5ED] dark:border-[#2A4D6B] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[14px]">
           <div className="flex items-start gap-3">
             <BookmarkCheck className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0] shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <span className="font-semibold text-[#10212E] dark:text-white block">
                 Saved Draft Application Resumed
               </span>
-              <p className="text-[#43525F] dark:text-[#B2C3D2] text-[13px]">
+              <p className="text-[#43525F] dark:text-[#D3E3F2] text-[13px]">
                 {lastSavedTime || 'Your progress has been loaded.'} You are currently at <strong>Step {currentStep} of 5</strong>. All entered line prices, commitments, and documents have been restored.
               </p>
             </div>
@@ -867,7 +867,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             <button
               type="button"
               onClick={() => setIsDraftRestored(false)}
-              className="px-3 py-1.5 text-[13px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-white dark:hover:bg-[#132635] rounded-[6px] font-medium border border-[#D5E0EA] dark:border-[#1E364A] transition-colors cursor-pointer"
+              className="px-3 py-1.5 text-[13px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-white dark:hover:bg-[#1C364B] rounded-[6px] font-medium border border-[#D5E0EA] dark:border-[#244157] transition-colors cursor-pointer"
             >
               Continue editing
             </button>
@@ -876,7 +876,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       )}
 
       {/* 3. Five Step Stepper Header */}
-      <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-4 sm:p-5">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-4 sm:p-5">
         {/* Mobile Compact Step Header */}
         <div className="sm:hidden flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
@@ -897,7 +897,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               }
             </span>
           </div>
-          <span className="text-[14px] text-[#6B7A87]">Sealed bid</span>
+          <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">Sealed bid</span>
         </div>
 
         {/* Desktop Step Buttons Grid */}
@@ -927,10 +927,10 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 }}
                 className={`text-left p-3 rounded-[8px] border transition-all cursor-pointer ${
                   isCurrent
-                    ? 'border-[#1F5F99] bg-[#EAF2FA]/50 dark:bg-[#1E364A]/50 ring-1 ring-[#1F5F99]/30'
+                    ? 'border-[#1F5F99] bg-[#EAF2FA]/50 dark:bg-[#244157]/50 ring-1 ring-[#1F5F99]/30'
                     : isDone
-                    ? 'border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/70 dark:bg-[#10212E]/70 hover:border-[#1F5F99]/50'
-                    : 'border-[#D5E0EA]/60 dark:border-[#1E364A]/60 opacity-60 hover:opacity-100 hover:border-[#D5E0EA]'
+                    ? 'border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/70 dark:bg-[#10212E]/70 hover:border-[#1F5F99]/50'
+                    : 'border-[#D5E0EA]/60 dark:border-[#244157]/60 opacity-60 hover:opacity-100 hover:border-[#D5E0EA]'
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">
@@ -940,7 +940,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                         ? 'bg-[#1F5F99] text-white'
                         : isDone
                         ? 'bg-[#2F8F5B] text-white'
-                        : 'bg-[#D5E0EA] dark:bg-[#1E364A] text-[#6B7A87]'
+                        : 'bg-[#D5E0EA] dark:bg-[#244157] text-[#6B7A87]'
                     }`}
                   >
                     {isDone ? <Check className="w-3 h-3" /> : s.step}
@@ -964,8 +964,8 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
 
         {/* Stepper Footer: Auto-save status and Quick Save action */}
         {currentStep !== 5 && !existingSubmittedApp && (
-          <div className="flex items-center justify-between pt-3 border-t border-[#D5E0EA]/60 dark:border-[#1E364A]/60 mt-3 text-[13px]">
-            <div className="flex items-center gap-2 text-[#6B7A87]">
+          <div className="flex items-center justify-between pt-3 border-t border-[#D5E0EA]/60 dark:border-[#244157]/60 mt-3 text-[13px]">
+            <div className="flex items-center gap-2 text-[#6B7A87] dark:text-[#9CB4C9]">
               {isSavingDraft ? (
                 <span className="flex items-center gap-1.5 text-[#1F5F99] dark:text-[#6FAEE0] font-medium">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -977,8 +977,8 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   {lastSavedTime}
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-[#6B7A87]">
-                  <BookmarkCheck className="w-3.5 h-3.5 text-[#1F5F99]" />
+                <span className="flex items-center gap-1.5 text-[#6B7A87] dark:text-[#9CB4C9]">
+                  <BookmarkCheck className="w-3.5 h-3.5 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   Auto-draft enabled (each step is preserved)
                 </span>
               )}
@@ -999,17 +999,17 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {/* STEP 1: PRICE SCHEDULE TABLE                                         */}
       {/* ==================================================================== */}
       {currentStep === 1 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <div className="space-y-0.5">
               <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Buyer price schedule and line items
               </h2>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Quantities are specified by the procuring entity (read-only). Enter unit prices in Botswana Pula (BWP).
               </p>
             </div>
-            <span className="text-[14px] text-[#6B7A87] font-medium">
+            <span className="text-[14px] text-[#6B7A87] font-medium dark:text-[#9CB4C9]">
               Currency: BWP (Pula)
             </span>
           </div>
@@ -1018,7 +1018,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] text-[14px] text-[#6B7A87]">
+                <tr className="border-b border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#10212E] text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   <th className="py-3 px-4 font-semibold w-12">#</th>
                   <th className="py-3 px-4 font-semibold">Description</th>
                   <th className="py-3 px-4 font-semibold">Unit</th>
@@ -1027,16 +1027,16 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   <th className="py-3 px-4 font-semibold text-right">Total (BWP)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[14px]">
+              <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[14px]">
                 {lineItems.map((item) => (
                   <tr key={item.id} className="hover:bg-[#F7FAFD]/50 dark:hover:bg-[#10212E]/50">
-                    <td className="py-4 px-4 font-medium text-[#6B7A87] tabular-nums">
+                    <td className="py-4 px-4 font-medium text-[#6B7A87] tabular-nums dark:text-[#9CB4C9]">
                       {item.itemNumber}
                     </td>
                     <td className="py-4 px-4 font-medium text-[#10212E] dark:text-white max-w-sm">
                       {item.description}
                     </td>
-                    <td className="py-4 px-4 text-[#6B7A87]">
+                    <td className="py-4 px-4 text-[#6B7A87] dark:text-[#9CB4C9]">
                       {item.unit}
                     </td>
                     <td className="py-4 px-4 text-right font-medium text-[#10212E] dark:text-white tabular-nums">
@@ -1044,7 +1044,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                     </td>
                     <td className="py-4 px-4 text-right">
                       <div className="inline-flex items-center gap-1 justify-end">
-                        <span className="text-[14px] text-[#6B7A87]">BWP</span>
+                        <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">BWP</span>
                         <input
                           type="number"
                           disabled={isCallClosed}
@@ -1052,7 +1052,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                           step={1}
                           value={item.unitPriceBWP || ''}
                           onChange={(e) => handleUnitPriceChange(item.id, parseFloat(e.target.value))}
-                          className="w-28 p-2 text-right border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px] font-semibold text-[#10212E] dark:text-white tabular-nums focus:outline-none focus:border-[#1F5F99]"
+                          className="w-28 p-2 text-right border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[14px] font-semibold text-[#10212E] dark:text-white tabular-nums focus:outline-none focus:border-[#1F5F99]"
                         />
                       </div>
                     </td>
@@ -1066,24 +1066,24 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           </div>
 
           {/* Mobile Stacked Line Item Cards */}
-          <div className="md:hidden divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
+          <div className="md:hidden divide-y divide-[#D5E0EA] dark:divide-[#244157]">
             {lineItems.map((item) => (
               <div key={item.id} className="py-4 space-y-3 text-[14px]">
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-0.5">
-                    <span className="font-semibold text-[14px] text-[#1F5F99]">
+                    <span className="font-semibold text-[14px] text-[#1F5F99] dark:text-[#6FAEE0]">
                       Item #{item.itemNumber}
                     </span>
                     <h4 className="font-heading font-medium text-[15px] text-[#10212E] dark:text-white">
                       {item.description}
                     </h4>
                   </div>
-                  <span className="text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] px-2 py-0.5 rounded border border-[#D5E0EA] text-[#6B7A87]">
+                  <span className="text-[14px] bg-[#F7FAFD] dark:bg-[#10212E] px-2 py-0.5 rounded border border-[#D5E0EA] text-[#6B7A87] dark:text-[#9CB4C9] dark:border-[#244157]">
                     {item.unit}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-[#6B7A87]">
+                <div className="flex items-center justify-between text-[#6B7A87] dark:text-[#9CB4C9]">
                   <span>Quantity (read-only):</span>
                   <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                     {item.quantity.toLocaleString()} {item.unit}
@@ -1093,7 +1093,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <span className="font-medium text-[#10212E] dark:text-white">Unit price:</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[14px] text-[#6B7A87]">BWP</span>
+                    <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">BWP</span>
                     <input
                       type="number"
                       disabled={isCallClosed}
@@ -1101,13 +1101,13 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                       step={1}
                       value={item.unitPriceBWP || ''}
                       onChange={(e) => handleUnitPriceChange(item.id, parseFloat(e.target.value))}
-                      className="w-28 p-2 text-right border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px] font-semibold text-[#10212E] dark:text-white tabular-nums focus:outline-none focus:border-[#1F5F99]"
+                      className="w-28 p-2 text-right border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[14px] font-semibold text-[#10212E] dark:text-white tabular-nums focus:outline-none focus:border-[#1F5F99]"
                     />
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-1 border-t border-[#D5E0EA]/40">
-                  <span className="text-[#6B7A87]">Line total:</span>
+                  <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Line total:</span>
                   <span className="font-semibold text-[15px] text-[#10212E] dark:text-white tabular-nums">
                     BWP {(item.totalPriceBWP || 0).toLocaleString()}
                   </span>
@@ -1117,21 +1117,21 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           </div>
 
           {/* Pricing Totals Box */}
-          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row justify-end">
-            <div className="w-full sm:w-80 space-y-2.5 p-4 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A]">
-              <div className="flex items-center justify-between text-[14px] text-[#6B7A87]">
+          <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row justify-end">
+            <div className="w-full sm:w-80 space-y-2.5 p-4 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157]">
+              <div className="flex items-center justify-between text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 <span>Net subtotal</span>
                 <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                   BWP {subtotalBWP.toLocaleString()}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-[14px] text-[#6B7A87]">
+              <div className="flex items-center justify-between text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 <span>VAT (14% statutory)</span>
                 <span className="font-semibold text-[#10212E] dark:text-white tabular-nums">
                   BWP {vatAmountBWP.toLocaleString()}
                 </span>
               </div>
-              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between">
+              <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between">
                 <span className="font-semibold text-[15px] text-[#10212E] dark:text-white">
                   Grand total bid
                 </span>
@@ -1143,19 +1143,19 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           </div>
 
           {/* Step 1 Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A] cursor-pointer"
+                className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#244157] cursor-pointer"
               >
                 Exit to dashboard
               </button>
               <button
                 type="button"
                 onClick={() => handleSaveDraft(1, true)}
-                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#244157]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Save className="w-4 h-4" />
                 <span>Save draft</span>
@@ -1181,12 +1181,12 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {/* STEP 2: TECHNICAL RESPONSE                                           */}
       {/* ==================================================================== */}
       {currentStep === 2 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
-          <div className="space-y-0.5 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6">
+          <div className="space-y-0.5 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
               Technical response and methodology
             </h2>
-            <p className="text-[14px] text-[#6B7A87]">
+            <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
               Provide commitments regarding execution delivery timelines, quality control, and warranty coverage.
             </p>
           </div>
@@ -1201,7 +1201,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 disabled={isCallClosed}
                 value={technicalMethodology}
                 onChange={(e) => setTechnicalMethodology(e.target.value)}
-                className="w-full p-3.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                className="w-full p-3.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] bg-white dark:bg-[#1C364B] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
               />
             </div>
 
@@ -1215,7 +1215,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   disabled={isCallClosed}
                   value={deliveryLeadTimeDays}
                   onChange={(e) => setDeliveryLeadTimeDays(parseInt(e.target.value) || 0)}
-                  className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] bg-white dark:bg-[#1C364B] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
 
@@ -1228,7 +1228,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   disabled={isCallClosed}
                   value={warrantyMonths}
                   onChange={(e) => setWarrantyMonths(parseInt(e.target.value) || 0)}
-                  className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] bg-white dark:bg-[#1C364B] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
             </div>
@@ -1242,13 +1242,13 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 disabled={isCallClosed}
                 value={qualityAssurancePlan}
                 onChange={(e) => setQualityAssurancePlan(e.target.value)}
-                className="w-full p-3.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                className="w-full p-3.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] bg-white dark:bg-[#1C364B] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
               />
             </div>
           </div>
 
           {/* Step 2 Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
             <button
               type="button"
               onClick={() => {
@@ -1256,7 +1256,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 setCurrentStep(1);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A] cursor-pointer inline-flex items-center gap-1.5"
+              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#244157] cursor-pointer inline-flex items-center gap-1.5"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to price schedule</span>
@@ -1265,7 +1265,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               <button
                 type="button"
                 onClick={() => handleSaveDraft(2, true)}
-                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#244157]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Save className="w-4 h-4" />
                 <span>Save draft</span>
@@ -1291,7 +1291,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {/* STEP 3: SUPPORTING FILES                                             */}
       {/* ==================================================================== */}
       {currentStep === 3 && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6">
           {/* Hidden real file input */}
           <input
             ref={fileInputRef}
@@ -1302,15 +1302,15 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             onChange={handleFileUpload}
           />
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <div className="space-y-0.5">
               <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white flex items-center gap-2">
                 <span>Supporting attachments & statutory certificates</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#6FAEE0] font-mono">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#244157] dark:text-[#6FAEE0] tabular-nums">
                   {supportingFiles.length} attached
                 </span>
               </h2>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Statutory credentials are automatically attached from your secure Document Vault. Additional schedules can be uploaded directly from your computer.
               </p>
             </div>
@@ -1319,7 +1319,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 <button
                   type="button"
                   onClick={() => setIsAttachingFromVault(true)}
-                  className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-3.5 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white hover:bg-[#F7FAFD] dark:hover:bg-[#244157] rounded-[6px] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <ShieldCheck className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>Attach from Vault</span>
@@ -1354,18 +1354,18 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               onClick={handleTriggerFilePicker}
               className={`p-5 rounded-[8px] border-2 border-dashed transition-all cursor-pointer text-center ${
                 isDraggingOver
-                  ? 'border-[#1F5F99] bg-[#EAF2FA]/50 dark:bg-[#1E364A]/50'
-                  : 'border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 hover:bg-[#EAF2FA]/20 dark:hover:bg-[#1E364A]/20'
+                  ? 'border-[#1F5F99] bg-[#EAF2FA]/50 dark:bg-[#244157]/50'
+                  : 'border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 hover:bg-[#EAF2FA]/20 dark:hover:bg-[#244157]/20'
               }`}
             >
               <div className="flex flex-col items-center gap-1.5 text-center">
-                <div className="w-9 h-9 rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#6FAEE0]">
+                <div className="w-9 h-9 rounded-full bg-[#EAF2FA] dark:bg-[#244157] flex items-center justify-center text-[#1F5F99] dark:text-[#6FAEE0]">
                   <Upload className="w-5 h-5" />
                 </div>
                 <div className="text-[13px] font-medium text-[#10212E] dark:text-white">
                   <span>Click to browse files or drag and drop here</span>
                 </div>
-                <p className="text-[11px] text-[#6B7A87]">
+                <p className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Supports PDF, Word (.docx), Excel (.xlsx), and scanned certificates (up to 25 MB each)
                 </p>
               </div>
@@ -1377,10 +1377,10 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             {supportingFiles.map((file) => (
               <div
                 key={file.id}
-                className="p-4 rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[14px]"
+                className="p-4 rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-[14px]"
               >
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-[6px] bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#6FAEE0] shrink-0 mt-0.5">
+                  <div className="w-9 h-9 rounded-[6px] bg-[#EAF2FA] dark:bg-[#244157] flex items-center justify-center text-[#1F5F99] dark:text-[#6FAEE0] shrink-0 mt-0.5">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="space-y-1 min-w-0">
@@ -1389,7 +1389,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                         {file.name}
                       </span>
                       {file.source === 'vault' ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#6FAEE0] font-medium inline-flex items-center gap-1">
+                        <span className="text-[11px] px-2 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#244157] dark:text-[#6FAEE0] font-medium inline-flex items-center gap-1">
                           <ShieldCheck className="w-3 h-3" />
                           Document Vault
                         </span>
@@ -1406,14 +1406,14 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                       )}
                     </div>
 
-                    <div className="text-[13px] text-[#6B7A87] flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-[#43525F] dark:text-[#B2C3D2]">{file.fileName}</span>
+                    <div className="text-[13px] text-[#6B7A87] flex items-center gap-2 flex-wrap dark:text-[#9CB4C9]">
+                      <span className="font-medium text-[#43525F] dark:text-[#D3E3F2]">{file.fileName}</span>
                       <span>·</span>
                       <span>{file.size}</span>
                       {file.documentNumber && (
                         <>
                           <span>·</span>
-                          <span className="font-mono">Doc #{file.documentNumber}</span>
+                          <span className="tabular-nums">Doc #{file.documentNumber}</span>
                         </>
                       )}
                       {file.expiryDate && (
@@ -1426,8 +1426,8 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                       <span>{file.uploadedAt}</span>
                     </div>
 
-                    <div className="text-[12px] text-[#6B7A87]">
-                      Integrity fingerprint: <span className="font-mono text-[#10212E] dark:text-white">{file.fingerprint}</span>
+                    <div className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
+                      Integrity fingerprint: <span className="tabular-nums text-[#10212E] dark:text-white">{file.fingerprint}</span>
                     </div>
                   </div>
                 </div>
@@ -1437,7 +1437,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   <button
                     type="button"
                     onClick={() => setPreviewFile(file)}
-                    className="px-2.5 py-1.5 text-[12px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A] rounded-[4px] cursor-pointer inline-flex items-center gap-1 transition-colors"
+                    className="px-2.5 py-1.5 text-[12px] font-medium text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#244157] rounded-[4px] cursor-pointer inline-flex items-center gap-1 transition-colors"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     <span>Preview</span>
@@ -1445,7 +1445,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   <button
                     type="button"
                     onClick={() => handleDownloadFile(file)}
-                    className="px-2.5 py-1.5 text-[12px] font-medium text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A] rounded-[4px] cursor-pointer inline-flex items-center gap-1 transition-colors"
+                    className="px-2.5 py-1.5 text-[12px] font-medium text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] dark:hover:bg-[#244157] rounded-[4px] cursor-pointer inline-flex items-center gap-1 transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download</span>
@@ -1467,7 +1467,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           </div>
 
           {/* Step 3 Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
             <button
               type="button"
               onClick={() => {
@@ -1475,7 +1475,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 setCurrentStep(2);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A] cursor-pointer inline-flex items-center gap-1.5"
+              className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#244157] cursor-pointer inline-flex items-center gap-1.5"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to technical response</span>
@@ -1484,7 +1484,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               <button
                 type="button"
                 onClick={() => handleSaveDraft(3, true)}
-                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#244157]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Save className="w-4 h-4" />
                 <span>Save draft</span>
@@ -1512,18 +1512,18 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {currentStep === 4 && (
         <div className="space-y-6">
           {/* Summary Box */}
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
-            <div className="space-y-0.5 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6">
+            <div className="space-y-0.5 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <h2 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
                 Review and seal proposal
               </h2>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Review line pricing, technical parameters, and statutory checklists before generating your sealed submission.
               </p>
             </div>
 
             {/* Pricing Summary */}
-            <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+            <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-[15px] text-[#10212E] dark:text-white">
                   Commercial bid offer summary
@@ -1532,7 +1532,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   BWP {grandTotalBWP.toLocaleString()}
                 </span>
               </div>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Comprises {lineItems.length} schedule line items including 14% statutory VAT.
               </p>
             </div>
@@ -1552,7 +1552,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 {supportingFiles.map((file) => (
                   <div
                     key={file.id}
-                    className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-[14px]"
+                    className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-3 text-[14px]"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <CheckCircle2 className="w-4 h-4 text-[#2F8F5B] shrink-0" />
@@ -1571,13 +1571,13 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                             </span>
                           )}
                         </div>
-                        <div className="text-[12px] text-[#6B7A87]">
+                        <div className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                           {file.fileName} · {file.size} {file.documentNumber ? `· Doc #${file.documentNumber}` : ''}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="font-mono text-[#6B7A87] text-[12px] hidden md:inline">
+                      <span className="tabular-nums text-[#6B7A87] text-[12px] hidden md:inline dark:text-[#9CB4C9]">
                         {file.fingerprint}
                       </span>
                       <button
@@ -1595,13 +1595,13 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             </div>
 
             {/* Statutory Declarations Checkboxes */}
-            <div className="space-y-3 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="space-y-3 pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={declarationAgreed}
                   onChange={(e) => setDeclarationAgreed(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-[#1F5F99] rounded border-[#D5E0EA] focus:ring-[#1F5F99]"
+                  className="mt-1 w-4 h-4 text-[#1F5F99] rounded border-[#D5E0EA] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                 />
                 <span className="text-[14px] text-[#10212E] dark:text-white leading-relaxed">
                   I confirm that all unit rates and pricing schedules quoted represent a binding, irrevocable tender offer open for acceptance for 90 days from the tender closing date.
@@ -1613,7 +1613,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   type="checkbox"
                   checked={nonCollusionAgreed}
                   onChange={(e) => setNonCollusionAgreed(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-[#1F5F99] rounded border-[#D5E0EA] focus:ring-[#1F5F99]"
+                  className="mt-1 w-4 h-4 text-[#1F5F99] rounded border-[#D5E0EA] focus:ring-[#1F5F99] dark:text-[#6FAEE0] dark:border-[#244157]"
                 />
                 <span className="text-[14px] text-[#10212E] dark:text-white leading-relaxed">
                   Non-collusion and anti-corruption declaration: I certify under penalty of disqualification under the Public Procurement Act that this proposal has been compiled independently without collusion.
@@ -1622,7 +1622,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             </div>
 
             {/* Step 4 Actions */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-[#D5E0EA] dark:border-[#244157]">
               <button
                 type="button"
                 onClick={() => {
@@ -1630,7 +1630,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   setCurrentStep(3);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A] cursor-pointer inline-flex items-center gap-1.5"
+                className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] dark:hover:bg-[#244157] cursor-pointer inline-flex items-center gap-1.5"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back to supporting files</span>
@@ -1681,7 +1681,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 <button
                   type="button"
                   onClick={() => handleSaveDraft(4, true)}
-                  className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#244157]/50 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save draft</span>
@@ -1715,10 +1715,10 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {currentStep === 5 && submittedReceipt && (
         <div className="space-y-6">
           {/* Certified Receipt Card */}
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#ECFDF5] text-[#2F8F5B] flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-full bg-[#ECFDF5] text-[#2F8F5B] flex items-center justify-center shrink-0 dark:bg-[#2F8F5B]/20">
                   <CheckCircle2 className="w-5 h-5" />
                 </div>
                 <div className="space-y-0.5">
@@ -1734,7 +1734,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               <button
                 type="button"
                 onClick={handleDownloadReceipt}
-                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors shrink-0"
+                className="px-4 py-2.5 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors shrink-0 dark:hover:bg-[#162C3D]"
               >
                 <Download className="w-4 h-4" />
                 <span>Download receipt</span>
@@ -1743,22 +1743,22 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
 
             {/* Key Receipt Parameters */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                <span className="text-[14px] text-[#6B7A87] block">Receipt number</span>
+              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
+                <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">Receipt number</span>
                 <span className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white block">
                   {submittedReceipt.receiptNumber}
                 </span>
               </div>
 
-              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                <span className="text-[14px] text-[#6B7A87] block">Submission timestamp</span>
+              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
+                <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">Submission timestamp</span>
                 <span className="font-semibold text-[15px] text-[#10212E] dark:text-white block tabular-nums">
                   {submittedReceipt.timestamp}
                 </span>
               </div>
 
-              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                <span className="text-[14px] text-[#6B7A87] block">Total evaluated offer</span>
+              <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
+                <span className="text-[14px] text-[#6B7A87] block dark:text-[#9CB4C9]">Total evaluated offer</span>
                 <span className="font-heading font-semibold text-[17px] text-[#10212E] dark:text-white block tabular-nums">
                   BWP {grandTotalBWP.toLocaleString()}
                 </span>
@@ -1766,14 +1766,14 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             </div>
 
             {/* Cryptographic Hash */}
-            <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+            <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
               <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                 Sealed cryptographic fingerprint
               </span>
-              <p className="font-mono text-[14px] text-[#43525F] dark:text-[#B2C3D2] break-all">
+              <p className="tabular-nums text-[14px] text-[#43525F] dark:text-[#D3E3F2] break-all">
                 {submittedReceipt.sealedHash}
               </p>
-              <div className="flex items-center gap-2 pt-1 text-[14px] text-[#6B7A87]">
+              <div className="flex items-center gap-2 pt-1 text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 <ShieldCheck className="w-4 h-4 text-[#2F8F5B]" />
                 <span>Vault verification timestamp recorded in central procurement registry</span>
               </div>
@@ -1788,12 +1788,12 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 {submittedReceipt.fileFingerprints.map((item, idx) => (
                   <div
                     key={idx}
-                    className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]"
+                    className="p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]"
                   >
                     <span className="font-medium text-[#10212E] dark:text-white">
                       {item.fileName}
                     </span>
-                    <span className="font-mono text-[#6B7A87]">
+                    <span className="tabular-nums text-[#6B7A87] dark:text-[#9CB4C9]">
                       {item.hash}
                     </span>
                   </div>
@@ -1802,12 +1802,12 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
             </div>
 
             {/* Post-submission Actions: Withdraw or Replace Before Closing */}
-            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                   Modify or replace submission
                 </span>
-                <p className="text-[14px] text-[#6B7A87]">
+                <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {isCallClosed
                     ? 'The tender has reached its closing deadline. Bids are permanently locked.'
                     : `You may replace pricing line items or withdraw your proposal anytime before ${call.closingDate} at ${call.closingTimeCAT}.`}
@@ -1818,7 +1818,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 <button
                   type="button"
                   onClick={() => setActiveNav('my-applications')}
-                  className="px-4 py-2 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#1E364A] rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer"
+                  className="px-4 py-2 border border-[#1F5F99] text-[#1F5F99] dark:text-[#6FAEE0] hover:bg-[#EAF2FA] dark:hover:bg-[#244157] rounded-[6px] text-[14px] font-medium transition-colors cursor-pointer"
                 >
                   View my applications
                 </button>
@@ -1848,7 +1848,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
           {/* Withdraw Confirmation Modal */}
           {isWithdrawModalOpen && (
             <div className="fixed inset-0 z-50 bg-[#10212E]/60 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-lg w-full p-6 space-y-4">
+              <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-lg w-full p-6 space-y-4">
                 <div className="flex items-center gap-3 text-[#DC2626]">
                   <AlertTriangle className="w-6 h-6 shrink-0" />
                   <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white">
@@ -1856,7 +1856,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                   </h3>
                 </div>
 
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                   Are you sure you want to withdraw your bid for <strong>{call.callNumber}</strong>? Your sealed proposal and pricing schedule will be permanently cancelled. You may resubmit prior to the closing deadline.
                 </p>
 
@@ -1869,12 +1869,12 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                     value={withdrawReason}
                     onChange={(e) => setWithdrawReason(e.target.value)}
                     placeholder="e.g. Updating schedule or operational capacity"
-                    className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] bg-white dark:bg-[#132635] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                    className="w-full p-2.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] bg-white dark:bg-[#1C364B] text-[14px] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
 
                 {withdrawError && (
-                  <div className="p-3 rounded-[6px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] text-[13px]">
+                  <div className="p-3 rounded-[6px] bg-[#FEF2F2] text-[#8E2A1B] border border-[#FCA5A5] text-[13px] dark:bg-[#C2412D]/20">
                     {withdrawError}
                   </div>
                 )}
@@ -1886,7 +1886,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                       setWithdrawError(null);
                       setIsWithdrawModalOpen(false);
                     }}
-                    className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#43525F] dark:text-[#B2C3D2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] cursor-pointer"
+                    className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#43525F] dark:text-[#D3E3F2] rounded-[6px] text-[14px] font-medium hover:bg-[#F7FAFD] cursor-pointer dark:hover:bg-[#162C3D]"
                   >
                     Keep bid active
                   </button>
@@ -1910,8 +1910,8 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {/* ==================================================================== */}
       {previewFile && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white flex items-center gap-2">
                   <span>{previewFile.name}</span>
@@ -1925,50 +1925,50 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                     </span>
                   )}
                 </h3>
-                <p className="text-[13px] text-[#6B7A87]">
+                <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   File: {previewFile.fileName} · Size: {previewFile.size}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setPreviewFile(null)}
-                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer rounded-[4px]"
+                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer rounded-[4px] dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-4 text-center">
-              <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#1E364A] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
+            <div className="p-6 rounded-[8px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#244157] space-y-4 text-center">
+              <div className="w-16 h-16 mx-auto rounded-full bg-[#EAF2FA] dark:bg-[#244157] flex items-center justify-center text-[#1F5F99] dark:text-[#38BDF8] font-bold text-lg">
                 {previewFile.type}
               </div>
               <div className="space-y-1">
                 <h4 className="font-semibold text-[16px] text-[#10212E] dark:text-white">
                   {previewFile.fileName}
                 </h4>
-                <p className="text-[13px] text-[#6B7A87]">
+                <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {previewFile.source === 'vault'
                     ? 'Verified Statutory Document from Secure Document Vault'
                     : 'Attached Proposal Supplementary File'}
                 </p>
               </div>
 
-              <div className="pt-2 grid grid-cols-2 gap-3 text-[13px] text-left bg-white dark:bg-[#10212E] p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="pt-2 grid grid-cols-2 gap-3 text-[13px] text-left bg-white dark:bg-[#10212E] p-3 rounded-[6px] border border-[#D5E0EA] dark:border-[#244157]">
                 <div>
-                  <span className="text-[#6B7A87] block text-[11px]">Document Number</span>
-                  <span className="font-mono font-medium text-[#10212E] dark:text-white">
+                  <span className="text-[#6B7A87] block text-[11px] dark:text-[#9CB4C9]">Document Number</span>
+                  <span className="tabular-nums font-medium text-[#10212E] dark:text-white">
                     {previewFile.documentNumber || 'N/A'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[#6B7A87] block text-[11px]">Validity / Expiry</span>
+                  <span className="text-[#6B7A87] block text-[11px] dark:text-[#9CB4C9]">Validity / Expiry</span>
                   <span className="font-medium text-[#10212E] dark:text-white">
                     {previewFile.expiryDate ? `Until ${previewFile.expiryDate}` : 'Permanent / Non-expiring'}
                   </span>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-[#6B7A87] block text-[11px]">Integrity Fingerprint</span>
-                  <span className="font-mono text-[11px] text-[#1F5F99] dark:text-[#6FAEE0] break-all">
+                  <span className="text-[#6B7A87] block text-[11px] dark:text-[#9CB4C9]">Integrity Fingerprint</span>
+                  <span className="tabular-nums text-[11px] text-[#1F5F99] dark:text-[#6FAEE0] break-all">
                     {previewFile.fingerprint}
                   </span>
                 </div>
@@ -1988,7 +1988,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               <button
                 type="button"
                 onClick={() => setPreviewFile(null)}
-                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium cursor-pointer hover:bg-[#F7FAFD] dark:hover:bg-[#1E364A]"
+                className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] text-[#10212E] dark:text-white rounded-[6px] text-[13px] font-medium cursor-pointer hover:bg-[#F7FAFD] dark:hover:bg-[#244157]"
               >
                 Close
               </button>
@@ -2002,21 +2002,21 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
       {/* ==================================================================== */}
       {isAttachingFromVault && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-[#1F5F99]" />
+                  <ShieldCheck className="w-5 h-5 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>Attach Documents from Secure Vault</span>
                 </h3>
-                <p className="text-[13px] text-[#6B7A87]">
+                <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Select verified statutory credentials and certificates from your Document Vault to include in this tender submission.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAttachingFromVault(false)}
-                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer rounded-[4px]"
+                className="p-1.5 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer rounded-[4px] dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2030,7 +2030,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                 return (
                   <div
                     key={doc.id}
-                    className="p-3.5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-between gap-3 text-[14px] bg-[#F7FAFD]/50 dark:bg-[#10212E]/50"
+                    className="p-3.5 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] flex items-center justify-between gap-3 text-[14px] bg-[#F7FAFD]/50 dark:bg-[#10212E]/50"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -2041,7 +2041,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
                           {doc.status}
                         </span>
                       </div>
-                      <div className="text-[12px] text-[#6B7A87] flex items-center gap-2">
+                      <div className="text-[12px] text-[#6B7A87] flex items-center gap-2 dark:text-[#9CB4C9]">
                         <span>{doc.fileName}</span>
                         <span>·</span>
                         <span>{doc.fileSize}</span>
@@ -2074,7 +2074,7 @@ This sealed electronic receipt confirms that your commercial pricing and bill of
               })}
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="flex justify-end pt-2 border-t border-[#D5E0EA] dark:border-[#244157]">
               <button
                 type="button"
                 onClick={() => setIsAttachingFromVault(false)}

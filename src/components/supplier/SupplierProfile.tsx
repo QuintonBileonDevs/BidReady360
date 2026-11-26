@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useReadiness } from '../../context/ReadinessContext';
 import { supplierApi, referenceApi, CategoryTreeNode } from '../../services/api';
 import { DirectorsPanel } from './DirectorsPanel';
+import { ThemeSwitcher } from '../common/ThemeSwitcher';
 import { Director, PastProject, SupplierTeamMember } from '../../types';
 import {
   calculateSupplierCompleteness,
@@ -870,21 +871,21 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
     <div className="space-y-8">
       {/* 1. Onboarding Checklist Banner (Shown until completeness is 100%) */}
       {!completeness.isComplete && (
-        <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 shadow-subtle space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+        <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 shadow-subtle space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
             <div className="space-y-1">
               <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#162C3E] dark:text-[#6FAEE0] text-[12px] font-semibold uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#162C3D] dark:text-[#6FAEE0] text-[12px] font-semibold uppercase tracking-wider">
                   Onboarding Checklist
                 </span>
-                <span className="text-[14px] text-[#6B7A87]">
+                <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   {completeness.completedCount} of {completeness.totalCount} completed
                 </span>
               </div>
               <h2 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
                 Complete your profile to start applying
               </h2>
-              <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2]">
+              <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2]">
                 15 statutory requirements of equal weight. Each links directly to its field and ticks off automatically.
               </p>
             </div>
@@ -893,7 +894,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
               <button
                 type="button"
                 onClick={() => setIsChecklistVisible(!isChecklistVisible)}
-                className="p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[#6B7A87] hover:text-[#10212E] transition-colors cursor-pointer"
+                className="p-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[#6B7A87] hover:text-[#10212E] transition-colors cursor-pointer dark:text-[#9CB4C9] dark:hover:text-white"
                 aria-label="Toggle checklist"
               >
                 {isChecklistVisible ? (
@@ -908,12 +909,12 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           {/* Progress bar */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-[13px]">
-              <span className="text-[#6B7A87]">Completeness: {completeness.completedCount}/15 items</span>
+              <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Completeness: {completeness.completedCount}/15 items</span>
               <span data-bind="completeness.score" className="font-semibold text-[#1F5F99] dark:text-[#6FAEE0] tabular-nums">
                 {completeness.score}%
               </span>
             </div>
-            <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3E] rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-[#EAF2FA] dark:bg-[#162C3D] rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#1F5F99] transition-all duration-300 rounded-full"
                 style={{ width: `${completeness.score}%` }}
@@ -943,7 +944,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       className={`px-3 py-1.5 rounded-[6px] text-[13px] font-medium transition-colors cursor-pointer ${
                         checklistFilter === tab
                           ? 'bg-[#1F5F99] text-white'
-                          : 'bg-[#F7FAFD] dark:bg-[#10212E] text-[#43525F] dark:text-[#B2C3D2] border border-[#D5E0EA] dark:border-[#1E364A]'
+                          : 'bg-[#F7FAFD] dark:bg-[#10212E] text-[#43525F] dark:text-[#D3E3F2] border border-[#D5E0EA] dark:border-[#244157]'
                       }`}
                     >
                       {tab} ({completedInTab}/{count})
@@ -961,7 +962,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     className={`p-3 rounded-[8px] border text-left flex items-start justify-between gap-3 transition-colors cursor-pointer ${
                       item.isComplete
                         ? 'bg-[#F0FDF4] dark:bg-[#064E3B]/20 border-[#BBF7D0] dark:border-[#065F46]/50'
-                        : 'bg-white dark:bg-[#132635] border-[#D5E0EA] dark:border-[#1E364A] hover:border-[#1F5F99]'
+                        : 'bg-white dark:bg-[#1C364B] border-[#D5E0EA] dark:border-[#244157] hover:border-[#1F5F99]'
                     }`}
                   >
                     <div className="space-y-1 pr-2">
@@ -975,11 +976,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         >
                           {item.shortLabel}
                         </span>
-                        <span className="text-[11px] px-1.5 py-0.2 rounded bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0]">
+                        <span className="text-[11px] px-1.5 py-0.2 rounded bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0]">
                           {item.category}
                         </span>
                       </div>
-                      <p className="text-[12px] text-[#6B7A87] line-clamp-1 leading-snug">
+                      <p className="text-[12px] text-[#6B7A87] line-clamp-1 leading-snug dark:text-[#9CB4C9]">
                         {item.description}
                       </p>
                     </div>
@@ -988,7 +989,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       {item.isComplete ? (
                         <CheckCircle2 className="w-4 h-4 text-[#2F8F5B]" />
                       ) : (
-                        <span className="w-4 h-4 rounded-full border-2 border-[#D5E0EA] dark:border-[#384C5C] flex items-center justify-center text-[10px] text-[#1F5F99] font-bold">
+                        <span className="w-4 h-4 rounded-full border-2 border-[#D5E0EA] dark:border-[#384C5C] flex items-center justify-center text-[10px] text-[#1F5F99] font-bold dark:text-[#6FAEE0]">
                           •
                         </span>
                       )}
@@ -1002,10 +1003,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       )}
 
       {/* 2. Header with Profile Completeness Meter & What's Missing */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-[#D5E0EA] dark:border-[#244157]">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-[12px] border-2 border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-center overflow-hidden shadow-sm shrink-0">
-            <Building2 className="w-8 h-8 text-[#1F5F99]" />
+          <div className="w-16 h-16 rounded-[12px] border-2 border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD] dark:bg-[#10212E] flex items-center justify-center overflow-hidden shadow-sm shrink-0">
+            <Building2 className="w-8 h-8 text-[#1F5F99] dark:text-[#6FAEE0]" />
           </div>
 
           <div className="space-y-1">
@@ -1014,18 +1015,18 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                 {supplier.legalName || 'Company Profile'}
               </h1>
               {completeness.isComplete ? (
-                <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+                <span className="bg-[#ECFDF5] text-[#2F8F5B] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5 dark:bg-[#2F8F5B]/20">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Verified supplier</span>
                 </span>
               ) : (
-                <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5">
+                <span className="bg-[#FFFBEB] text-[#D97706] px-2.5 py-0.5 rounded-[4px] text-[14px] font-medium inline-flex items-center gap-1.5 dark:bg-[#E8A33D]/20 dark:text-[#FCD34D]">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>Incomplete profile ({completeness.score}%)</span>
                 </span>
               )}
             </div>
-            <p className="text-[15px] text-[#43525F] dark:text-[#B2C3D2]">
+            <p className="text-[15px] text-[#43525F] dark:text-[#D3E3F2]">
               CIPA UIN: {supplier.cipaNumber || 'Pending'} · Trading as{' '}
               {supplier.tradingName || 'Pending'} · Central supplier database profile
             </p>
@@ -1033,7 +1034,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
         </div>
 
         {/* Completeness Meter */}
-        <div className="bg-white dark:bg-[#132635] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] shrink-0 min-w-[280px]">
+        <div className="bg-white dark:bg-[#1C364B] p-4 rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] shrink-0 min-w-[280px]">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-4">
               <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
@@ -1044,14 +1045,14 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
               </span>
             </div>
 
-            <div className="w-full h-2 bg-[#EAF2FA] dark:bg-[#1E364A] rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-[#EAF2FA] dark:bg-[#244157] rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#1F5F99] rounded-full transition-all duration-300"
                 style={{ width: `${completeness.score}%` }}
               />
             </div>
 
-            <div className="text-[13px] text-[#6B7A87]">
+            <div className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
               {completeness.isComplete ? (
                 <span className="text-[#2F8F5B] font-medium flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4" />
@@ -1073,7 +1074,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </button>
 
                   {isHeaderMissingOpen && (
-                    <div className="mt-1.5 p-2 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1 max-h-40 overflow-y-auto">
+                    <div className="mt-1.5 p-2 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] space-y-1 max-h-40 overflow-y-auto">
                       {completeness.missingItems.map((item) => (
                         <button
                           key={item.id}
@@ -1082,10 +1083,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             handleChecklistItemClick(item);
                             setIsHeaderMissingOpen(false);
                           }}
-                          className="w-full text-left text-[12px] py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#132635] text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] flex items-center justify-between transition-colors cursor-pointer"
+                          className="w-full text-left text-[12px] py-1 px-1.5 rounded hover:bg-white dark:hover:bg-[#1C364B] text-[#43525F] dark:text-[#D3E3F2] hover:text-[#1F5F99] flex items-center justify-between transition-colors cursor-pointer dark:hover:text-[#6FAEE0]"
                         >
                           <span className="truncate pr-1">{item.label}</span>
-                          <span className="text-[#D97706] text-[10px] font-semibold shrink-0">
+                          <span className="text-[#D97706] text-[10px] font-semibold shrink-0 dark:text-[#FCD34D]">
                             Required
                           </span>
                         </button>
@@ -1101,7 +1102,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px] animate-fade-in">
+        <div className="p-4 rounded-[12px] bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] flex items-center justify-between gap-3 text-[14px] animate-fade-in dark:bg-[#2F8F5B]/20 dark:text-[#6EE7B7] dark:border-[#2F8F5B]/40">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-[#2F8F5B] shrink-0" />
             <span>{toastMessage}</span>
@@ -1109,7 +1110,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer"
+            className="text-[#065F46] hover:opacity-75 text-[14px] cursor-pointer dark:text-[#6EE7B7]"
           >
             ✕
           </button>
@@ -1119,57 +1120,71 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       {/* 3. Main Two-Column Layout (Left Navigation + Right Section Content) */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
         {/* Left Section List */}
-        <div className="lg:col-span-1 bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-2 space-y-1">
-          {[
-            { id: 'details', label: 'Company details', icon: Building2 },
-            { id: 'directors', label: 'Directors and owners', icon: Users },
-            { id: 'categories', label: 'Categories', icon: FolderTree },
-            { id: 'projects', label: 'Past projects', icon: Briefcase },
-            { id: 'preferences', label: 'Preference status', icon: Award },
-            { id: 'team', label: 'Team', icon: UserPlus },
-          ].map((item) => {
-            const isActive = activeSection === item.id;
-            const Icon = item.icon;
-            const status = sectionStatuses[item.id];
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-2 space-y-1">
+            {[
+              { id: 'details', label: 'Company details', icon: Building2 },
+              { id: 'directors', label: 'Directors and owners', icon: Users },
+              { id: 'categories', label: 'Categories', icon: FolderTree },
+              { id: 'projects', label: 'Past projects', icon: Briefcase },
+              { id: 'preferences', label: 'Preference status', icon: Award },
+              { id: 'team', label: 'Team', icon: UserPlus },
+            ].map((item) => {
+              const isActive = activeSection === item.id;
+              const Icon = item.icon;
+              const status = sectionStatuses[item.id];
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveSection(item.id as any)}
-                className={`w-full p-3 rounded-[8px] flex items-center justify-between gap-2 text-[14px] transition-colors cursor-pointer text-left ${
-                  isActive
-                    ? 'bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold'
-                    : 'text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
-                </div>
-                {status && (
-                  <span
-                    className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium shrink-0 ${status.color}`}
-                  >
-                    {status.label}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveSection(item.id as any)}
+                  className={`w-full p-3 rounded-[8px] flex items-center justify-between gap-2 text-[14px] transition-colors cursor-pointer text-left ${
+                    isActive
+                      ? 'bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] font-semibold'
+                      : 'text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#EAF2FA]/50 dark:hover:bg-[#162C3D]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </div>
+                  {status && (
+                    <span
+                      className={`text-[11px] px-2 py-0.5 rounded-[4px] font-medium shrink-0 ${status.color}`}
+                    >
+                      {status.label}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-4 space-y-3">
+            <div>
+              <h3 className="font-heading font-semibold text-sm text-[#10212E] dark:text-white">
+                Display appearance
+              </h3>
+              <p className="text-xs text-[#6B7A87] dark:text-[#9CB4C9] mt-0.5">
+                Choose Light, System, or Dark mode for your workspace.
+              </p>
+            </div>
+            <ThemeSwitcher variant="segmented" className="w-full" />
+          </div>
         </div>
 
         {/* Right Section Content */}
         <div className="lg:col-span-3 space-y-6">
           {/* ================= SECTION 1: Company Details (10 Items) ================= */}
           {activeSection === 'details' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <div>
                   <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                     Company details
                   </h2>
-                  <span className="text-[14px] text-[#6B7A87]">
+                  <span className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     Last updated on {detailsLastUpdated}
                   </span>
                 </div>
@@ -1202,7 +1217,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, legalName: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
 
@@ -1218,7 +1233,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, tradingName: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
                   </div>
@@ -1236,7 +1251,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, cipaNumber: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
 
@@ -1252,7 +1267,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, tinNumber: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
 
@@ -1268,7 +1283,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, ppraCode: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
                   </div>
@@ -1284,7 +1299,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, companyType: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       >
                         <option value="Private Company (Pty) Ltd">Private Company (Pty) Ltd</option>
                         <option value="Public Company Ltd">Public Company Ltd</option>
@@ -1310,7 +1325,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             yearEstablished: Number(e.target.value),
                           })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
 
@@ -1331,21 +1346,21 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             citizenOwnedPercentage: Number(e.target.value),
                           })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                         Does your business hold a trading licence?
                       </label>
-                      <div className="flex flex-wrap gap-4 p-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px]">
+                      <div className="flex flex-wrap gap-4 p-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px]">
                         <label className="flex items-center gap-2 cursor-pointer text-[14px] text-[#10212E] dark:text-white">
                           <input
                             type="radio"
                             name="tradingLicence"
                             checked={detailsForm.hasTradingLicence === true}
                             onChange={() => setDetailsForm({ ...detailsForm, hasTradingLicence: true })}
-                            className="text-[#1F5F99]"
+                            className="text-[#1F5F99] dark:text-[#6FAEE0]"
                           />
                           Yes, I'll upload it
                         </label>
@@ -1355,14 +1370,14 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             name="tradingLicence"
                             checked={detailsForm.hasTradingLicence === false}
                             onChange={() => setDetailsForm({ ...detailsForm, hasTradingLicence: false })}
-                            className="text-[#1F5F99]"
+                            className="text-[#1F5F99] dark:text-[#6FAEE0]"
                           />
                           Not required for my business
                         </label>
                       </div>
                       {detailsForm.hasTradingLicence === false && (
                         <div className="pt-1.5">
-                          <label className="text-[12px] font-medium text-[#6B7A87] block mb-1">
+                          <label className="text-[12px] font-medium text-[#6B7A87] block mb-1 dark:text-[#9CB4C9]">
                             Reason trading licence is not required (optional):
                           </label>
                           <input
@@ -1370,7 +1385,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             value={detailsForm.tradingLicenceReason || ''}
                             onChange={(e) => setDetailsForm({ ...detailsForm, tradingLicenceReason: e.target.value })}
                             placeholder="e.g. Professional consultancy exempt under Trade Act"
-                            className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                            className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                           />
                         </div>
                       )}
@@ -1378,13 +1393,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </div>
 
                   {/* Statutory Preference Eligibility Checkboxes */}
-                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="space-y-0.5">
                         <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                           Statutory Preference Eligibility
                         </span>
-                        <span className="text-[12px] text-[#6B7A87]">
+                        <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                           Toggles save immediately and automatically update conditional requirements and evidence in Documents.
                         </span>
                       </div>
@@ -1400,17 +1415,17 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       {/* Youth-owned */}
-                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                      <div className="p-3 bg-white dark:bg-[#1C364B] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
                         <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
                           <input
                             type="checkbox"
                             checked={detailsForm.youthOwned}
                             onChange={(e) => handleTogglePreference('youthOwned', e.target.checked)}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                           <span>Youth-owned business</span>
                         </label>
-                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap dark:text-[#9CB4C9]">
                           <span>Req: Youth preference evidence</span>
                           {detailsForm.youthOwned ? (
                             youthDoc ? (
@@ -1425,17 +1440,17 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       </div>
 
                       {/* Women-owned */}
-                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                      <div className="p-3 bg-white dark:bg-[#1C364B] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
                         <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
                           <input
                             type="checkbox"
                             checked={detailsForm.womenOwned}
                             onChange={(e) => handleTogglePreference('womenOwned', e.target.checked)}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                           <span>Women-owned business</span>
                         </label>
-                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap dark:text-[#9CB4C9]">
                           <span>Req: Women preference evidence</span>
                           {detailsForm.womenOwned ? (
                             womenDoc ? (
@@ -1450,17 +1465,17 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       </div>
 
                       {/* Disability-owned */}
-                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                      <div className="p-3 bg-white dark:bg-[#1C364B] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
                         <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
                           <input
                             type="checkbox"
                             checked={detailsForm.disabilityOwned}
                             onChange={(e) => handleTogglePreference('disabilityOwned', e.target.checked)}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                           <span>Disability-owned business</span>
                         </label>
-                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap dark:text-[#9CB4C9]">
                           <span>Req: Disability preference evidence</span>
                           {detailsForm.disabilityOwned ? (
                             disabilityDoc ? (
@@ -1475,17 +1490,17 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       </div>
 
                       {/* EDD Certified */}
-                      <div className="p-3 bg-white dark:bg-[#132635] rounded-[6px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1.5">
+                      <div className="p-3 bg-white dark:bg-[#1C364B] rounded-[6px] border border-[#D5E0EA] dark:border-[#244157] space-y-1.5">
                         <label className="flex items-center gap-2 cursor-pointer text-[#10212E] dark:text-[#E2EDF8] text-[13px] font-medium">
                           <input
                             type="checkbox"
                             checked={detailsForm.eddCertified}
                             onChange={(e) => handleTogglePreference('eddCertified', e.target.checked)}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                           <span>EDD certified</span>
                         </label>
-                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap">
+                        <div className="pl-6 text-[11px] text-[#6B7A87] flex items-center justify-between gap-1 flex-wrap dark:text-[#9CB4C9]">
                           <span>Req: EDD certificate & evidence</span>
                           {detailsForm.eddCertified ? (
                             eddDoc ? (
@@ -1514,7 +1529,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       onChange={(e) =>
                         setDetailsForm({ ...detailsForm, physicalAddress: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                     />
                   </div>
 
@@ -1532,7 +1547,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, city: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
 
@@ -1546,7 +1561,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           <button
                             type="button"
                             onClick={loadDistricts}
-                            className="px-2.5 py-1 text-[12px] font-medium rounded-[4px] bg-white dark:bg-[#132635] border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-200 hover:bg-rose-100 cursor-pointer shrink-0"
+                            className="px-2.5 py-1 text-[12px] font-medium rounded-[4px] bg-white dark:bg-[#1C364B] border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-200 hover:bg-rose-100 cursor-pointer shrink-0"
                           >
                             Retry
                           </button>
@@ -1560,7 +1575,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           onChange={(e) =>
                             setDetailsForm({ ...detailsForm, district: e.target.value })
                           }
-                          className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                          className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                         >
                           <option value="">
                             {isLoadingDistricts && districtsList.length === 0 ? 'Loading districts...' : 'Select district...'}
@@ -1608,7 +1623,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, primaryPhone: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                       />
                     </div>
 
@@ -1625,7 +1640,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, email: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                       <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2]">
                         Use an email you check regularly. Company and personal addresses are both fine.
@@ -1634,13 +1649,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </div>
 
                   {/* Commercial Banking Details */}
-                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
                     <span className="text-[14px] font-semibold text-[#10212E] dark:text-white block">
                       Commercial Banking Details *
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[12px] text-[#6B7A87] block">Bank name *</label>
+                        <label className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Bank name *</label>
                         <input
                           id="field-bankDetails"
                           type="text"
@@ -1650,11 +1665,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           onChange={(e) =>
                             setDetailsForm({ ...detailsForm, bankName: e.target.value })
                           }
-                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[12px] text-[#6B7A87] block">Branch name *</label>
+                        <label className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Branch name *</label>
                         <input
                           type="text"
                           required
@@ -1663,11 +1678,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           onChange={(e) =>
                             setDetailsForm({ ...detailsForm, bankBranch: e.target.value })
                           }
-                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[12px] text-[#6B7A87] block">Account number *</label>
+                        <label className="text-[12px] text-[#6B7A87] block dark:text-[#9CB4C9]">Account number *</label>
                         <input
                           type="text"
                           required
@@ -1676,7 +1691,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           onChange={(e) =>
                             setDetailsForm({ ...detailsForm, accountNumberMasked: e.target.value })
                           }
-                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[13px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                          className="w-full px-3 py-1.5 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[13px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                         />
                       </div>
                     </div>
@@ -1694,7 +1709,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, postalAddress: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
 
@@ -1709,7 +1724,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onChange={(e) =>
                           setDetailsForm({ ...detailsForm, website: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                        className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                       />
                     </div>
                   </div>
@@ -1724,15 +1739,15 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       onChange={(e) =>
                         setDetailsForm({ ...detailsForm, description: e.target.value })
                       }
-                      className="w-full p-3 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                      className="w-full p-3 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                     />
                   </div>
 
-                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
                     <button
                       type="button"
                       onClick={() => setIsEditingDetails(false)}
-                      className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
+                      className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] dark:hover:bg-[#10212E] cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -1760,63 +1775,63 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                 <div className="space-y-6 text-[14px]">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Legal company name</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Legal company name</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         {detailsForm.legalName || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Trading name</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Trading name</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         {detailsForm.tradingName || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">CIPA registration #</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">CIPA registration #</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
                         {detailsForm.cipaNumber || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">BURS tax number (TIN)</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">BURS tax number (TIN)</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
                         {detailsForm.tinNumber || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Citizen ownership %</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Citizen ownership %</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
                         {detailsForm.citizenOwnedPercentage}%
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Telephone</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Telephone</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block tabular-nums">
                         {detailsForm.primaryPhone || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Official email</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Official email</span>
                       <span className="font-medium text-[#1F5F99] dark:text-[#6FAEE0] block">
                         {detailsForm.email || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">City / District</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">City / District</span>
                       <span className="font-medium text-[#10212E] dark:text-white block">
                         {detailsForm.city || 'N/A'}{detailsForm.district ? `, ${detailsForm.district}` : ''}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Banking details</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Banking details</span>
                       <span className="font-medium text-[#10212E] dark:text-white block">
                         {detailsForm.bankName
                           ? `${detailsForm.bankName} (${detailsForm.bankBranch || 'Active'})`
@@ -1825,38 +1840,38 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Company structure</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Company structure</span>
                       <span className="font-medium text-[#10212E] dark:text-white block">
                         {detailsForm.companyType || 'Private Company (Pty) Ltd'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Year established</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Year established</span>
                       <span className="font-medium text-[#10212E] dark:text-white block tabular-nums">
                         {detailsForm.yearEstablished || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">PPRA registration #</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">PPRA registration #</span>
                       <span className="font-medium text-[#10212E] dark:text-white block">
                         {detailsForm.ppraCode || 'Not recorded'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Website</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Website</span>
                       <span className="font-medium text-[#1F5F99] dark:text-[#6FAEE0] block">
                         {detailsForm.website || 'Not specified'}
                       </span>
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Statutory preference claims</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Statutory preference claims</span>
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {detailsForm.youthOwned && (
-                          <span className="text-[11px] font-medium bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded-[4px]">
+                          <span className="text-[11px] font-medium bg-[#EAF2FA] text-[#1F5F99] px-2 py-0.5 rounded-[4px] dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                             Youth-owned
                           </span>
                         )}
@@ -1871,19 +1886,19 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           </span>
                         )}
                         {detailsForm.eddCertified && (
-                          <span className="text-[11px] font-medium bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px]">
+                          <span className="text-[11px] font-medium bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] dark:bg-[#2F8F5B]/20">
                             EDD certified
                           </span>
                         )}
                         {!detailsForm.youthOwned && !detailsForm.womenOwned && !detailsForm.disabilityOwned && !detailsForm.eddCertified && (
-                          <span className="text-[12px] text-[#6B7A87]">None claimed</span>
+                          <span className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">None claimed</span>
                         )}
                       </div>
                     </div>
                   </div>
 
                   {/* Statutory Preference Eligibility - Interactive & Linked to Documents */}
-                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#0D1A25] rounded-[10px] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+                  <div className="p-4 bg-[#F7FAFD] dark:bg-[#10212E] rounded-[10px] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
@@ -1891,11 +1906,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           <span className="text-[14px] font-semibold text-[#10212E] dark:text-white">
                             Statutory Preference Eligibility
                           </span>
-                          <span className="text-[11px] px-2 py-0.5 bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] rounded font-medium">
+                          <span className="text-[11px] px-2 py-0.5 bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] rounded font-medium">
                             Synced with Documents & Vault
                           </span>
                         </div>
-                        <p className="text-[12px] text-[#6B7A87]">
+                        <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                           Click any preference to toggle. Changes save immediately to your profile and automatically update conditional requirements and evidence in Documents.
                         </p>
                       </div>
@@ -1916,8 +1931,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onClick={() => handleTogglePreference('youthOwned', !detailsForm.youthOwned)}
                         className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
                           detailsForm.youthOwned
-                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
-                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                            ? 'bg-white dark:bg-[#1C364B] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#244157] hover:border-slate-400'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -1929,11 +1944,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             checked={detailsForm.youthOwned}
                             onChange={(e) => handleTogglePreference('youthOwned', e.target.checked)}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                         </div>
                         <div className="text-[11px] space-y-1">
-                          <div className="text-[#6B7A87]">Req: Youth preference evidence</div>
+                          <div className="text-[#6B7A87] dark:text-[#9CB4C9]">Req: Youth preference evidence</div>
                           {detailsForm.youthOwned ? (
                             youthDoc ? (
                               <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
@@ -1957,8 +1972,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onClick={() => handleTogglePreference('womenOwned', !detailsForm.womenOwned)}
                         className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
                           detailsForm.womenOwned
-                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
-                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                            ? 'bg-white dark:bg-[#1C364B] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#244157] hover:border-slate-400'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -1970,11 +1985,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             checked={detailsForm.womenOwned}
                             onChange={(e) => handleTogglePreference('womenOwned', e.target.checked)}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                         </div>
                         <div className="text-[11px] space-y-1">
-                          <div className="text-[#6B7A87]">Req: Women preference evidence</div>
+                          <div className="text-[#6B7A87] dark:text-[#9CB4C9]">Req: Women preference evidence</div>
                           {detailsForm.womenOwned ? (
                             womenDoc ? (
                               <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
@@ -1998,8 +2013,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onClick={() => handleTogglePreference('disabilityOwned', !detailsForm.disabilityOwned)}
                         className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
                           detailsForm.disabilityOwned
-                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
-                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                            ? 'bg-white dark:bg-[#1C364B] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#244157] hover:border-slate-400'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -2011,11 +2026,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             checked={detailsForm.disabilityOwned}
                             onChange={(e) => handleTogglePreference('disabilityOwned', e.target.checked)}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                         </div>
                         <div className="text-[11px] space-y-1">
-                          <div className="text-[#6B7A87]">Req: Disability preference evidence</div>
+                          <div className="text-[#6B7A87] dark:text-[#9CB4C9]">Req: Disability preference evidence</div>
                           {detailsForm.disabilityOwned ? (
                             disabilityDoc ? (
                               <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
@@ -2039,8 +2054,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         onClick={() => handleTogglePreference('eddCertified', !detailsForm.eddCertified)}
                         className={`p-3 rounded-[8px] border transition-all cursor-pointer select-none space-y-2 ${
                           detailsForm.eddCertified
-                            ? 'bg-white dark:bg-[#132635] border-[#1F5F99] shadow-sm'
-                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#1E364A] hover:border-slate-400'
+                            ? 'bg-white dark:bg-[#1C364B] border-[#1F5F99] shadow-sm'
+                            : 'bg-white/60 dark:bg-[#10212E]/60 border-[#D5E0EA] dark:border-[#244157] hover:border-slate-400'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -2052,11 +2067,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                             checked={detailsForm.eddCertified}
                             onChange={(e) => handleTogglePreference('eddCertified', e.target.checked)}
                             onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer"
+                            className="w-4 h-4 rounded border-[#D5E0EA] text-[#1F5F99] focus:ring-[#1F5F99] cursor-pointer dark:text-[#6FAEE0] dark:border-[#244157]"
                           />
                         </div>
                         <div className="text-[11px] space-y-1">
-                          <div className="text-[#6B7A87]">Req: EDD certificate & evidence</div>
+                          <div className="text-[#6B7A87] dark:text-[#9CB4C9]">Req: EDD certificate & evidence</div>
                           {detailsForm.eddCertified ? (
                             eddDoc ? (
                               <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded text-[11px]">
@@ -2077,14 +2092,14 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] space-y-4">
+                  <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] space-y-4">
                     <div className="space-y-1">
-                      <span className="text-[14px] text-[#6B7A87] font-medium block">Registered physical address</span>
+                      <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Registered physical address</span>
                       <span className="font-semibold text-[#10212E] dark:text-white block">
                         {detailsForm.physicalAddress || 'Not recorded'}
                       </span>
                       {detailsForm.postalAddress && (
-                        <span className="text-[#43525F] dark:text-[#B2C3D2] block">
+                        <span className="text-[#43525F] dark:text-[#D3E3F2] block">
                           Postal: {detailsForm.postalAddress}
                         </span>
                       )}
@@ -2092,8 +2107,8 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
                     {detailsForm.description && (
                       <div className="space-y-1">
-                        <span className="text-[14px] text-[#6B7A87] font-medium block">Company description</span>
-                        <p className="text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+                        <span className="text-[14px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Company description</span>
+                        <p className="text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
                           {detailsForm.description}
                         </p>
                       </div>
@@ -2109,12 +2124,12 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
           {/* ================= SECTION 3: Categories ================= */}
           {activeSection === 'categories' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-              <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+              <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                   Supply and service categories
                 </h2>
-                <p className="text-[14px] text-[#6B7A87]">
+                <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                   Select the supply categories, industry disciplines, and commodity sectors for tender matching. Note: Not all companies are registered with PPRA, so categories are optional and do not affect your profile completeness score.
                 </p>
               </div>
@@ -2125,7 +2140,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   Active registered categories ({selectedCategories.length})
                 </span>
                 {selectedCategories.length === 0 ? (
-                  <p className="text-[14px] text-[#6B7A87] italic">
+                  <p className="text-[14px] text-[#6B7A87] italic dark:text-[#9CB4C9]">
                     No categories chosen yet. Select items from the list below to see matching tenders.
                   </p>
                 ) : (
@@ -2133,7 +2148,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     {selectedCategories.map((cat) => (
                       <span
                         key={cat}
-                        className="bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] px-3 py-1.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2"
+                        className="bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] px-3 py-1.5 rounded-[6px] text-[14px] font-medium inline-flex items-center gap-2"
                       >
                         <span>{cat}</span>
                         <button
@@ -2152,20 +2167,20 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
               {/* Search Category Tree */}
               <div className="space-y-3 pt-2">
                 <div className="relative">
-                  <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-[#6B7A87] absolute left-3 top-1/2 -translate-y-1/2 dark:text-[#9CB4C9]" />
                   <input
                     type="text"
                     placeholder="Search by code or category name (e.g. Building, Solar, Roads)..."
                     value={categorySearch}
                     onChange={(e) => setCategorySearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                    className="w-full pl-9 pr-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
 
-                <div className="space-y-2 max-h-96 overflow-y-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] p-3">
+                <div className="space-y-2 max-h-96 overflow-y-auto border border-[#D5E0EA] dark:border-[#244157] rounded-[8px] p-3">
                   {isLoadingCategories && categoriesList.length === 0 ? (
-                    <div className="py-8 text-center text-[#6B7A87] flex flex-col items-center justify-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99]" />
+                    <div className="py-8 text-center text-[#6B7A87] flex flex-col items-center justify-center gap-2 dark:text-[#9CB4C9]">
+                      <Loader2 className="w-5 h-5 animate-spin text-[#1F5F99] dark:text-[#6FAEE0]" />
                       <p className="text-[13px]">Loading categories from database...</p>
                     </div>
                   ) : categoriesError ? (
@@ -2194,7 +2209,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
                     if (filtered.length === 0) {
                       return (
-                        <div className="py-8 text-center text-[#6B7A87]">
+                        <div className="py-8 text-center text-[#6B7A87] dark:text-[#9CB4C9]">
                           <p className="text-[14px]">No category codes or sub-codes match "{categorySearch}".</p>
                         </div>
                       );
@@ -2225,7 +2240,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       return (
                         <div
                           key={node.code}
-                          className="p-3 bg-[#F7FAFD]/60 dark:bg-[#10212E]/60 rounded-[6px] space-y-2 border border-[#E2E8F0]/40 dark:border-[#1E364A]/40"
+                          className="p-3 bg-[#F7FAFD]/60 dark:bg-[#10212E]/60 rounded-[6px] space-y-2 border border-[#E2E8F0]/40 dark:border-[#244157]/40"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -2233,7 +2248,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                                 <button
                                   type="button"
                                   onClick={() => toggleCategoryExpand(node.code)}
-                                  className="p-1 -ml-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer transition-colors"
+                                  className="p-1 -ml-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white cursor-pointer transition-colors dark:text-[#9CB4C9]"
                                   title={isExpanded ? 'Collapse sub-codes' : 'Expand sub-codes'}
                                 >
                                   {isExpanded ? (
@@ -2245,7 +2260,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                               ) : (
                                 <span className="w-4" />
                               )}
-                              <span className="px-2 py-0.5 rounded font-mono text-[12px] font-semibold bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#6FAEE0] whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded tabular-nums text-[12px] font-semibold bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#6FAEE0] whitespace-nowrap">
                                 {node.code}
                               </span>
                               <span className="font-semibold text-[14px] text-[#10212E] dark:text-white truncate">
@@ -2271,7 +2286,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           </div>
 
                           {hasChildren && isExpanded && (
-                            <div className="pl-5 space-y-1 pt-1 border-l-2 border-[#D5E0EA] dark:border-[#1E364A] ml-2">
+                            <div className="pl-5 space-y-1 pt-1 border-l-2 border-[#D5E0EA] dark:border-[#244157] ml-2">
                               {matchingChildren.map((child) => {
                                 const childCodeFormatted = child.code.length <= 2 ? `Sub-code ${child.code}` : child.code;
                                 const childLabel = child.code.length <= 2 ? `${node.code}/${child.code}: ${child.name}` : `${child.code}: ${child.name}`;
@@ -2288,10 +2303,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                                     className="flex items-center justify-between gap-2 text-[13px] py-1 px-2 rounded hover:bg-white/80 dark:hover:bg-[#172D3F]/70 transition-colors"
                                   >
                                     <div className="flex items-center gap-2 min-w-0">
-                                      <span className="px-1.5 py-0.5 rounded font-mono text-[11px] font-medium bg-[#E2E8F0] dark:bg-[#1E293B] text-[#334155] dark:text-[#CBD5E1] whitespace-nowrap">
+                                      <span className="px-1.5 py-0.5 rounded tabular-nums text-[11px] font-medium bg-[#E2E8F0] dark:bg-[#1E293B] text-[#334155] dark:text-[#CBD5E1] whitespace-nowrap">
                                         {childCodeFormatted}
                                       </span>
-                                      <span className="text-[#43525F] dark:text-[#B2C3D2] truncate">
+                                      <span className="text-[#43525F] dark:text-[#D3E3F2] truncate">
                                         {child.name}
                                       </span>
                                     </div>
@@ -2301,7 +2316,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                                       className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer transition-colors whitespace-nowrap ${
                                         isChildSelected
                                           ? 'bg-[#2F8F5B] text-white'
-                                          : 'bg-white dark:bg-[#132635] border border-[#D5E0EA] dark:border-[#1E364A] text-[#1F5F99] hover:bg-[#F7FAFD]'
+                                          : 'bg-white dark:bg-[#1C364B] border border-[#D5E0EA] dark:border-[#244157] text-[#1F5F99] hover:bg-[#F7FAFD] dark:text-[#6FAEE0] dark:hover:bg-[#162C3D]'
                                       }`}
                                     >
                                       {isChildSelected ? 'Selected' : '+ Select'}
@@ -2322,13 +2337,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
           {/* ================= SECTION 4: Past Projects ================= */}
           {activeSection === 'projects' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <div>
                   <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                     Past projects & track record
                   </h2>
-                  <p className="text-[14px] text-[#6B7A87]">
+                  <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     Record completed and ongoing contracts to satisfy technical qualification criteria.
                   </p>
                 </div>
@@ -2357,11 +2372,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
               {/* Projects Card List or Empty State */}
               {projectsList.length === 0 ? (
-                <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px] text-center space-y-3">
+                <div className="p-8 border border-dashed border-[#D5E0EA] dark:border-[#244157] rounded-[8px] text-center space-y-3">
                   <p className="text-[15px] font-semibold text-[#10212E] dark:text-white">
                     No past projects recorded yet
                   </p>
-                  <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto">
+                  <p className="text-[13px] text-[#6B7A87] max-w-md mx-auto dark:text-[#9CB4C9]">
                     Add prior commercial contracts and public sector work to strengthen your technical capability evaluations.
                   </p>
                   <button
@@ -2381,7 +2396,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   {projectsList.map((proj) => (
                     <div
                       key={proj.id}
-                      className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#1E364A] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3"
+                      className="p-5 rounded-[8px] border border-[#D5E0EA] dark:border-[#244157] bg-[#F7FAFD]/40 dark:bg-[#10212E]/40 space-y-3"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div className="space-y-1">
@@ -2408,16 +2423,16 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           <span className="font-heading font-semibold text-[18px] text-[#10212E] dark:text-white tabular-nums block">
                             BWP {proj.valueBWP.toLocaleString()}
                           </span>
-                          <span className="text-[13px] text-[#6B7A87] block">
+                          <span className="text-[13px] text-[#6B7A87] block dark:text-[#9CB4C9]">
                             {proj.startDate || 'N/A'} – {proj.endDate || 'Ongoing'}
                           </span>
                         </div>
                       </div>
 
                       {/* Reference Contact */}
-                      <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]">
-                        <div className="text-[#43525F] dark:text-[#B2C3D2]">
-                          <span className="text-[#6B7A87]">Reference officer: </span>
+                      <div className="pt-2 border-t border-[#D5E0EA] dark:border-[#244157] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[14px]">
+                        <div className="text-[#43525F] dark:text-[#D3E3F2]">
+                          <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Reference officer: </span>
                           <strong>{proj.referenceContact?.name || 'Contact'}</strong> (
                           {proj.referenceContact?.role || 'Officer'}) ·{' '}
                           <span>{proj.referenceContact?.phone || 'Phone'}</span>
@@ -2451,18 +2466,18 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
           {activeSection === 'preferences' && (
             <div className="space-y-6">
               {/* Header Card */}
-              <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+              <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                         Statutory Preference Eligibility & Evidence
                       </h2>
-                      <span className="text-[12px] px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#1E364A] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
+                      <span className="text-[12px] px-2.5 py-0.5 rounded-[4px] bg-[#EAF2FA] dark:bg-[#244157] text-[#1F5F99] dark:text-[#38BDF8] font-medium">
                         Live BidReady360 Sync
                       </span>
                     </div>
-                    <p className="text-[14px] text-[#6B7A87] mt-1">
+                    <p className="text-[14px] text-[#6B7A87] mt-1 dark:text-[#9CB4C9]">
                       Statutory preference eligibility margins are claimed below and directly substantiated through uploaded documentary evidence in your document vault. Toggling any preference here immediately updates your profile, activates the corresponding requirement, and synchronizes with the Documents page.
                     </p>
                   </div>
@@ -2479,32 +2494,32 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
                 {/* Preference Summary Metrics */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                    <span className="text-[12px] text-[#6B7A87] font-medium block">Active Targeted Claims</span>
+                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
+                    <span className="text-[12px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Active Targeted Claims</span>
                     <span className="text-[20px] font-bold text-[#10212E] dark:text-white block">
                       {[detailsForm.youthOwned, detailsForm.womenOwned, detailsForm.disabilityOwned, detailsForm.eddCertified].filter(Boolean).length} of 4 claimed
                     </span>
-                    <span className="text-[11px] text-[#43525F] dark:text-[#B2C3D2] block">
+                    <span className="text-[11px] text-[#43525F] dark:text-[#D3E3F2] block">
                       Youth, Women, Disability, & EDD
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                    <span className="text-[12px] text-[#6B7A87] font-medium block">Citizen Equity Shareholding</span>
+                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
+                    <span className="text-[12px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Citizen Equity Shareholding</span>
                     <span className="text-[20px] font-bold text-[#1F5F99] dark:text-[#38BDF8] block">
                       {detailsForm.citizenOwnedPercentage}%
                     </span>
-                    <span className="text-[11px] text-[#43525F] dark:text-[#B2C3D2] block">
+                    <span className="text-[11px] text-[#43525F] dark:text-[#D3E3F2] block">
                       {detailsForm.citizenOwnedPercentage === 100 ? '100% Citizen Contractor Preference' : 'Partial Citizen Preference'}
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-1">
-                    <span className="text-[12px] text-[#6B7A87] font-medium block">Local Procurement District</span>
+                  <div className="p-4 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-1">
+                    <span className="text-[12px] text-[#6B7A87] font-medium block dark:text-[#9CB4C9]">Local Procurement District</span>
                     <span className="text-[20px] font-bold text-[#10212E] dark:text-white block truncate">
                       {detailsForm.district || detailsForm.city || 'Gaborone'}
                     </span>
-                    <span className="text-[11px] text-[#43525F] dark:text-[#B2C3D2] block">
+                    <span className="text-[11px] text-[#43525F] dark:text-[#D3E3F2] block">
                       Local Authority Preference Eligible
                     </span>
                   </div>
@@ -2514,10 +2529,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
               {/* 4 Interactive Statutory Preference Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Youth-owned */}
-                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                <div className={`bg-white dark:bg-[#1C364B] rounded-[12px] border p-6 space-y-4 transition-all ${
                   detailsForm.youthOwned
                     ? 'border-[#1F5F99] shadow-sm'
-                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                    : 'border-[#D5E0EA] dark:border-[#244157]'
                 }`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -2527,13 +2542,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         </h3>
                         <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
                           detailsForm.youthOwned
-                            ? 'bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#1E364A] dark:text-[#38BDF8]'
+                            ? 'bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#244157] dark:text-[#38BDF8]'
                             : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                         }`}>
                           {detailsForm.youthOwned ? 'Active Claim' : 'Inactive'}
                         </span>
                       </div>
-                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                      <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                         Statutory preference margin under the Citizen Economic Empowerment Policy for enterprises majority owned or managed by Botswana citizens under 35 years.
                       </p>
                     </div>
@@ -2544,11 +2559,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       aria-checked={detailsForm.youthOwned}
                       onClick={() => handleTogglePreference('youthOwned', !detailsForm.youthOwned)}
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
-                        detailsForm.youthOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                        detailsForm.youthOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#244157]'
                       }`}
                     >
                       <div
-                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 dark:bg-[#1C364B] ${
                           detailsForm.youthOwned ? 'translate-x-6' : 'translate-x-0'
                         }`}
                       />
@@ -2556,7 +2571,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </div>
 
                   {/* Linked Requirement & Evidence */}
-                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
                     <div className="flex items-center justify-between gap-2 text-[12px]">
                       <span className="font-semibold text-[#10212E] dark:text-white">
                         Linked Requirement in Documents:
@@ -2578,7 +2593,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       )}
                     </div>
 
-                    <p className="text-[12px] text-[#6B7A87]">
+                    <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       {youthDoc
                         ? `Document: ${youthDoc.title || youthDoc.fileName} (${youthDoc.status})`
                         : 'Youth ownership preference evidence (National ID/Omang or youth shareholding declaration) is required in your Documents vault to substantiate this claim during procurement evaluation.'}
@@ -2596,10 +2611,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                 </div>
 
                 {/* 2. Women-owned */}
-                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                <div className={`bg-white dark:bg-[#1C364B] rounded-[12px] border p-6 space-y-4 transition-all ${
                   detailsForm.womenOwned
                     ? 'border-[#1F5F99] shadow-sm'
-                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                    : 'border-[#D5E0EA] dark:border-[#244157]'
                 }`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -2615,7 +2630,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           {detailsForm.womenOwned ? 'Active Claim' : 'Inactive'}
                         </span>
                       </div>
-                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                      <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                         Empowerment preference margin under procurement regulations for companies majority owned, directed, or operated by female Botswana citizens.
                       </p>
                     </div>
@@ -2626,11 +2641,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       aria-checked={detailsForm.womenOwned}
                       onClick={() => handleTogglePreference('womenOwned', !detailsForm.womenOwned)}
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
-                        detailsForm.womenOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                        detailsForm.womenOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#244157]'
                       }`}
                     >
                       <div
-                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 dark:bg-[#1C364B] ${
                           detailsForm.womenOwned ? 'translate-x-6' : 'translate-x-0'
                         }`}
                       />
@@ -2638,7 +2653,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </div>
 
                   {/* Linked Requirement & Evidence */}
-                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
                     <div className="flex items-center justify-between gap-2 text-[12px]">
                       <span className="font-semibold text-[#10212E] dark:text-white">
                         Linked Requirement in Documents:
@@ -2660,7 +2675,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       )}
                     </div>
 
-                    <p className="text-[12px] text-[#6B7A87]">
+                    <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       {womenDoc
                         ? `Document: ${womenDoc.title || womenDoc.fileName} (${womenDoc.status})`
                         : 'Women ownership preference evidence (CIPA register showing female shareholding or directors) is required in your Documents vault.'}
@@ -2678,10 +2693,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                 </div>
 
                 {/* 3. Disability-owned */}
-                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                <div className={`bg-white dark:bg-[#1C364B] rounded-[12px] border p-6 space-y-4 transition-all ${
                   detailsForm.disabilityOwned
                     ? 'border-[#1F5F99] shadow-sm'
-                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                    : 'border-[#D5E0EA] dark:border-[#244157]'
                 }`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -2697,7 +2712,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           {detailsForm.disabilityOwned ? 'Active Claim' : 'Inactive'}
                         </span>
                       </div>
-                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                      <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                         Empowerment preference margin under procurement frameworks for companies owned or operated by persons living with disabilities.
                       </p>
                     </div>
@@ -2708,11 +2723,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       aria-checked={detailsForm.disabilityOwned}
                       onClick={() => handleTogglePreference('disabilityOwned', !detailsForm.disabilityOwned)}
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
-                        detailsForm.disabilityOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                        detailsForm.disabilityOwned ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#244157]'
                       }`}
                     >
                       <div
-                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 dark:bg-[#1C364B] ${
                           detailsForm.disabilityOwned ? 'translate-x-6' : 'translate-x-0'
                         }`}
                       />
@@ -2720,7 +2735,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </div>
 
                   {/* Linked Requirement & Evidence */}
-                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
                     <div className="flex items-center justify-between gap-2 text-[12px]">
                       <span className="font-semibold text-[#10212E] dark:text-white">
                         Linked Requirement in Documents:
@@ -2742,7 +2757,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       )}
                     </div>
 
-                    <p className="text-[12px] text-[#6B7A87]">
+                    <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       {disabilityDoc
                         ? `Document: ${disabilityDoc.title || disabilityDoc.fileName} (${disabilityDoc.status})`
                         : 'Disability ownership preference evidence (medical certification or Ministry declaration) is required in your Documents vault.'}
@@ -2760,10 +2775,10 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                 </div>
 
                 {/* 4. EDD Certified */}
-                <div className={`bg-white dark:bg-[#132635] rounded-[12px] border p-6 space-y-4 transition-all ${
+                <div className={`bg-white dark:bg-[#1C364B] rounded-[12px] border p-6 space-y-4 transition-all ${
                   detailsForm.eddCertified
                     ? 'border-[#1F5F99] shadow-sm'
-                    : 'border-[#D5E0EA] dark:border-[#1E364A]'
+                    : 'border-[#D5E0EA] dark:border-[#244157]'
                 }`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -2779,7 +2794,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           {detailsForm.eddCertified ? 'Active Claim' : 'Inactive'}
                         </span>
                       </div>
-                      <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2]">
+                      <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2]">
                         Statutory price preference margins under the Presidential EDD directive for domestic manufacturers and certified local service providers.
                       </p>
                     </div>
@@ -2790,11 +2805,11 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       aria-checked={detailsForm.eddCertified}
                       onClick={() => handleTogglePreference('eddCertified', !detailsForm.eddCertified)}
                       className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 cursor-pointer ${
-                        detailsForm.eddCertified ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#1E364A]'
+                        detailsForm.eddCertified ? 'bg-[#1F5F99] dark:bg-[#38BDF8]' : 'bg-[#D5E0EA] dark:bg-[#244157]'
                       }`}
                     >
                       <div
-                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
+                        className={`w-4 h-4 rounded-full bg-white transition-transform duration-200 dark:bg-[#1C364B] ${
                           detailsForm.eddCertified ? 'translate-x-6' : 'translate-x-0'
                         }`}
                       />
@@ -2802,7 +2817,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </div>
 
                   {/* Linked Requirement & Evidence */}
-                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#0D1A25] border border-[#D5E0EA] dark:border-[#1E364A] space-y-2">
+                  <div className="p-3.5 rounded-[8px] bg-[#F7FAFD] dark:bg-[#10212E] border border-[#D5E0EA] dark:border-[#244157] space-y-2">
                     <div className="flex items-center justify-between gap-2 text-[12px]">
                       <span className="font-semibold text-[#10212E] dark:text-white">
                         Linked Requirement in Documents:
@@ -2824,7 +2839,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       )}
                     </div>
 
-                    <p className="text-[12px] text-[#6B7A87]">
+                    <p className="text-[12px] text-[#6B7A87] dark:text-[#9CB4C9]">
                       {eddDoc
                         ? `Document: ${eddDoc.title || eddDoc.fileName} (${eddDoc.status})`
                         : 'A valid Economic Diversification Drive (EDD) Certificate issued by the Ministry is required in your Documents vault.'}
@@ -2843,12 +2858,12 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
               </div>
 
               {/* General Documents and Eligibility Link Card */}
-              <div className="bg-[#F7FAFD] dark:bg-[#182C3A]/50 rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="bg-[#F7FAFD] dark:bg-[#182C3A]/50 rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <h4 className="font-heading font-semibold text-[15px] text-[#10212E] dark:text-white">
                     Need to upload or replace preference proof?
                   </h4>
-                  <p className="text-[13px] text-[#6B7A87]">
+                  <p className="text-[13px] text-[#6B7A87] dark:text-[#9CB4C9]">
                     Manage mandatory statutory compliance, business eligibility declarations, and all preference margin evidence directly in the Documents vault.
                   </p>
                 </div>
@@ -2866,13 +2881,13 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
 
           {/* ================= SECTION 6: Team ================= */}
           {activeSection === 'team' && (
-            <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+            <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
                 <div>
                   <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white">
                     Supplier team & access
                   </h2>
-                  <p className="text-[14px] text-[#6B7A87] mt-0.5">
+                  <p className="text-[14px] text-[#6B7A87] mt-0.5 dark:text-[#9CB4C9]">
                     Authorized company staff authorized to prepare tender bids and submit electronic proposals.
                   </p>
                 </div>
@@ -2893,9 +2908,9 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   Active members ({teamMembers.length})
                 </span>
 
-                <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
-                  <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#1E364A]">
-                    <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px]">
+                <div className="overflow-x-auto border border-[#D5E0EA] dark:border-[#244157] rounded-[8px]">
+                  <table className="w-full text-left text-[14px] divide-y divide-[#D5E0EA] dark:divide-[#244157]">
+                    <thead className="bg-[#F7FAFD] dark:bg-[#10212E] text-[#6B7A87] font-medium text-[14px] dark:text-[#9CB4C9]">
                       <tr>
                         <th className="p-3.5">Name</th>
                         <th className="p-3.5">Email address</th>
@@ -2903,20 +2918,20 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         <th className="p-3.5">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] text-[#10212E] dark:text-white">
+                    <tbody className="divide-y divide-[#D5E0EA] dark:divide-[#244157] text-[#10212E] dark:text-white">
                       {teamMembers.map((member) => (
                         <tr key={member.id} className="hover:bg-[#F7FAFD] dark:hover:bg-[#10212E]">
                           <td className="p-3.5 font-semibold">{member.name}</td>
-                          <td className="p-3.5 text-[#43525F] dark:text-[#B2C3D2]">
+                          <td className="p-3.5 text-[#43525F] dark:text-[#D3E3F2]">
                             {member.email || 'N/A'}
                           </td>
                           <td className="p-3.5">
-                            <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] text-[#1F5F99]">
+                            <span className="text-[13px] px-2.5 py-0.5 rounded-[4px] font-medium bg-[#EAF2FA] text-[#1F5F99] dark:bg-[#162C3D] dark:text-[#6FAEE0]">
                               {member.role}
                             </span>
                           </td>
                           <td className="p-3.5">
-                            <span className="text-[13px] bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] font-medium">
+                            <span className="text-[13px] bg-[#ECFDF5] text-[#2F8F5B] px-2 py-0.5 rounded-[4px] font-medium dark:bg-[#2F8F5B]/20">
                               Active
                             </span>
                           </td>
@@ -2935,7 +2950,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   </span>
 
                   {lastInviteLink && (
-                    <div className="p-3 rounded-[8px] bg-[#EAF2FA] dark:bg-[#1E364A]/60 border border-[#BFDBFE] dark:border-[#25455D] text-[13px] text-[#10212E] dark:text-white space-y-1">
+                    <div className="p-3 rounded-[8px] bg-[#EAF2FA] dark:bg-[#244157]/60 border border-[#BFDBFE] dark:border-[#25455D] text-[13px] text-[#10212E] dark:text-white space-y-1">
                       <span className="font-semibold block">Shareable invitation link:</span>
                       <code className="block break-all text-[12px] text-[#1F5F99] dark:text-[#6FAEE0]">
                         {lastInviteLink}
@@ -2943,7 +2958,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     </div>
                   )}
 
-                  <div className="divide-y divide-[#D5E0EA] dark:divide-[#1E364A] border border-[#D5E0EA] dark:border-[#1E364A] rounded-[8px]">
+                  <div className="divide-y divide-[#D5E0EA] dark:divide-[#244157] border border-[#D5E0EA] dark:border-[#244157] rounded-[8px]">
                     {pendingInvites.map((inv) => (
                       <div
                         key={inv.id}
@@ -2953,7 +2968,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                           <span className="font-semibold text-[#10212E] dark:text-white block">
                             {inv.email}
                           </span>
-                          <span className="text-[#6B7A87]">
+                          <span className="text-[#6B7A87] dark:text-[#9CB4C9]">
                             Role: {inv.role} · Sent {inv.sentDate}
                           </span>
                         </div>
@@ -2990,20 +3005,20 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       {/* 5. MODAL: Add / Edit Project */}
       {isProjectDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
+            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
                   {editingProject ? 'Edit past project' : 'Add past project'}
                 </h3>
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
+                <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] mt-0.5">
                   Record contract details and reference official contact.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsProjectDrawerOpen(false)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
+                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -3020,7 +3035,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   placeholder="e.g. Ministry of Local Government & Rural Development"
                   value={projectForm.client}
                   onChange={(e) => setProjectForm({ ...projectForm, client: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
 
@@ -3034,7 +3049,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   placeholder="e.g. Supply and delivery of structural roofing materials"
                   value={projectForm.title}
                   onChange={(e) => setProjectForm({ ...projectForm, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
 
@@ -3050,7 +3065,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     onChange={(e) =>
                       setProjectForm({ ...projectForm, valueBWP: Number(e.target.value) })
                     }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
+                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99] tabular-nums"
                   />
                 </div>
 
@@ -3065,7 +3080,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                     onChange={(e) =>
                       setProjectForm({ ...projectForm, startDate: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   />
                 </div>
 
@@ -3081,7 +3096,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                         status: e.target.value as 'Completed' | 'Ongoing',
                       })
                     }
-                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                    className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                   >
                     <option value="Completed">Completed</option>
                     <option value="Ongoing">Ongoing</option>
@@ -3106,15 +3121,15 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                       },
                     })
                   }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
               </div>
 
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsProjectDrawerOpen(false)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
+                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] cursor-pointer dark:hover:bg-[#162C3D]"
                 >
                   Cancel
                 </button>
@@ -3134,20 +3149,20 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
       {/* 6. MODAL: Invite Team Member */}
       {isInviteModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-[#132635] rounded-[12px] border border-[#D5E0EA] dark:border-[#1E364A] max-w-md w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
-            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+          <div className="bg-white dark:bg-[#1C364B] rounded-[12px] border border-[#D5E0EA] dark:border-[#244157] max-w-md w-full p-6 sm:p-8 space-y-6 shadow-xl animate-fade-in my-8">
+            <div className="flex items-start justify-between pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
               <div>
                 <h3 className="font-heading font-semibold text-[22px] text-[#10212E] dark:text-white">
                   Invite team member
                 </h3>
-                <p className="text-[14px] text-[#43525F] dark:text-[#B2C3D2] mt-0.5">
+                <p className="text-[14px] text-[#43525F] dark:text-[#D3E3F2] mt-0.5">
                   Grant company access to prepare bids or administer the profile.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsInviteModalOpen(false)}
-                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer"
+                className="p-1 text-[#6B7A87] hover:text-[#10212E] dark:hover:text-white rounded-[4px] cursor-pointer dark:text-[#9CB4C9]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -3164,7 +3179,7 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   placeholder="e.g. name@example.com, gmail.com, or any address"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 />
                 <p className="text-[12px] text-[#6B7A87] dark:text-[#8FA2B2]">
                   Use an email you check regularly. Company and personal addresses are both fine. Supplier admins can invite staff using any email domain.
@@ -3180,18 +3195,18 @@ export const SupplierProfile: React.FC<SupplierProfileProps> = ({ initialSection
                   onChange={(e) =>
                     setInviteRole(e.target.value as 'Supplier admin' | 'Supplier staff')
                   }
-                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] bg-white dark:bg-[#132635] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
+                  className="w-full px-3 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] bg-white dark:bg-[#1C364B] text-[#10212E] dark:text-white focus:outline-none focus:border-[#1F5F99]"
                 >
                   <option value="Supplier staff">Supplier staff (Bid preparation & viewing)</option>
                   <option value="Supplier admin">Supplier admin (Full authority & sealing bids)</option>
                 </select>
               </div>
 
-              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#1E364A] flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-[#D5E0EA] dark:border-[#244157] flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#1E364A] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#B2C3D2] hover:bg-[#F7FAFD] cursor-pointer"
+                  className="px-4 py-2 border border-[#D5E0EA] dark:border-[#244157] rounded-[6px] text-[14px] text-[#43525F] dark:text-[#D3E3F2] hover:bg-[#F7FAFD] cursor-pointer dark:hover:bg-[#162C3D]"
                 >
                   Cancel
                 </button>

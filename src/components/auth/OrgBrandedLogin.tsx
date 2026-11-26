@@ -226,7 +226,7 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
                   {activeOrg.name}
                 </h2>
               </div>
-              <p className="text-[14px] text-[#6B7A87]">
+              <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
                 Sign in to manage your organization's tenders and evaluation scorecards.
               </p>
             </div>
@@ -275,7 +275,7 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
               </div>
 
               <div className="flex items-center justify-between text-[14px] pt-1">
-                <span className="text-[#6B7A87]">Two-step verification required</span>
+                <span className="text-[#6B7A87] dark:text-[#9CB4C9]">Two-step verification required</span>
                 <button
                   type="button"
                   onClick={() => onNavigate('forgot-password')}
@@ -313,7 +313,7 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
               <h2 className="text-[24px] font-heading font-semibold text-[#10212E] dark:text-white tracking-tight">
                 Enter verification code
               </h2>
-              <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto">
+              <p className="text-[14px] text-[#6B7A87] max-w-sm mx-auto dark:text-[#9CB4C9]">
                 We sent a 6-digit code to <strong>{email}</strong>. Enter it below to sign in.
               </p>
             </div>
@@ -322,7 +322,7 @@ export const OrgBrandedLogin: React.FC<OrgBrandedLoginProps> = ({ onNavigate }) 
               <DigitCodeInput onComplete={handleMfaComplete} disabled={isLoading} />
             </div>
 
-            <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3">
+            <div className="pt-2 text-[14px] text-[#6B7A87] space-y-3 dark:text-[#9CB4C9]">
               <div>
                 Resend code in{' '}
                 <span className="font-semibold tabular-nums" style={{ color: activeOrg.accentColor }}>

@@ -5,12 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BidReady360 — A 360° Picture of Procurement</title>
     <meta name="description" content="A 360° picture of procurement. Unified supplier registration, verified document vault, and sealed-bid tender platform for organizations in Botswana." />
-    <meta name="theme-color" content="#10212E" />
+    <meta name="theme-color" content="#FFFFFF" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="BidReady360" />
     <link rel="manifest" href="/manifest.json" />
+
+    <!-- Prevent white flash before React mounts -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('bidready360_theme');
+          var mode = stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var resolved = mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode;
+          var root = document.documentElement;
+          root.classList.toggle('dark', resolved === 'dark');
+          root.setAttribute('data-theme', resolved);
+          root.style.colorScheme = resolved;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute('content', resolved === 'dark' ? '#10212E' : '#FFFFFF');
+          }
+        } catch (e) {}
+      })();
+    </script>
 
     <!-- Favicon & Icons -->
     <link rel="icon" type="image/svg+xml" href="/brand/bidready360-app-icon.svg" />
@@ -23,10 +43,10 @@
     <meta property="og:description" content="A 360° picture of procurement. Unified supplier registration, verified document vault, and sealed-bid tender platform for organizations in Botswana." />
     <meta property="og:image" content="/brand/bidready360-logo-primary.svg" />
 
-    <!-- Fonts: Sora & Source Sans 3 & JetBrains Mono -->
+    <!-- Fonts: Sora & Source Sans 3 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 
     <!-- Structured Data (JSON-LD) -->
     <script type="application/ld+json">
@@ -48,7 +68,7 @@
     }
     </script>
   </head>
-  <body class="bg-white text-[#10212E] font-sans antialiased selection:bg-[#EAF2FA] selection:text-[#1F5F99]">
+  <body class="bg-[var(--bg-page)] text-[var(--text-primary)] font-sans antialiased selection:bg-[#EAF2FA] selection:text-[#1F5F99] dark:selection:bg-[#1F5F99]/40 dark:selection:text-[#FFFFFF]">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

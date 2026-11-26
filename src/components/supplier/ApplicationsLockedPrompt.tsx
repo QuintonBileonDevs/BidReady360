@@ -64,7 +64,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
         <button
           type="button"
           onClick={onNavigateToDashboard}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#43525F] dark:text-[#B2C3D2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#43525F] dark:text-[#D3E3F2] hover:text-[#1F5F99] dark:hover:text-[#6FAEE0] transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Dashboard</span>
@@ -72,7 +72,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
       </div>
 
       {/* Main Lock Banner */}
-      <div className="bg-white dark:bg-[#132635] rounded-[14px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6 shadow-sm">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[14px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-[12px] text-amber-700 dark:text-amber-300 shrink-0 mt-0.5">
@@ -97,7 +97,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
                   ? 'Document and profile sharing locked'
                   : 'Tender applications locked'}
               </h1>
-              <p className="text-[14px] sm:text-[15px] text-[#43525F] dark:text-[#B2C3D2] max-w-2xl leading-relaxed">
+              <p className="text-[14px] sm:text-[15px] text-[#43525F] dark:text-[#D3E3F2] max-w-2xl leading-relaxed">
                 Under BidReady360, suppliers must achieve{' '}
                 <strong>100% profile completeness</strong> before they can{' '}
                 {intendedAction === 'sharing'
@@ -109,7 +109,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
         </div>
 
         {/* Progress Bar & Status */}
-        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#1E364A] space-y-3">
+        <div className="p-5 rounded-[10px] bg-[#F7FAFD] dark:bg-[#182C3A] border border-[#D5E0EA] dark:border-[#244157] space-y-3">
           <div className="flex items-center justify-between text-sm">
             <span className="font-semibold text-[#10212E] dark:text-white flex items-center gap-1.5">
               <span>Current Profile Completeness:</span>
@@ -117,12 +117,12 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
                 {score}%
               </span>
             </span>
-            <span className="text-[#6B7A87] font-medium text-xs sm:text-sm">
+            <span className="text-[#6B7A87] font-medium text-xs sm:text-sm dark:text-[#9CB4C9]">
               {completeness.completedCount} of {completeness.totalCount} mandatory items completed
             </span>
           </div>
 
-          <div className="w-full h-3 bg-[#D5E0EA] dark:bg-[#1E364A] rounded-full overflow-hidden">
+          <div className="w-full h-3 bg-[#D5E0EA] dark:bg-[#244157] rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-500 rounded-full ${
                 score >= 80 ? 'bg-[#1F5F99]' : 'bg-amber-500'
@@ -131,7 +131,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
             />
           </div>
 
-          <div className="flex items-center justify-between text-xs text-[#6B7A87]">
+          <div className="flex items-center justify-between text-xs text-[#6B7A87] dark:text-[#9CB4C9]">
             <span>
               {missingItems.length} requirement{missingItems.length === 1 ? '' : 's'} remaining to unlock full {intendedAction === 'sharing' ? 'document sharing' : 'application'} access
             </span>
@@ -155,7 +155,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
           <button
             type="button"
             onClick={onNavigateToVault}
-            className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#1E364A] hover:bg-[#F7FAFD] dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white rounded-[6px] text-sm font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
+            className="px-4 py-2.5 border border-[#D5E0EA] dark:border-[#244157] hover:bg-[#F7FAFD] dark:hover:bg-[#182C3A] text-[#10212E] dark:text-white rounded-[6px] text-sm font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
           >
             <FileText className="w-4 h-4 text-[#1F5F99] dark:text-[#38BDF8]" />
             <span>Go to Document Vault</span>
@@ -165,13 +165,13 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
       </div>
 
       {/* Detailed Instructions for Missing Items */}
-      <div className="bg-white dark:bg-[#132635] rounded-[14px] border border-[#D5E0EA] dark:border-[#1E364A] p-6 sm:p-8 space-y-6 shadow-sm">
-        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#1E364A]">
+      <div className="bg-white dark:bg-[#1C364B] rounded-[14px] border border-[#D5E0EA] dark:border-[#244157] p-6 sm:p-8 space-y-6 shadow-sm">
+        <div className="space-y-1 pb-4 border-b border-[#D5E0EA] dark:border-[#244157]">
           <h2 className="font-heading font-semibold text-[20px] text-[#10212E] dark:text-white flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             <span>Instructions: What is missing and how to complete it</span>
           </h2>
-          <p className="text-[14px] text-[#6B7A87]">
+          <p className="text-[14px] text-[#6B7A87] dark:text-[#9CB4C9]">
             Review each missing item below. Follow the specific instructions and click the action button to resolve it.
           </p>
         </div>
@@ -192,7 +192,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
             {companyMissing.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#10212E] dark:text-white">
-                  <Building2 className="w-4 h-4 text-[#1F5F99]" />
+                  <Building2 className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>Company Details ({companyMissing.length} missing)</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -210,14 +210,14 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
                               {item.label}
                             </h4>
                           </div>
-                          <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] pl-4">
+                          <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] pl-4">
                             {item.description}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={action.handler}
-                          className="px-3.5 py-1.5 bg-white dark:bg-[#1E364A] hover:bg-amber-100 dark:hover:bg-[#254661] text-[#1F5F99] dark:text-[#38BDF8] border border-amber-300 dark:border-amber-800 rounded-[6px] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors shadow-xs"
+                          className="px-3.5 py-1.5 bg-white dark:bg-[#244157] hover:bg-amber-100 dark:hover:bg-[#254661] text-[#1F5F99] dark:text-[#38BDF8] border border-amber-300 dark:border-amber-800 rounded-[6px] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors shadow-xs"
                         >
                           <span>Fill in profile</span>
                           <ArrowRight className="w-3 h-3" />
@@ -233,7 +233,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
             {peopleMissing.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#10212E] dark:text-white">
-                  <Users className="w-4 h-4 text-[#1F5F99]" />
+                  <Users className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>Directors and Ownership ({peopleMissing.length} missing)</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -251,14 +251,14 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
                               {item.label}
                             </h4>
                           </div>
-                          <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] pl-4">
+                          <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] pl-4">
                             {item.description}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={action.handler}
-                          className="px-3.5 py-1.5 bg-white dark:bg-[#1E364A] hover:bg-amber-100 dark:hover:bg-[#254661] text-[#1F5F99] dark:text-[#38BDF8] border border-amber-300 dark:border-amber-800 rounded-[6px] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors shadow-xs"
+                          className="px-3.5 py-1.5 bg-white dark:bg-[#244157] hover:bg-amber-100 dark:hover:bg-[#254661] text-[#1F5F99] dark:text-[#38BDF8] border border-amber-300 dark:border-amber-800 rounded-[6px] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors shadow-xs"
                         >
                           <span>Balance Directors (100%)</span>
                           <ArrowRight className="w-3 h-3" />
@@ -274,7 +274,7 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
             {docMissing.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#10212E] dark:text-white">
-                  <FileText className="w-4 h-4 text-[#1F5F99]" />
+                  <FileText className="w-4 h-4 text-[#1F5F99] dark:text-[#6FAEE0]" />
                   <span>Statutory Compliance Documents ({docMissing.length} missing)</span>
                 </div>
                 <div className="grid grid-cols-1 gap-3">
@@ -292,14 +292,14 @@ export const ApplicationsLockedPrompt: React.FC<ApplicationsLockedPromptProps> =
                               {item.label}
                             </h4>
                           </div>
-                          <p className="text-[13px] text-[#43525F] dark:text-[#B2C3D2] pl-4">
+                          <p className="text-[13px] text-[#43525F] dark:text-[#D3E3F2] pl-4">
                             {item.description}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={action.handler}
-                          className="px-3.5 py-1.5 bg-white dark:bg-[#1E364A] hover:bg-amber-100 dark:hover:bg-[#254661] text-[#1F5F99] dark:text-[#38BDF8] border border-amber-300 dark:border-amber-800 rounded-[6px] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors shadow-xs"
+                          className="px-3.5 py-1.5 bg-white dark:bg-[#244157] hover:bg-amber-100 dark:hover:bg-[#254661] text-[#1F5F99] dark:text-[#38BDF8] border border-amber-300 dark:border-amber-800 rounded-[6px] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition-colors shadow-xs"
                         >
                           <span>Upload Document</span>
                           <ArrowRight className="w-3 h-3" />

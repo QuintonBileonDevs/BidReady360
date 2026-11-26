@@ -71,7 +71,7 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
   return (
     <div className="space-y-12 sm:space-y-16 py-4">
       {/* Editorial Header */}
-      <div className="relative border-b border-[#D5E0EA] dark:border-[#1E364A] pb-10 sm:pb-12 overflow-hidden">
+      <div className="relative border-b border-[#D5E0EA] dark:border-[#244157] pb-10 sm:pb-12 overflow-hidden">
         <RingMotif size={360} dotAngle={135} opacity={0.3} position="top-right" />
 
         <div className="max-w-3xl space-y-4 relative z-10">
@@ -83,7 +83,7 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
             Configurable governance. Impartial evaluations. Complete auditability.
           </h1>
 
-          <p className="text-base sm:text-lg text-[#43525F] dark:text-[#B2C3D2] leading-relaxed">
+          <p className="text-base sm:text-lg text-[#43525F] dark:text-[#D3E3F2] leading-relaxed">
             Run expressions of interest, supplier pre-qualification drives, and sealed competitive tenders on an auditable digital workspace built for Botswana’s civic and corporate procuring entities.
           </p>
 
@@ -116,7 +116,7 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
           <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             100% Statutory Compliance
           </h3>
-          <p className="text-xs text-[#6B7A87] leading-relaxed">
+          <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Automated verification against CIPA and BURS eliminates non-compliant bidders before evaluation committees open responses.
           </p>
         </Card>
@@ -128,7 +128,7 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
           <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             Multi-Evaluator Panels
           </h3>
-          <p className="text-xs text-[#6B7A87] leading-relaxed">
+          <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Assign panel members, capture conflict-of-interest declarations, and automatically consolidate weighted scores without spreadsheets.
           </p>
         </Card>
@@ -140,7 +140,7 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
           <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
             Immutable Audit Trail
           </h3>
-          <p className="text-xs text-[#6B7A87] leading-relaxed">
+          <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
             Every document view, score submission, addendum publication, and award recommendation is immutably logged with timestamped signatures.
           </p>
         </Card>
@@ -148,7 +148,7 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
 
       {/* Step Sequence */}
       <div className="space-y-6">
-        <div className="border-b border-[#D5E0EA] dark:border-[#1E364A] pb-3">
+        <div className="border-b border-[#D5E0EA] dark:border-[#244157] pb-3">
           <h2 className="text-xl sm:text-2xl font-heading font-semibold text-[#10212E] dark:text-white">
             The Buyer Procurement Workflow
           </h2>
@@ -158,22 +158,22 @@ export const PublicForBuyers: React.FC<PublicForBuyersProps> = ({ onOpenAuth }) 
           {steps.map((step) => (
             <Card key={step.num} variant="default" padding="md" className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 px-2 py-1 rounded-[4px]">
+                <span className="tabular-nums text-xs font-bold text-[#1F5F99] dark:text-[#6FAEE0] bg-[#EAF2FA] dark:bg-[#1F5F99]/20 px-2 py-1 rounded-[4px]">
                   STEP {step.num}
                 </span>
-                <span className="text-[11px] text-[#6B7A87]">Buyer Governance</span>
+                <span className="text-[11px] text-[#6B7A87] dark:text-[#9CB4C9]">Buyer Governance</span>
               </div>
 
               <div className="space-y-1.5">
                 <h3 className="text-base font-heading font-semibold text-[#10212E] dark:text-white">
                   {step.title}
                 </h3>
-                <p className="text-xs text-[#6B7A87] leading-relaxed">
+                <p className="text-xs text-[#6B7A87] leading-relaxed dark:text-[#9CB4C9]">
                   {step.description}
                 </p>
               </div>
 
-              <ul className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#1E364A] text-xs text-[#43525F] dark:text-[#B2C3D2]">
+              <ul className="space-y-2 pt-2 border-t border-[#D5E0EA] dark:border-[#244157] text-xs text-[#43525F] dark:text-[#D3E3F2]">
                 {step.details.map((detail, i) => (
                   <li key={i} className="flex items-center gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-[#2F8F5B] shrink-0" strokeWidth={1.5} />
