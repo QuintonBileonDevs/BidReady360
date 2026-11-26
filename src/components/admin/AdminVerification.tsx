@@ -233,13 +233,25 @@ export const AdminVerification: React.FC = () => {
             : p
         )
       );
-      showSuccess(
+      const sentCount = Number((updated as any)?.notificationsSent ?? 0);
+      const notifWarn = (updated as any)?.notificationWarning;
+      const baseMsg =
         status === 'verified'
           ? `${person.fullName} marked as verified.`
           : status === 'failed'
           ? `${person.fullName} marked as rejected.`
-          : `${person.fullName} reset to pending review.`
-      );
+          : `${person.fullName} reset to pending review.`;
+      if (status === 'verified' || status === 'failed') {
+        if (sentCount > 0) {
+          showSuccess(`${baseMsg} In-app notification sent to ${sentCount} supplier ${sentCount === 1 ? 'user' : 'users'}.`);
+        } else if (notifWarn) {
+          setErrorMessage(`${baseMsg} Notification failed: ${notifWarn}`);
+        } else {
+          showSuccess(`${baseMsg} No active supplier user account was linked to receive an in-app alert.`);
+        }
+      } else {
+        showSuccess(baseMsg);
+      }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to update director verification status.');
     } finally {
@@ -272,13 +284,25 @@ export const AdminVerification: React.FC = () => {
             : d
         )
       );
-      showSuccess(
+      const sentCount = Number((updated as any)?.notificationsSent ?? 0);
+      const notifWarn = (updated as any)?.notificationWarning;
+      const baseMsg =
         status === 'VERIFIED'
           ? `${doc.documentTypeName} marked as verified.`
           : status === 'REJECTED'
           ? `${doc.documentTypeName} marked as rejected.`
-          : `${doc.documentTypeName} status updated.`
-      );
+          : `${doc.documentTypeName} status updated.`;
+      if (status === 'VERIFIED' || status === 'REJECTED' || status === 'UNVERIFIABLE') {
+        if (sentCount > 0) {
+          showSuccess(`${baseMsg} In-app notification sent to ${sentCount} supplier ${sentCount === 1 ? 'user' : 'users'}.`);
+        } else if (notifWarn) {
+          setErrorMessage(`${baseMsg} Notification failed: ${notifWarn}`);
+        } else {
+          showSuccess(`${baseMsg} No active supplier user account was linked to receive an in-app alert.`);
+        }
+      } else {
+        showSuccess(baseMsg);
+      }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to update document verification status.');
     } finally {

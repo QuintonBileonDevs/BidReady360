@@ -102,6 +102,30 @@ export async function ensureInAppNotificationTemplates(): Promise<void> {
       variables: ['documentTitle', 'expiryDate', 'daysRemaining'],
     },
     {
+      code: 'director_verified',
+      subject: 'Director identity verified: {{directorName}}',
+      body: 'Identity verification for {{directorName}} has been approved. Open your company profile to check your readiness.',
+      variables: ['directorName'],
+    },
+    {
+      code: 'director_rejected',
+      subject: 'Director verification needs attention: {{directorName}}',
+      body: 'Identity verification for {{directorName}} was not approved. Reason: {{reason}}. Update the director record in your company profile.',
+      variables: ['directorName', 'reason'],
+    },
+    {
+      code: 'supplier_verified',
+      subject: 'Your supplier profile is verified',
+      body: '{{supplierName}} has been verified for bidding. Open your dashboard to view open tender calls.',
+      variables: ['supplierName'],
+    },
+    {
+      code: 'supplier_rejected',
+      subject: 'Supplier verification needs attention',
+      body: '{{supplierName}} could not be verified. Reason: {{reason}}. Open your document vault to update and resubmit.',
+      variables: ['supplierName', 'reason'],
+    },
+    {
       code: 'clarification_asked',
       subject: 'New clarification question on {{callNumber}}',
       body: '{{supplierName}} asked a clarification question under {{topic}}. Review the question and publish an official response.',

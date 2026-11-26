@@ -338,9 +338,11 @@ export class NotificationsRepository {
       queueEmail?: boolean;
     },
     client?: PoolClient
-  ): Promise<void> {
+  ): Promise<{ recipientCount: number; insertedCount: number; error?: string }> {
     const uniqueUsers = Array.from(new Set((input.userIds || []).filter((id) => UUID_REGEX.test(String(id)))));
-    if (!uniqueUsers.length) return;
+    if (!uniqueUsers.length) {
+      return { recipientCount: 0, insertedCount: 0 };
+    }
 
     const safeOrgId = input.organizationId && UUID_REGEX.test(input.organizationId) ? input.organizationId : null;
     const safeSupId = input.supplierId && UUID_REGEX.test(input.supplierId) ? input.supplierId : null;
@@ -349,7 +351,9 @@ export class NotificationsRepository {
         ? input.templateOrganizationId
         : safeOrgId;
     const eventCode = input.eventType.slice(0, 100);
-    const priority = input.priority || 'info';
+    const priority = ['urgent', 'info', 'success', 'warning'].includes(String(input.priority || ''))
+      ? (input.priority as 'urgent' | 'info' | 'success' | 'warning')
+      : 'info';
 
     const templateVars = input.data && typeof input.data === 'object' ? input.data : {};
     const inAppTemplate =
@@ -359,14 +363,17 @@ export class NotificationsRepository {
 
     const resolvedTitle = (
       (inAppTemplate?.subject && !inAppTemplate.subject.includes('{{') ? inAppTemplate.subject : '') ||
-      input.title
+      input.title ||
+      'Procurement notification'
     )
       .trim()
       .slice(0, 250);
     const resolvedBody = (
       (inAppTemplate?.body && inAppTemplate.body.length > 0 && !inAppTemplate.body.includes('{{')
         ? inAppTemplate.body
-        : '') || input.body
+        : '') ||
+      input.body ||
+      ''
     )
       .trim()
       .slice(0, 990);
@@ -383,43 +390,69 @@ export class NotificationsRepository {
       emailByUser = new Map(emailsRes.rows.map((u) => [u.id, u.email]));
     }
 
+    let insertedCount = 0;
+    let lastError: string | undefined;
+
     for (const userId of uniqueUsers) {
-      const ins = await execQuery<{ id: string }>(
-        `INSERT INTO notifications (
-          user_id, organization_id, supplier_id, event_type, title, body, link_url, data, priority, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
-        RETURNING id`,
-        [
+      try {
+        const ins = await execQuery<{ id: string }>(
+          `INSERT INTO notifications (
+            user_id, organization_id, supplier_id, event_type, title, body, link_url, data, priority, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+          RETURNING id`,
+          [
+            userId,
+            safeOrgId,
+            safeSupId,
+            eventCode,
+            resolvedTitle,
+            resolvedBody,
+            input.linkUrl || null,
+            input.data ? JSON.stringify(input.data) : null,
+            priority,
+          ],
+          client
+        );
+
+        if (ins.rows.length > 0) {
+          insertedCount += 1;
+        }
+
+        if (shouldQueueEmail) {
+          const userEmail = emailByUser.get(userId);
+          if (userEmail) {
+            await this.queueEmailDelivery(
+              {
+                userId,
+                recipientEmail: userEmail,
+                templateCode: eventCode,
+                vars: { ...templateVars, title: resolvedTitle, body: resolvedBody },
+                organizationId: templateOrgId,
+                notificationId: ins.rows[0]?.id || null,
+              },
+              client
+            );
+          }
+        }
+      } catch (err: any) {
+        lastError = err?.message || String(err);
+        console.error('[NOTIFY INSERT FAILED]', {
+          eventCode,
           userId,
           safeOrgId,
           safeSupId,
-          eventCode,
-          resolvedTitle,
-          resolvedBody,
-          input.linkUrl || null,
-          input.data ? JSON.stringify(input.data) : null,
-          priority,
-        ],
-        client
-      );
-
-      if (shouldQueueEmail) {
-        const userEmail = emailByUser.get(userId);
-        if (userEmail) {
-          await this.queueEmailDelivery(
-            {
-              userId,
-              recipientEmail: userEmail,
-              templateCode: eventCode,
-              vars: { ...templateVars, title: resolvedTitle, body: resolvedBody },
-              organizationId: templateOrgId,
-              notificationId: ins.rows[0]?.id || null,
-            },
-            client
-          );
+          code: err?.code,
+          constraint: err?.constraint,
+          detail: err?.detail,
+          message: err?.message,
+        });
+        if (client) {
+          throw err;
         }
       }
     }
+
+    return { recipientCount: uniqueUsers.length, insertedCount, error: lastError };
   }
 
   async notifySupplierMembers(
@@ -433,24 +466,47 @@ export class NotificationsRepository {
       data?: Record<string, any> | null;
       priority?: 'urgent' | 'info' | 'success' | 'warning';
       queueEmail?: boolean;
+      fallbackUserIds?: string[];
     },
     client?: PoolClient
-  ): Promise<void> {
-    if (!UUID_REGEX.test(supplierId)) return;
+  ): Promise<{ recipientCount: number; insertedCount: number; error?: string }> {
+    if (!UUID_REGEX.test(supplierId)) {
+      return { recipientCount: 0, insertedCount: 0 };
+    }
+
     const memRes = await execQuery<{ user_id: string }>(
-      `SELECT user_id FROM supplier_members WHERE supplier_id = $1 AND status = 'active'`,
+      `SELECT DISTINCT user_id FROM (
+         SELECT sm.user_id
+         FROM supplier_members sm
+         JOIN users u ON u.id = sm.user_id AND u.deleted_at IS NULL
+         WHERE sm.supplier_id = $1
+           AND LOWER(COALESCE(sm.status, 'active')) = 'active'
+         UNION
+         SELECT u.id AS user_id
+         FROM suppliers s
+         JOIN users u ON LOWER(u.email::text) = LOWER(s.email::text)
+         WHERE s.id = $1
+           AND s.email IS NOT NULL
+           AND u.deleted_at IS NULL
+           AND LOWER(COALESCE(u.status, 'active')) = 'active'
+       ) recipients`,
       [supplierId],
       client
     );
-    const userIds = memRes.rows.map((r) => r.user_id);
-    if (!userIds.length) return;
+
+    const extraIds = (payload.fallbackUserIds || []).filter((id) => UUID_REGEX.test(String(id)));
+    const userIds = Array.from(new Set([...memRes.rows.map((r) => r.user_id), ...extraIds]));
+    if (!userIds.length) {
+      console.warn('[NOTIFY SUPPLIER SKIPPED] No active user accounts found for supplier:', supplierId, payload.eventType);
+      return { recipientCount: 0, insertedCount: 0 };
+    }
 
     const mergedData = {
       ...(payload.data || {}),
       ...(payload.organizationId ? { sourceOrganizationId: payload.organizationId } : {}),
     };
 
-    await this.notifyUsers(
+    return this.notifyUsers(
       {
         userIds,
         supplierId,
@@ -482,36 +538,56 @@ export class NotificationsRepository {
       queueEmail?: boolean;
     },
     client?: PoolClient
-  ): Promise<void> {
-    if (!UUID_REGEX.test(organizationId)) return;
+  ): Promise<{ recipientCount: number; insertedCount: number; error?: string }> {
+    if (!UUID_REGEX.test(organizationId)) {
+      return { recipientCount: 0, insertedCount: 0 };
+    }
 
     const memRes = payload.permissionCode
       ? await execQuery<{ user_id: string }>(
           `SELECT DISTINCT om.user_id
            FROM organization_members om
+           JOIN users u ON u.id = om.user_id AND u.deleted_at IS NULL
            JOIN role_permissions rp ON rp.role_id = om.role_id
            JOIN permissions p ON p.id = rp.permission_id
            WHERE om.organization_id = $1
-             AND om.status = 'active'
+             AND LOWER(COALESCE(om.status, 'active')) = 'active'
              AND p.code = $2`,
           [organizationId, payload.permissionCode],
           client
         )
       : await execQuery<{ user_id: string }>(
-          `SELECT user_id FROM organization_members WHERE organization_id = $1 AND status = 'active'`,
+          `SELECT DISTINCT user_id FROM (
+             SELECT om.user_id
+             FROM organization_members om
+             JOIN users u ON u.id = om.user_id AND u.deleted_at IS NULL
+             WHERE om.organization_id = $1
+               AND LOWER(COALESCE(om.status, 'active')) = 'active'
+             UNION
+             SELECT u.id AS user_id
+             FROM organizations o
+             JOIN users u ON LOWER(u.email::text) = LOWER(o.contact_email::text)
+             WHERE o.id = $1
+               AND o.contact_email IS NOT NULL
+               AND u.deleted_at IS NULL
+               AND LOWER(COALESCE(u.status, 'active')) = 'active'
+           ) recipients`,
           [organizationId],
           client
         );
 
     const userIds = memRes.rows.map((r) => r.user_id);
-    if (!userIds.length) return;
+    if (!userIds.length) {
+      console.warn('[NOTIFY ORG SKIPPED] No active user accounts found for organization:', organizationId, payload.eventType);
+      return { recipientCount: 0, insertedCount: 0 };
+    }
 
     const mergedData = {
       ...(payload.data || {}),
       ...(payload.supplierId ? { sourceSupplierId: payload.supplierId } : {}),
     };
 
-    await this.notifyUsers(
+    return this.notifyUsers(
       {
         userIds,
         organizationId,

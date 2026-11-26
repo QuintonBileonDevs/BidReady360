@@ -49,6 +49,26 @@ INSERT INTO notification_templates (organization_id, code, channel, locale, subj
    'Your {{documentTitle}} expires on {{expiryDate}} ({{daysRemaining}} days left). Upload a renewed certificate in your document vault to stay ready to bid.',
    ARRAY['documentTitle', 'expiryDate', 'daysRemaining'], TRUE),
 
+  (NULL, 'director_verified', 'in_app', 'en',
+   'Director identity verified: {{directorName}}',
+   'Identity verification for {{directorName}} has been approved. Open your company profile to check your readiness.',
+   ARRAY['directorName'], TRUE),
+
+  (NULL, 'director_rejected', 'in_app', 'en',
+   'Director verification needs attention: {{directorName}}',
+   'Identity verification for {{directorName}} was not approved. Reason: {{reason}}. Update the director record in your company profile.',
+   ARRAY['directorName', 'reason'], TRUE),
+
+  (NULL, 'supplier_verified', 'in_app', 'en',
+   'Your supplier profile is verified',
+   '{{supplierName}} has been verified for bidding. Open your dashboard to view open tender calls.',
+   ARRAY['supplierName'], TRUE),
+
+  (NULL, 'supplier_rejected', 'in_app', 'en',
+   'Supplier verification needs attention',
+   '{{supplierName}} could not be verified. Reason: {{reason}}. Open your document vault to update and resubmit.',
+   ARRAY['supplierName', 'reason'], TRUE),
+
   -- Clarifications
   (NULL, 'clarification_asked', 'in_app', 'en',
    'New clarification question on {{callNumber}}',

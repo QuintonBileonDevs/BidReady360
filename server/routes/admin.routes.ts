@@ -711,7 +711,40 @@ router.post('/suppliers/:id/verification', async (req: Request, res: Response) =
       details: `Updated supplier "${before.legal_name}" verification to ${verificationStatus} (${complianceStatus})${notes ? `. Notes: ${notes}` : ''}`,
     });
 
-    res.json(updated.rows[0]);
+    let notifResult: { recipientCount: number; insertedCount: number; error?: string } = {
+      recipientCount: 0,
+      insertedCount: 0,
+    };
+    if (verificationStatus === 'verified') {
+      notifResult = await notificationsRepository
+        .notifySupplierMembers(id, {
+          eventType: 'supplier_verified',
+          title: 'Your supplier profile is verified',
+          body: `${before.legal_name} has been verified for bidding. Open your dashboard to view open tender calls.`,
+          linkUrl: 'dashboard',
+          priority: 'success',
+          data: { supplierId: id, supplierName: before.legal_name },
+        })
+        .catch((err) => ({ recipientCount: 0, insertedCount: 0, error: err?.message || String(err) }));
+    } else if (verificationStatus === 'rejected') {
+      const reasonText = notes || 'Review your profile and compliance documents.';
+      notifResult = await notificationsRepository
+        .notifySupplierMembers(id, {
+          eventType: 'supplier_rejected',
+          title: 'Supplier verification needs attention',
+          body: `${before.legal_name} could not be verified. Reason: ${reasonText}. Open your document vault to update and resubmit.`,
+          linkUrl: 'vault',
+          priority: 'urgent',
+          data: { supplierId: id, supplierName: before.legal_name, reason: reasonText },
+        })
+        .catch((err) => ({ recipientCount: 0, insertedCount: 0, error: err?.message || String(err) }));
+    }
+
+    res.json({
+      ...updated.rows[0],
+      notificationsSent: notifResult.insertedCount,
+      notificationWarning: notifResult.error || null,
+    });
   } catch (err: any) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -941,7 +974,40 @@ router.post('/verification/people/:personId', async (req: Request, res: Response
       details: `Set director ${existing.rows[0].fullName} KYC status to ${rawStatus}${rawNotes ? ` (${rawNotes})` : ''}`,
     });
 
-    res.json(updatedRes.rows[0]);
+    let notifResult: { recipientCount: number; insertedCount: number; error?: string } = {
+      recipientCount: 0,
+      insertedCount: 0,
+    };
+    if (rawStatus === 'verified') {
+      notifResult = await notificationsRepository
+        .notifySupplierMembers(existing.rows[0].supplierId, {
+          eventType: 'director_verified',
+          title: `Director identity verified: ${existing.rows[0].fullName}`,
+          body: `Identity verification for ${existing.rows[0].fullName} has been approved. Open your company profile to check your readiness.`,
+          linkUrl: 'profile',
+          priority: 'success',
+          data: { personId, directorName: existing.rows[0].fullName },
+        })
+        .catch((err) => ({ recipientCount: 0, insertedCount: 0, error: err?.message || String(err) }));
+    } else if (rawStatus === 'failed') {
+      const reasonText = rawNotes || 'Please review the director identity details.';
+      notifResult = await notificationsRepository
+        .notifySupplierMembers(existing.rows[0].supplierId, {
+          eventType: 'director_rejected',
+          title: `Director verification needs attention: ${existing.rows[0].fullName}`,
+          body: `Identity verification for ${existing.rows[0].fullName} was not approved. Reason: ${reasonText}. Update the director record in your company profile.`,
+          linkUrl: 'profile',
+          priority: 'urgent',
+          data: { personId, directorName: existing.rows[0].fullName, reason: reasonText },
+        })
+        .catch((err) => ({ recipientCount: 0, insertedCount: 0, error: err?.message || String(err) }));
+    }
+
+    res.json({
+      ...updatedRes.rows[0],
+      notificationsSent: notifResult.insertedCount,
+      notificationWarning: notifResult.error || null,
+    });
   } catch (err: any) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
@@ -977,10 +1043,21 @@ router.post('/verification/documents/:versionId', async (req: Request, res: Resp
       });
     }
 
-    const existing = await query<{ versionId: string; documentId: string; supplierId: string; title: string }>(
-      `SELECT v.id AS "versionId", d.id AS "documentId", d.supplier_id AS "supplierId", d.title
+    const existing = await query<{
+      versionId: string;
+      documentId: string;
+      supplierId: string;
+      title: string;
+      uploadedByUserId: string | null;
+    }>(
+      `SELECT v.id AS "versionId",
+              d.id AS "documentId",
+              d.supplier_id AS "supplierId",
+              COALESCE(NULLIF(TRIM(d.title), ''), dt.name, 'Compliance document') AS title,
+              v.uploaded_by_user_id AS "uploadedByUserId"
        FROM supplier_document_versions v
        JOIN supplier_documents d ON d.id = v.document_id
+       LEFT JOIN document_types dt ON dt.id = d.document_type_id
        WHERE v.id = $1
        LIMIT 1`,
       [versionId]
@@ -990,6 +1067,8 @@ router.post('/verification/documents/:versionId', async (req: Request, res: Resp
     }
 
     const supplierId = existing.rows[0].supplierId;
+    const documentTitle = existing.rows[0].title || 'Compliance document';
+    const fallbackUserIds = existing.rows[0].uploadedByUserId ? [existing.rows[0].uploadedByUserId] : [];
 
     const updatedRes = await query(
       `UPDATE supplier_document_versions
@@ -1046,44 +1125,61 @@ router.post('/verification/documents/:versionId', async (req: Request, res: Resp
       entityType: 'supplier_document_version',
       entityId: versionId,
       supplierId,
-      details: `Set document "${existing.rows[0].title}" status to ${rawStatus}${rejectionReason ? ` (${rejectionReason})` : ''}`,
+      details: `Set document "${documentTitle}" status to ${rawStatus}${rejectionReason ? ` (${rejectionReason})` : ''}`,
     });
 
+    let notifResult: { recipientCount: number; insertedCount: number; error?: string } = {
+      recipientCount: 0,
+      insertedCount: 0,
+    };
+
     if (rawStatus === 'VERIFIED') {
-      await notificationsRepository
+      notifResult = await notificationsRepository
         .notifySupplierMembers(supplierId, {
           eventType: 'document_verified',
-          title: `Document verified: ${existing.rows[0].title}`,
-          body: `Your ${existing.rows[0].title} has been verified. Open your document vault to check your bidding readiness.`,
+          title: `Document verified: ${documentTitle}`,
+          body: `Your ${documentTitle} has been verified. Open your document vault to check your bidding readiness.`,
           linkUrl: 'vault',
           priority: 'success',
+          fallbackUserIds,
           data: {
             documentId: existing.rows[0].documentId,
             versionId,
-            documentTitle: existing.rows[0].title,
+            documentTitle,
           },
         })
-        .catch((notifErr) => console.warn('[DOC VERIFY NOTIFY WARNING]:', notifErr?.message || notifErr));
+        .catch((notifErr) => {
+          console.error('[DOC VERIFY NOTIFY ERROR]:', notifErr?.message || notifErr);
+          return { recipientCount: 0, insertedCount: 0, error: notifErr?.message || String(notifErr) };
+        });
     } else if (rawStatus === 'REJECTED' || rawStatus === 'UNVERIFIABLE') {
       const reasonText = rejectionReason || notes || 'Please upload a clearer, valid copy.';
-      await notificationsRepository
+      notifResult = await notificationsRepository
         .notifySupplierMembers(supplierId, {
           eventType: 'document_rejected',
-          title: `Document needs replacement: ${existing.rows[0].title}`,
-          body: `Your ${existing.rows[0].title} could not be accepted. Reason: ${reasonText}. Upload a clear replacement copy in your document vault.`,
+          title: `Document needs replacement: ${documentTitle}`,
+          body: `Your ${documentTitle} could not be accepted. Reason: ${reasonText}. Upload a clear replacement copy in your document vault.`,
           linkUrl: 'vault',
           priority: 'urgent',
+          fallbackUserIds,
           data: {
             documentId: existing.rows[0].documentId,
             versionId,
-            documentTitle: existing.rows[0].title,
+            documentTitle,
             reason: reasonText,
           },
         })
-        .catch((notifErr) => console.warn('[DOC REJECT NOTIFY WARNING]:', notifErr?.message || notifErr));
+        .catch((notifErr) => {
+          console.error('[DOC REJECT NOTIFY ERROR]:', notifErr?.message || notifErr);
+          return { recipientCount: 0, insertedCount: 0, error: notifErr?.message || String(notifErr) };
+        });
     }
 
-    res.json(updatedRes.rows[0]);
+    res.json({
+      ...updatedRes.rows[0],
+      notificationsSent: notifResult.insertedCount,
+      notificationWarning: notifResult.error || null,
+    });
   } catch (err: any) {
     const safe = translateDbError(err);
     res.status(safe.status).json(safe);
